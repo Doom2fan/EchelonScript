@@ -19,6 +19,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace EchelonScriptCompiler.Parser {
     public enum EchelonScriptTokenType {
@@ -227,10 +228,7 @@ namespace EchelonScriptCompiler.Parser {
             };
 
             tokenStrings.Sort ((x, y) => -x.Str.Length.CompareTo (y.Str.Length));
-
-            tokenStringsMaxLength = 4;
-            foreach (var token in tokenStrings)
-                tokenStringsMaxLength = Math.Max (tokenStringsMaxLength, token.Str.Length);
+            tokenStringsMaxLength = Math.Max (4, tokenStrings [0].Str.Length);
         }
 
         public EchelonScriptTokenizer (List<EchelonScriptErrorMessage> errorsList) {
