@@ -19,7 +19,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace EchelonScriptCompiler.Parser {
     public enum EchelonScriptTokenType {
@@ -139,6 +138,352 @@ namespace EchelonScriptCompiler.Parser {
     }
 
     public class EchelonScriptTokenizer {
+        #region ================== Token parsers
+
+        public abstract class TokenParser {
+            public abstract int MinimumStartPeek { get; }
+            public abstract int RequestedStartPeek { get; }
+
+            public abstract bool IsStartValid (EchelonScriptTokenizer tokenizer, ReadOnlySpan<char> peekedChars);
+            public abstract bool ParseToken (EchelonScriptTokenizer tokenizer, ReadOnlySpan<char> peekedChars, ref EchelonScriptToken retToken);
+        }
+
+        public class HexTokenParser : TokenParser {
+            public override int MinimumStartPeek => 2;
+            public override int RequestedStartPeek => 2;
+
+            public override bool IsStartValid (EchelonScriptTokenizer tokenizer, ReadOnlySpan<char> peekedChars) {
+                return peekedChars.StartsWith ("0x", StringComparison.InvariantCultureIgnoreCase);
+            }
+
+            public override bool ParseToken (EchelonScriptTokenizer tokenizer, ReadOnlySpan<char> peekedChars, ref EchelonScriptToken retToken) {
+                int startPos = tokenizer.curPos;
+                tokenizer.ReadChars (2);
+
+                if (tokenizer.PeekChar () == NumberSeparator)
+                    tokenizer.Errors.Add (new EchelonScriptErrorMessage (retToken, "Invalid hex literal."));
+                else
+                    tokenizer.ReadStringWhile (c => IsHexDigit (c) || c == NumberSeparator);
+
+                tokenizer.TryReadIntSuffix ();
+
+                retToken.Type = EchelonScriptTokenType.HexIntegerLiteral;
+                retToken.Text = tokenizer.data.Slice (startPos, tokenizer.curPos - startPos);
+
+                return true;
+            }
+        }
+
+        public class BinaryTokenParser : TokenParser {
+            public override int MinimumStartPeek => 2;
+            public override int RequestedStartPeek => 2;
+
+            public override bool IsStartValid (EchelonScriptTokenizer tokenizer, ReadOnlySpan<char> peekedChars) {
+                return peekedChars.StartsWith ("0b", StringComparison.InvariantCultureIgnoreCase);
+            }
+
+            public override bool ParseToken (EchelonScriptTokenizer tokenizer, ReadOnlySpan<char> peekedChars, ref EchelonScriptToken retToken) {
+                int startPos = tokenizer.curPos;
+                tokenizer.ReadChars (2);
+
+                if (tokenizer.PeekChar () == NumberSeparator)
+                    tokenizer.Errors.Add (new EchelonScriptErrorMessage (retToken, "Invalid binary literal."));
+                else
+                    tokenizer.ReadStringWhile (c => IsBinaryDigit (c) || c == NumberSeparator);
+
+                tokenizer.TryReadIntSuffix ();
+
+                retToken.Type = EchelonScriptTokenType.BinIntegerLiteral;
+                retToken.Text = tokenizer.data.Slice (startPos, tokenizer.curPos - startPos);
+
+                return true;
+            }
+        }
+
+        public class DecimalTokenParser : TokenParser {
+            public override int MinimumStartPeek => 1;
+            public override int RequestedStartPeek => 2;
+
+            public override bool IsStartValid (EchelonScriptTokenizer tokenizer, ReadOnlySpan<char> peekedChars) {
+                return (
+                    peekedChars [0] == '0' ||
+                    IsIntegerDigit (peekedChars [0]) ||
+                    (peekedChars [0] == '.' && peekedChars.Length >= 2 && IsIntegerDigit (peekedChars [1]))
+                );
+            }
+
+            public override bool ParseToken (EchelonScriptTokenizer tokenizer, ReadOnlySpan<char> peekedChars, ref EchelonScriptToken retToken) {
+                if (peekedChars [0] == '0') {
+                    int startPos = tokenizer.curPos;
+
+                    tokenizer.ReadChar ();
+                    if (tokenizer.PeekChar () == '.') {
+                        tokenizer.TryReadFloatFractional ();
+                        tokenizer.TryReadFloatExponent (retToken.TextLine, retToken.TextColumn, startPos);
+                        tokenizer.TryReadFloatSuffix ();
+
+                        retToken.Type = EchelonScriptTokenType.FloatLiteral;
+                    } else {
+                        tokenizer.TryReadIntSuffix ();
+                        retToken.Type = EchelonScriptTokenType.DecIntegerLiteral;
+                    }
+
+                    retToken.Text = tokenizer.data.Slice (startPos, tokenizer.curPos - startPos);
+                } else if (IsIntegerDigit (peekedChars [0])) {
+                    int startPos = tokenizer.curPos;
+
+                    tokenizer.ReadStringWhile ((c) => c == '\'' || IsIntegerDigit (c));
+
+                    var c = tokenizer.PeekChar ();
+                    if (c != null) {
+                        if (c == '.') {
+                            tokenizer.TryReadFloatFractional ();
+                            tokenizer.TryReadFloatExponent (retToken.TextLine, retToken.TextColumn, startPos);
+                            tokenizer.TryReadFloatSuffix ();
+
+                            retToken.Type = EchelonScriptTokenType.FloatLiteral;
+                        } else if (c == 'e' || c == 'E') {
+                            tokenizer.TryReadFloatExponent (retToken.TextLine, retToken.TextColumn, startPos);
+                            tokenizer.TryReadFloatSuffix ();
+
+                            retToken.Type = EchelonScriptTokenType.FloatLiteral;
+                        } else if (IsFloatSuffix (c.Value)) {
+                            tokenizer.ReadChar ();
+                            retToken.Type = EchelonScriptTokenType.FloatLiteral;
+                        } else {
+                            tokenizer.TryReadIntSuffix ();
+
+                            retToken.Type = EchelonScriptTokenType.DecIntegerLiteral;
+                        }
+                    }
+
+                    retToken.Text = tokenizer.data.Slice (startPos, tokenizer.curPos - startPos);
+                } else if (peekedChars [0] == '.' && peekedChars.Length >= 2 && IsIntegerDigit (peekedChars [1])) {
+                    int startPos = tokenizer.curPos;
+
+                    tokenizer.TryReadFloatFractional ();
+                    tokenizer.TryReadFloatExponent (retToken.TextLine, retToken.TextColumn, startPos);
+                    tokenizer.TryReadFloatSuffix ();
+
+                    retToken.Type = EchelonScriptTokenType.FloatLiteral;
+                    retToken.Text = tokenizer.data.Slice (startPos, tokenizer.curPos - startPos);
+                }
+
+                return true;
+            }
+        }
+
+        public class IdentifierTokenParser : TokenParser {
+            public override int MinimumStartPeek => 1;
+            public override int RequestedStartPeek => 1;
+
+            public override bool IsStartValid (EchelonScriptTokenizer tokenizer, ReadOnlySpan<char> peekedChars) {
+                return peekedChars [0] == '_' || IsLatinLetter (peekedChars [0]);
+            }
+
+            public override bool ParseToken (EchelonScriptTokenizer tokenizer, ReadOnlySpan<char> peekedChars, ref EchelonScriptToken retToken) {
+                int startPos = tokenizer.curPos;
+                int len = tokenizer.ReadStringWhile ((c) => c == '_' || IsIntegerDigit (c) || IsLatinLetter (c));
+
+                retToken.Type = EchelonScriptTokenType.Identifier;
+                retToken.Text = tokenizer.data.Slice (startPos, len);
+
+                return true;
+            }
+        }
+
+        public class StringLiteralTokenParser : TokenParser {
+            public override int MinimumStartPeek => 1;
+            public override int RequestedStartPeek => 2;
+
+            public override bool IsStartValid (EchelonScriptTokenizer tokenizer, ReadOnlySpan<char> peekedChars) {
+                return peekedChars [0] == '"' || (peekedChars.Length >= 2 && peekedChars.StartsWith ("@\""));
+            }
+
+            public override bool ParseToken (EchelonScriptTokenizer tokenizer, ReadOnlySpan<char> peekedChars, ref EchelonScriptToken retToken) {
+                int startPos = tokenizer.curPos;
+                bool verbatim = false;
+
+                if (peekedChars [0] == '@') {
+                    tokenizer.ReadChar ();
+
+                    verbatim = true;
+                    retToken.Type = EchelonScriptTokenType.VerbatimStringLiteral;
+                } else
+                    retToken.Type = EchelonScriptTokenType.RegularStringLiteral;
+
+                tokenizer.ReadChar ();
+
+                while (true) {
+                    var c = tokenizer.ReadUntil (ch => ch == '\\' || ch == '"' || ch == '\r' || ch == '\n', false);
+                    int stopPos = tokenizer.curPos;
+                    int stopLine = tokenizer.curLine;
+                    int stopColumn = CalcColumn (tokenizer.curLineStartPos, stopPos);
+                    tokenizer.ReadChar ();
+
+                    if (c == '"')
+                        break;
+                    else if (c == null) {
+                        tokenizer.Errors.Add (new EchelonScriptErrorMessage ("Unclosed string literal.", startPos, tokenizer.curPos - startPos, retToken.TextLine, retToken.TextColumn));
+                        break;
+                    } else if (c == '\\') {
+                        if (!verbatim && !tokenizer.ReadEscapeSequence ())
+                            tokenizer.Errors.Add (new EchelonScriptErrorMessage ("Unrecognized escape sequence.", stopPos, 2, stopLine, stopColumn));
+                        if (verbatim && tokenizer.PeekChar () == '"')
+                            tokenizer.ReadChar ();
+                    } else if (c == '\r' && !verbatim)
+                        tokenizer.Errors.Add (new EchelonScriptErrorMessage ("Carriage return characters are not allowed in regular strings.", stopPos, 1, stopLine, stopColumn));
+                    else if (c == '\n' && !verbatim)
+                        tokenizer.Errors.Add (new EchelonScriptErrorMessage ("Newline characters are not allowed in regular strings.", stopPos, 1, stopLine, stopColumn));
+                }
+
+                retToken.Text = tokenizer.data.Slice (startPos, tokenizer.curPos - startPos);
+
+                return true;
+            }
+        }
+
+        public class CharLiteralTokenParser : TokenParser {
+            public override int MinimumStartPeek => 1;
+            public override int RequestedStartPeek => 1;
+
+            public override bool IsStartValid (EchelonScriptTokenizer tokenizer, ReadOnlySpan<char> peekedChars) {
+                return peekedChars [0] == '\'';
+            }
+
+            public override bool ParseToken (EchelonScriptTokenizer tokenizer, ReadOnlySpan<char> peekedChars, ref EchelonScriptToken retToken) {
+                int startPos = tokenizer.curPos;
+                retToken.Type = EchelonScriptTokenType.CharacterLiteral;
+
+                tokenizer.ReadChar ();
+
+                int charCount = 0;
+                while (true) {
+                    var c = tokenizer.ReadUntil (ch => ch == '\\' || ch == '\'' || ch == '\r' || ch == '\n', false);
+                    int stopPos = tokenizer.curPos;
+                    int stopLine = tokenizer.curLine;
+                    int stopColumn = CalcColumn (tokenizer.curLineStartPos, stopPos);
+                    tokenizer.ReadChar ();
+
+                    if (c == '\'')
+                        break;
+                    else if (c == null) {
+                        tokenizer.Errors.Add (new EchelonScriptErrorMessage ("Unclosed character literal.", startPos, tokenizer.curPos - startPos, retToken.TextLine, retToken.TextColumn));
+                        break;
+                    } else if (c == '\\' && !tokenizer.ReadEscapeSequence ())
+                        tokenizer.Errors.Add (new EchelonScriptErrorMessage ("Unrecognized escape sequence.", stopPos, 2, stopLine, stopColumn));
+                    else if (c == '\r')
+                        tokenizer.Errors.Add (new EchelonScriptErrorMessage ("Carriage return characters are not allowed in character literals.", stopPos, 1, stopLine, stopColumn));
+                    else if (c == '\n')
+                        tokenizer.Errors.Add (new EchelonScriptErrorMessage ("Newline characters are not allowed in character literals.", stopPos, 1, stopLine, stopColumn));
+
+                    charCount++;
+                }
+
+                retToken.Text = tokenizer.data.Slice (startPos, tokenizer.curPos - startPos);
+
+                if (charCount > 1)
+                    tokenizer.Errors.Add (new EchelonScriptErrorMessage (retToken, "Too many characters in character literal."));
+
+                return true;
+            }
+        }
+
+        public class MiscTokenParser : TokenParser {
+            protected static readonly int tokenStringsMaxLength;
+            protected static readonly List<(EchelonScriptTokenType Tok, string Str)> tokenStrings;
+
+            static MiscTokenParser () {
+                tokenStrings = new List<(EchelonScriptTokenType, string)> {
+                    (EchelonScriptTokenType.Dot, "."),
+                    (EchelonScriptTokenType.DotDot, ".."),
+
+                    (EchelonScriptTokenType.AndAnd, "&&"),
+                    (EchelonScriptTokenType.OrOr, "||"),
+
+                    (EchelonScriptTokenType.Bang, "!"),
+                    (EchelonScriptTokenType.Plus, "+"),
+                    (EchelonScriptTokenType.Minus, "-"),
+                    (EchelonScriptTokenType.Asterisk, "*"),
+                    (EchelonScriptTokenType.Divide, "/"),
+                    (EchelonScriptTokenType.Modulo, "%"),
+                    (EchelonScriptTokenType.PowerOp, "**"),
+                    (EchelonScriptTokenType.PlusPlus, "++"),
+                    (EchelonScriptTokenType.MinusMinus, "--"),
+
+                    (EchelonScriptTokenType.And, "&"),
+                    (EchelonScriptTokenType.BitOr, "|"),
+                    (EchelonScriptTokenType.ShiftLeft, "<<"),
+                    (EchelonScriptTokenType.ShiftRight, ">>"),
+                    (EchelonScriptTokenType.ShiftRightU, ">>>"),
+
+                    (EchelonScriptTokenType.Question, "?"),
+                    (EchelonScriptTokenType.Colon, ":"),
+
+                    (EchelonScriptTokenType.LesserThan, "<"),
+                    (EchelonScriptTokenType.GreaterThan, ">"),
+                    (EchelonScriptTokenType.LesserThanEq, "<="),
+                    (EchelonScriptTokenType.GreaterThanEq, ">="),
+
+                    (EchelonScriptTokenType.Equals, "="),
+                    (EchelonScriptTokenType.PlusEq, "+="),
+                    (EchelonScriptTokenType.MinusEq, "-="),
+                    (EchelonScriptTokenType.MultiplyEq, "*="),
+                    (EchelonScriptTokenType.DivideEq, "/="),
+                    (EchelonScriptTokenType.ModuloEq, "%="),
+                    (EchelonScriptTokenType.PowerOpEq, "**="),
+
+                    (EchelonScriptTokenType.AndEq, "&="),
+                    (EchelonScriptTokenType.BitOrEq, "|="),
+                    (EchelonScriptTokenType.ShiftLeftEq, "<<="),
+                    (EchelonScriptTokenType.ShiftRightEq, ">>="),
+                    (EchelonScriptTokenType.ShiftRightUEq, ">>>="),
+
+                    (EchelonScriptTokenType.EqualsEquals, "=="),
+                    (EchelonScriptTokenType.NotEquals, "!="),
+
+                    (EchelonScriptTokenType.ParenOpen, "("),
+                    (EchelonScriptTokenType.ParenClose, ")"),
+                    (EchelonScriptTokenType.BracketOpen, "["),
+                    (EchelonScriptTokenType.BracketClose, "]"),
+                    (EchelonScriptTokenType.BraceOpen, "{"),
+                    (EchelonScriptTokenType.BraceClose, "}"),
+
+                    (EchelonScriptTokenType.Comma, ","),
+                    (EchelonScriptTokenType.Semicolon, ";")
+                };
+
+                tokenStrings.Sort ((x, y) => -x.Str.Length.CompareTo (y.Str.Length));
+                tokenStringsMaxLength = tokenStrings [0].Str.Length;
+            }
+
+            public override int MinimumStartPeek => tokenParsersMaxLength;
+            public override int RequestedStartPeek => tokenParsersMaxLength;
+
+            public override bool IsStartValid (EchelonScriptTokenizer tokenizer, ReadOnlySpan<char> peekedChars) {
+                return true;
+            }
+
+            public override bool ParseToken (EchelonScriptTokenizer tokenizer, ReadOnlySpan<char> peekedChars, ref EchelonScriptToken retToken) {
+                foreach (var tk in tokenStrings) {
+                    if (peekedChars.Length < tk.Str.Length)
+                        continue;
+
+                    if (peekedChars.StartsWith (tk.Str)) {
+                        tokenizer.ReadChars (tk.Str.Length);
+                        retToken.Type = tk.Tok;
+                        retToken.Text = tokenizer.data.Slice (retToken.TextStartPos, tokenizer.curPos - retToken.TextStartPos);
+
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+        }
+
+        #endregion
+
         #region ================== Constants
 
         public const char NumberSeparator = '\'';
@@ -154,8 +499,8 @@ namespace EchelonScriptCompiler.Parser {
         protected int curLine;
         protected int curLineStartPos;
 
-        protected static readonly List<(EchelonScriptTokenType Tok, string Str)> tokenStrings;
-        protected static readonly int tokenStringsMaxLength;
+        protected static readonly List<TokenParser> tokenParsers;
+        protected static readonly int tokenParsersMaxLength;
 
         #endregion
 
@@ -168,67 +513,19 @@ namespace EchelonScriptCompiler.Parser {
         #region ================== Constructors
 
         static EchelonScriptTokenizer () {
-            tokenStrings = new List<(EchelonScriptTokenType, string)> {
-                (EchelonScriptTokenType.Dot, "."),
-                (EchelonScriptTokenType.DotDot, ".."),
+            tokenParsers = new List<TokenParser> ();
 
-                (EchelonScriptTokenType.AndAnd, "&&"),
-                (EchelonScriptTokenType.OrOr, "||"),
+            tokenParsers.Add (new HexTokenParser ());
+            tokenParsers.Add (new BinaryTokenParser ());
+            tokenParsers.Add (new DecimalTokenParser ());
+            tokenParsers.Add (new IdentifierTokenParser ());
+            tokenParsers.Add (new StringLiteralTokenParser ());
+            tokenParsers.Add (new CharLiteralTokenParser ());
+            tokenParsers.Add (new MiscTokenParser ());
 
-                (EchelonScriptTokenType.Bang, "!"),
-                (EchelonScriptTokenType.Plus, "+"),
-                (EchelonScriptTokenType.Minus, "-"),
-                (EchelonScriptTokenType.Asterisk, "*"),
-                (EchelonScriptTokenType.Divide, "/"),
-                (EchelonScriptTokenType.Modulo, "%"),
-                (EchelonScriptTokenType.PowerOp, "**"),
-                (EchelonScriptTokenType.PlusPlus, "++"),
-                (EchelonScriptTokenType.MinusMinus, "--"),
-
-                (EchelonScriptTokenType.And, "&"),
-                (EchelonScriptTokenType.BitOr, "|"),
-                (EchelonScriptTokenType.ShiftLeft, "<<"),
-                (EchelonScriptTokenType.ShiftRight, ">>"),
-                (EchelonScriptTokenType.ShiftRightU, ">>>"),
-
-                (EchelonScriptTokenType.Question, "?"),
-                (EchelonScriptTokenType.Colon, ":"),
-
-                (EchelonScriptTokenType.LesserThan, "<"),
-                (EchelonScriptTokenType.GreaterThan, ">"),
-                (EchelonScriptTokenType.LesserThanEq, "<="),
-                (EchelonScriptTokenType.GreaterThanEq, ">="),
-
-                (EchelonScriptTokenType.Equals, "="),
-                (EchelonScriptTokenType.PlusEq, "+="),
-                (EchelonScriptTokenType.MinusEq, "-="),
-                (EchelonScriptTokenType.MultiplyEq, "*="),
-                (EchelonScriptTokenType.DivideEq, "/="),
-                (EchelonScriptTokenType.ModuloEq, "%="),
-                (EchelonScriptTokenType.PowerOpEq, "**="),
-
-                (EchelonScriptTokenType.AndEq, "&="),
-                (EchelonScriptTokenType.BitOrEq, "|="),
-                (EchelonScriptTokenType.ShiftLeftEq, "<<="),
-                (EchelonScriptTokenType.ShiftRightEq, ">>="),
-                (EchelonScriptTokenType.ShiftRightUEq, ">>>="),
-
-                (EchelonScriptTokenType.EqualsEquals, "=="),
-                (EchelonScriptTokenType.NotEquals, "!="),
-
-                (EchelonScriptTokenType.ParenOpen, "("),
-                (EchelonScriptTokenType.ParenClose, ")"),
-                (EchelonScriptTokenType.BracketOpen, "["),
-                (EchelonScriptTokenType.BracketClose, "]"),
-                (EchelonScriptTokenType.BraceOpen, "{"),
-                (EchelonScriptTokenType.BraceClose, "}"),
-
-                (EchelonScriptTokenType.Comma, ","),
-                (EchelonScriptTokenType.Semicolon, ";")
-            };
-
-            tokenStrings.Sort ((x, y) => -x.Str.Length.CompareTo (y.Str.Length));
-            tokenStringsMaxLength = Math.Max (4, tokenStrings [0].Str.Length);
+            tokenParsersMaxLength = 1;
+            foreach (var parser in tokenParsers)
+                tokenParsersMaxLength = Math.Max (Math.Max (tokenParsersMaxLength, parser.MinimumStartPeek), parser.RequestedStartPeek);
         }
 
         public EchelonScriptTokenizer (List<EchelonScriptErrorMessage> errorsList) {
@@ -292,177 +589,14 @@ namespace EchelonScriptCompiler.Parser {
                 return (retToken, docTk);
             }
 
-            var peekedChars = PeekChars (tokenStringsMaxLength);
+            var peekedChars = PeekChars (tokenParsersMaxLength);
 
-            if (peekedChars.StartsWith ("0x", StringComparison.InvariantCultureIgnoreCase)) {
-                int startPos = curPos;
-                ReadChars (2);
+            foreach (var parser in tokenParsers) {
+                if (peekedChars.Length < parser.MinimumStartPeek)
+                    continue;
 
-                if (PeekChar () == NumberSeparator)
-                    Errors.Add (new EchelonScriptErrorMessage (retToken, "Invalid hex literal."));
-                else
-                    ReadStringWhile (c => IsHexDigit (c) || c == NumberSeparator);
-
-                TryReadIntSuffix ();
-
-                retToken.Type = EchelonScriptTokenType.HexIntegerLiteral;
-                retToken.Text = data.Slice (startPos, curPos - startPos);
-            } else if (peekedChars.StartsWith ("0b", StringComparison.InvariantCultureIgnoreCase)) {
-                int startPos = curPos;
-                ReadChars (2);
-
-                if (PeekChar () == NumberSeparator)
-                    Errors.Add (new EchelonScriptErrorMessage (retToken, "Invalid binary literal."));
-                else
-                    ReadStringWhile (c => IsBinaryDigit (c) || c == NumberSeparator);
-
-                TryReadIntSuffix ();
-
-                retToken.Type = EchelonScriptTokenType.BinIntegerLiteral;
-                retToken.Text = data.Slice (startPos, curPos - startPos);
-            } else if (peekedChars [0] == '.' && peekedChars.Length >= 2 && IsIntegerDigit (peekedChars [1])) {
-                int startPos = curPos;
-
-                TryReadFloatFractional ();
-                TryReadFloatExponent (retToken.TextLine, retToken.TextColumn, startPos);
-                TryReadFloatSuffix ();
-
-                retToken.Type = EchelonScriptTokenType.FloatLiteral;
-                retToken.Text = data.Slice (startPos, curPos - startPos);
-            } else if (peekedChars [0] == '0') {
-                int startPos = curPos;
-
-                ReadChar ();
-                if (PeekChar () == '.') {
-                    TryReadFloatFractional ();
-                    TryReadFloatExponent (retToken.TextLine, retToken.TextColumn, startPos);
-                    TryReadFloatSuffix ();
-
-                    retToken.Type = EchelonScriptTokenType.FloatLiteral;
-                } else {
-                    TryReadIntSuffix ();
-                    retToken.Type = EchelonScriptTokenType.DecIntegerLiteral;
-                }
-
-                retToken.Text = data.Slice (startPos, curPos - startPos);
-            } else if (IsIntegerDigit (peekedChars [0])) {
-                int startPos = curPos;
-
-                ReadStringWhile ((c) => c == '\'' || IsIntegerDigit (c));
-
-                var c = PeekChar ();
-                if (c != null) {
-                    if (c == '.') {
-                        TryReadFloatFractional ();
-                        TryReadFloatExponent (retToken.TextLine, retToken.TextColumn, startPos);
-                        TryReadFloatSuffix ();
-
-                        retToken.Type = EchelonScriptTokenType.FloatLiteral;
-                    } else if (c == 'e' || c == 'E') {
-                        TryReadFloatExponent (retToken.TextLine, retToken.TextColumn, startPos);
-                        TryReadFloatSuffix ();
-
-                        retToken.Type = EchelonScriptTokenType.FloatLiteral;
-                    } else if (IsFloatSuffix (c.Value)) {
-                        ReadChar ();
-                        retToken.Type = EchelonScriptTokenType.FloatLiteral;
-                    } else {
-                        TryReadIntSuffix ();
-
-                        retToken.Type = EchelonScriptTokenType.DecIntegerLiteral;
-                    }
-                }
-                retToken.Text = data.Slice (startPos, curPos - startPos);
-            } else if (peekedChars [0] == '_' || IsLatinLetter (peekedChars [0])) {
-                int startPos = curPos;
-                int len = ReadStringWhile ((c) => c == '_' || IsIntegerDigit (c) || IsLatinLetter (c));
-
-                retToken.Type = EchelonScriptTokenType.Identifier;
-                retToken.Text = data.Slice (startPos, len);
-            } else if (peekedChars [0] == '"' || (peekedChars.Length >= 2 && peekedChars.StartsWith ("@\""))) {
-                int startPos = curPos;
-                bool verbatim = false;
-
-                if (peekedChars [0] == '@') {
-                    ReadChar ();
-
-                    verbatim = true;
-                    retToken.Type = EchelonScriptTokenType.VerbatimStringLiteral;
-                } else
-                    retToken.Type = EchelonScriptTokenType.RegularStringLiteral;
-
-                ReadChar ();
-
-                while (true) {
-                    var c = ReadUntil (ch => ch == '\\' || ch == '"' || ch == '\r' || ch == '\n', false);
-                    int stopPos = curPos;
-                    int stopLine = curLine;
-                    int stopColumn = CalcColumn (curLineStartPos, stopPos);
-                    ReadChar ();
-
-                    if (c == '"')
-                        break;
-                    else if (c == null) {
-                        Errors.Add (new EchelonScriptErrorMessage ("Unclosed string literal.", startPos, curPos - startPos, retToken.TextLine, retToken.TextColumn));
-                        break;
-                    } else if (c == '\\') {
-                        if (!verbatim && !ReadEscapeSequence ())
-                            Errors.Add (new EchelonScriptErrorMessage ("Unrecognized escape sequence.", stopPos, 2, stopLine, stopColumn));
-                        if (verbatim && PeekChar () == '"')
-                            ReadChar ();
-                    } else if (c == '\r' && !verbatim)
-                        Errors.Add (new EchelonScriptErrorMessage ("Carriage return characters are not allowed in regular strings.", stopPos, 1, stopLine, stopColumn));
-                    else if (c == '\n' && !verbatim)
-                        Errors.Add (new EchelonScriptErrorMessage ("Newline characters are not allowed in regular strings.", stopPos, 1, stopLine, stopColumn));
-                }
-
-                retToken.Text = data.Slice (startPos, curPos - startPos);
-            } else if (peekedChars [0] == '\'') {
-                int startPos = curPos;
-                retToken.Type = EchelonScriptTokenType.CharacterLiteral;
-
-                ReadChar ();
-
-                int charCount = 0;
-                while (true) {
-                    var c = ReadUntil (ch => ch == '\\' || ch == '\'' || ch == '\r' || ch == '\n', false);
-                    int stopPos = curPos;
-                    int stopLine = curLine;
-                    int stopColumn = CalcColumn (curLineStartPos, stopPos);
-                    ReadChar ();
-
-                    if (c == '\'')
-                        break;
-                    else if (c == null) {
-                        Errors.Add (new EchelonScriptErrorMessage ("Unclosed character literal.", startPos, curPos - startPos, retToken.TextLine, retToken.TextColumn));
-                        break;
-                    } else if (c == '\\' && !ReadEscapeSequence ())
-                        Errors.Add (new EchelonScriptErrorMessage ("Unrecognized escape sequence.", stopPos, 2, stopLine, stopColumn));
-                    else if (c == '\r')
-                        Errors.Add (new EchelonScriptErrorMessage ("Carriage return characters are not allowed in character literals.", stopPos, 1, stopLine, stopColumn));
-                    else if (c == '\n')
-                        Errors.Add (new EchelonScriptErrorMessage ("Newline characters are not allowed in character literals.", stopPos, 1, stopLine, stopColumn));
-
-                    charCount++;
-                }
-
-                retToken.Text = data.Slice (startPos, curPos - startPos);
-
-                if (charCount > 1)
-                    Errors.Add (new EchelonScriptErrorMessage (retToken, "Too many characters in character literal."));
-            } else {
-                foreach (var tk in tokenStrings) {
-                    if (peekedChars.Length < tk.Str.Length)
-                        continue;
-
-                    if (peekedChars.StartsWith (tk.Str)) {
-                        ReadChars (tk.Str.Length);
-                        retToken.Type = tk.Tok;
-                        retToken.Text = data.Slice (retToken.TextStartPos, curPos - retToken.TextStartPos);
-
-                        return (retToken, docTk);
-                    }
-                }
+                if (parser.IsStartValid (this, peekedChars) && parser.ParseToken (this, peekedChars, ref retToken))
+                    break;
             }
 
             if (retToken.Type == EchelonScriptTokenType.Invalid) {
@@ -477,7 +611,7 @@ namespace EchelonScriptCompiler.Parser {
 
         #region Protected methods
 
-        protected int CalcColumn (int columnStart, int textPos) {
+        protected static int CalcColumn (int columnStart, int textPos) {
             return textPos - columnStart + 1;
         }
 
@@ -658,26 +792,26 @@ namespace EchelonScriptCompiler.Parser {
 
         #region Common pattern matching
 
-        protected bool IsLatinLetter (char? c) {
+        protected static bool IsLatinLetter (char? c) {
             return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
         }
 
-        protected bool IsIntegerDigit (char? c) {
+        protected static bool IsIntegerDigit (char? c) {
             return c >= '0' && c <= '9';
         }
 
-        protected bool IsHexDigit (char? c) {
+        protected static bool IsHexDigit (char? c) {
             if (IsIntegerDigit (c))
                 return true;
 
             return (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
         }
 
-        protected bool IsBinaryDigit (char? c) {
+        protected static bool IsBinaryDigit (char? c) {
             return c == '0' || c == '1';
         }
 
-        protected bool IsFloatSuffix (char? c) {
+        protected static bool IsFloatSuffix (char? c) {
             switch (c) {
                 case 'f':
                 case 'F':
