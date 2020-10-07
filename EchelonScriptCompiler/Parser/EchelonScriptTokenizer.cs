@@ -49,9 +49,6 @@ namespace EchelonScriptCompiler.Parser {
         ShiftRight,
         ShiftRightU,
 
-        Question,
-        Colon,
-
         LesserThan,
         GreaterThan,
         LesserThanEq,
@@ -82,8 +79,11 @@ namespace EchelonScriptCompiler.Parser {
         BraceOpen,
         BraceClose,
 
+        Question,
+        Colon,
         Comma,
         Semicolon,
+        LambdaArrow,
 
         Identifier,
 
@@ -417,9 +417,6 @@ namespace EchelonScriptCompiler.Parser {
                     (EchelonScriptTokenType.ShiftRight, ">>"),
                     (EchelonScriptTokenType.ShiftRightU, ">>>"),
 
-                    (EchelonScriptTokenType.Question, "?"),
-                    (EchelonScriptTokenType.Colon, ":"),
-
                     (EchelonScriptTokenType.LesserThan, "<"),
                     (EchelonScriptTokenType.GreaterThan, ">"),
                     (EchelonScriptTokenType.LesserThanEq, "<="),
@@ -449,8 +446,11 @@ namespace EchelonScriptCompiler.Parser {
                     (EchelonScriptTokenType.BraceOpen, "{"),
                     (EchelonScriptTokenType.BraceClose, "}"),
 
+                    (EchelonScriptTokenType.Question, "?"),
+                    (EchelonScriptTokenType.Colon, ":"),
                     (EchelonScriptTokenType.Comma, ","),
-                    (EchelonScriptTokenType.Semicolon, ";")
+                    (EchelonScriptTokenType.Semicolon, ";"),
+                    (EchelonScriptTokenType.LambdaArrow, "=>"),
                 };
 
                 tokenStrings.Sort ((x, y) => -x.Str.Length.CompareTo (y.Str.Length));
