@@ -274,6 +274,7 @@ namespace EchelonScriptCompiler.Parser {
         }
 
         public class MiscTokenParser : TokenParser {
+            protected static readonly int tokenStringsMinLength;
             protected static readonly int tokenStringsMaxLength;
             protected static readonly List<(EchelonScriptTokenType Tok, string Str)> tokenStrings;
 
@@ -342,10 +343,11 @@ namespace EchelonScriptCompiler.Parser {
                 };
 
                 tokenStrings.Sort ((x, y) => -x.Str.Length.CompareTo (y.Str.Length));
+                tokenStringsMinLength = tokenStrings [tokenStrings.Count - 1].Str.Length;
                 tokenStringsMaxLength = tokenStrings [0].Str.Length;
             }
 
-            public override int MinimumStartPeek => tokenParsersMaxLength;
+            public override int MinimumStartPeek => tokenStringsMinLength;
             public override int RequestedStartPeek => tokenParsersMaxLength;
 
             public override bool IsStartValid (EchelonScriptTokenizer tokenizer, ReadOnlySpan<char> peekedChars) {
