@@ -21,122 +21,6 @@ using System;
 using System.Collections.Generic;
 
 namespace EchelonScriptCompiler.Parser {
-    public enum EchelonScriptTokenType {
-        Invalid = -1,
-
-        EOF = 0,
-        DocComment,
-
-        Dot,
-        DotDot,
-
-        AndAnd,
-        OrOr,
-
-        Bang,
-        Plus,
-        Minus,
-        Asterisk,
-        Divide,
-        Modulo,
-        PowerOp,
-        PlusPlus,
-        MinusMinus,
-
-        And,
-        BitOr,
-        ShiftLeft,
-        ShiftRight,
-        ShiftRightU,
-
-        LesserThan,
-        GreaterThan,
-        LesserThanEq,
-        GreaterThanEq,
-
-        Equals,
-        PlusEq,
-        MinusEq,
-        MultiplyEq,
-        DivideEq,
-        ModuloEq,
-        PowerOpEq,
-
-        AndEq,
-        BitOrEq,
-        ShiftLeftEq,
-        ShiftRightEq,
-        ShiftRightUEq,
-
-        EqualsEquals,
-        NotEquals,
-
-        ParenOpen,
-        ParenClose,
-        BracketOpen,
-        BracketClose,
-
-        BraceOpen,
-        BraceClose,
-
-        Question,
-        Colon,
-        Comma,
-        Semicolon,
-        LambdaArrow,
-
-        Identifier,
-
-        RegularStringLiteral,
-        VerbatimStringLiteral,
-
-        CharacterLiteral,
-
-        DecIntegerLiteral,
-        HexIntegerLiteral,
-        BinIntegerLiteral,
-        FloatLiteral,
-    }
-
-    public struct EchelonScriptToken {
-        public EchelonScriptTokenType Type;
-        public int TextStartPos;
-        public int TextLine;
-        public int TextColumn;
-
-        public ReadOnlyMemory<char> Text;
-    }
-
-    public struct EchelonScriptErrorMessage {
-        public string Message { get; }
-
-        public int StartPos { get; }
-        public int Length { get; }
-
-        public int Line { get; }
-        public int Column { get; }
-
-        public EchelonScriptErrorMessage (EchelonScriptToken tk, string message = null) {
-            Message = message;
-
-            StartPos = tk.TextStartPos;
-            Length = tk.Text.Length;
-
-            Line = tk.TextLine;
-            Column = tk.TextColumn;
-        }
-
-        public EchelonScriptErrorMessage (string message, int startPos, int length, int line, int column) {
-            Message = message;
-
-            StartPos = startPos;
-            Length = length;
-
-            Line = line;
-            Column = column;
-        }
-    }
-
     public class EchelonScriptTokenizer {
         #region ================== Token parsers
 
@@ -413,6 +297,8 @@ namespace EchelonScriptCompiler.Parser {
 
                     (EchelonScriptTokenType.And, "&"),
                     (EchelonScriptTokenType.BitOr, "|"),
+                    (EchelonScriptTokenType.Xor, "^"),
+                    (EchelonScriptTokenType.Tilde, "~"),
                     (EchelonScriptTokenType.ShiftLeft, "<<"),
                     (EchelonScriptTokenType.ShiftRight, ">>"),
                     (EchelonScriptTokenType.ShiftRightU, ">>>"),
@@ -432,6 +318,8 @@ namespace EchelonScriptCompiler.Parser {
 
                     (EchelonScriptTokenType.AndEq, "&="),
                     (EchelonScriptTokenType.BitOrEq, "|="),
+                    (EchelonScriptTokenType.XorEq, "^="),
+                    (EchelonScriptTokenType.TildeEq, "~="),
                     (EchelonScriptTokenType.ShiftLeftEq, "<<="),
                     (EchelonScriptTokenType.ShiftRightEq, ">>="),
                     (EchelonScriptTokenType.ShiftRightUEq, ">>>="),
