@@ -72,8 +72,11 @@ namespace TestSuiteWPF {
         #region Public methods
 
         public void Clear () {
-            foreach (TextMarker m in markers)
-                Remove (m);
+            while (markers.Count > 0) {
+                var marker = markers.First ();
+                markers.Remove (marker);
+                Redraw (marker);
+            }
         }
 
         public void Create (int offset, int length, Action<TextMarker> func) {
