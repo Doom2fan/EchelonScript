@@ -14,4 +14,16 @@
     <ProjectReference Include="..\EchelonScriptCompiler\EchelonScriptCompiler.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Update="Tests\ParserTest.xaml.cs">
+      <SubType>Code</SubType>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Page Update="Tests\ParserTest.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+  </ItemGroup>
+
 </Project>
