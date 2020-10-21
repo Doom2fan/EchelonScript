@@ -1,0 +1,99 @@
+/*
+ * EchelonScript syntax sample
+ */
+
+using System;
+alias SomeShit = System.SomeShit;
+
+namespace A.Namespace {
+    mixin template SomeMixin {
+        immutable (int64[])* SomePointer; // Pointer to an immutable array of int64s
+    }
+
+    public interface ISomeInterface {
+        /+
+         + Does a thing
+         +/
+        void DoTheThing ();
+    }
+
+    /*
+     * To add: ADT syntax.
+     */
+
+    public void DoAThing (const (string) someInput) {
+        // Does the thing
+    }
+
+    public class SomeClass {
+        public static ui int Fuck = 15;
+        public const (string) SomeConstant = "Fuck\n\tShit";
+
+        public ui {
+            int32 SomeCounter;
+            float32 SomeFloat;
+            string SomeText;
+
+            mixin SomeMixin; // Inserted into this block
+        }
+
+        public float SomeFunction (float val) {
+            return SomeTemplatedFunction (val);
+        }
+
+        public int SomeFunction (int val) {
+            return SomeTemplatedFunction (val);
+        }
+
+        public T SomeTemplatedFunction!(T) (T val)
+            if (hasBinaryOp!(T, "+")) {
+            return cast (T) (1) / val + val;
+        }
+    }
+
+    internal class SomeOtherClass : SomeClass, ISomeInterface {
+        public void DoTheThing () {
+            using SomeNamespace : Fuckle;
+
+            Fuckle (1337);
+            Foo* aThing = new (1234);
+            // Does the thing
+        }
+    }
+
+    public struct SomeStruct : ISomeInterface {
+        mixin SomeMixin;
+
+        public void DoTheThing () {
+            var someUInt32 = 50u;
+
+            var someArraySlice = SomePointer [0 .. 8]; // Slices from 0 to 8. Start is inclusive, end is exclusive.
+            (int foo, float bar) someOtherTuple = (69, 13.37);
+            var someTuple = (someArraySlice, someOtherTuple.foo);
+
+            // Also does the thing
+        }
+    }
+
+    component Damageable {
+        int Health;
+
+        int DefaultHealth {
+            Health = value;
+        }
+    }
+
+    public entity SomeEntity {
+        component Damageable;
+
+        defaults Damageable {
+            Health 500;
+        }
+    }
+
+    public entity SomeDerivedEntity : SomeEntity {
+        defaults Damageable {
+            Health 100;
+        }
+    }
+}
