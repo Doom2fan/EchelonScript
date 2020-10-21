@@ -19,9 +19,10 @@
 
 using System;
 using System.Collections.Generic;
+using EchelonScriptCompiler.Utilities;
 
 namespace EchelonScriptCompiler.Parser {
-    public class EchelonScriptTokenizer {
+    public class EchelonScriptTokenizer : IDisposable {
         #region ================== Token parsers
 
         public abstract class TokenParser {
@@ -45,7 +46,7 @@ namespace EchelonScriptCompiler.Parser {
                 tokenizer.ReadChars (2);
 
                 if (tokenizer.PeekChar () == NumberSeparator)
-                    tokenizer.Errors.Add (new EchelonScriptErrorMessage (retToken, "Invalid hex literal."));
+                    tokenizer.Errors.Add (new EchelonScriptErrorMessage (retToken, ES_Errors.InvalidHexLiteral));
                 else
                     tokenizer.ReadStringWhile (c => IsHexDigit (c) || c == NumberSeparator);
 
@@ -71,7 +72,7 @@ namespace EchelonScriptCompiler.Parser {
                 tokenizer.ReadChars (2);
 
                 if (tokenizer.PeekChar () == NumberSeparator)
-                    tokenizer.Errors.Add (new EchelonScriptErrorMessage (retToken, "Invalid binary literal."));
+                    tokenizer.Errors.Add (new EchelonScriptErrorMessage (retToken, ES_Errors.InvalidBinaryLiteral));
                 else
                     tokenizer.ReadStringWhile (c => IsBinaryDigit (c) || c == NumberSeparator);
 
@@ -208,17 +209,17 @@ namespace EchelonScriptCompiler.Parser {
                     if (c == '"')
                         break;
                     else if (c == null) {
-                        tokenizer.Errors.Add (new EchelonScriptErrorMessage ("Unclosed string literal.", startPos, tokenizer.curPos - startPos, retToken.TextLine, retToken.TextColumn));
+                        tokenizer.Errors.Add (new EchelonScriptErrorMessage (ES_Errors.UnclosedStringLiteral, startPos, tokenizer.curPos - startPos, retToken.TextLine, retToken.TextColumn));
                         break;
                     } else if (c == '\\') {
                         if (!verbatim && !tokenizer.ReadEscapeSequence ())
-                            tokenizer.Errors.Add (new EchelonScriptErrorMessage ("Unrecognized escape sequence.", stopPos, 2, stopLine, stopColumn));
+                            tokenizer.Errors.Add (new EchelonScriptErrorMessage (ES_Errors.UnrecognizedEscape, stopPos, 2, stopLine, stopColumn));
                         if (verbatim && tokenizer.PeekChar () == '"')
                             tokenizer.ReadChar ();
                     } else if (c == '\r' && !verbatim)
-                        tokenizer.Errors.Add (new EchelonScriptErrorMessage ("Carriage return characters are not allowed in regular strings.", stopPos, 1, stopLine, stopColumn));
+                        tokenizer.Errors.Add (new EchelonScriptErrorMessage (ES_Errors.NoCRInRegularStrings, stopPos, 1, stopLine, stopColumn));
                     else if (c == '\n' && !verbatim)
-                        tokenizer.Errors.Add (new EchelonScriptErrorMessage ("Newline characters are not allowed in regular strings.", stopPos, 1, stopLine, stopColumn));
+                        tokenizer.Errors.Add (new EchelonScriptErrorMessage (ES_Errors.NoLFInRegularStrings, stopPos, 1, stopLine, stopColumn));
                 }
 
                 retToken.Text = tokenizer.data.Slice (startPos, tokenizer.curPos - startPos);
@@ -252,14 +253,14 @@ namespace EchelonScriptCompiler.Parser {
                     if (c == '\'')
                         break;
                     else if (c == null) {
-                        tokenizer.Errors.Add (new EchelonScriptErrorMessage ("Unclosed character literal.", startPos, tokenizer.curPos - startPos, retToken.TextLine, retToken.TextColumn));
+                        tokenizer.Errors.Add (new EchelonScriptErrorMessage (ES_Errors.UnclosedCharLiteral, startPos, tokenizer.curPos - startPos, retToken.TextLine, retToken.TextColumn));
                         break;
                     } else if (c == '\\' && !tokenizer.ReadEscapeSequence ())
-                        tokenizer.Errors.Add (new EchelonScriptErrorMessage ("Unrecognized escape sequence.", stopPos, 2, stopLine, stopColumn));
+                        tokenizer.Errors.Add (new EchelonScriptErrorMessage (ES_Errors.UnrecognizedEscape, stopPos, 2, stopLine, stopColumn));
                     else if (c == '\r')
-                        tokenizer.Errors.Add (new EchelonScriptErrorMessage ("Carriage return characters are not allowed in character literals.", stopPos, 1, stopLine, stopColumn));
+                        tokenizer.Errors.Add (new EchelonScriptErrorMessage (ES_Errors.NoCRInCharLiterals, stopPos, 1, stopLine, stopColumn));
                     else if (c == '\n')
-                        tokenizer.Errors.Add (new EchelonScriptErrorMessage ("Newline characters are not allowed in character literals.", stopPos, 1, stopLine, stopColumn));
+                        tokenizer.Errors.Add (new EchelonScriptErrorMessage (ES_Errors.NoLFInCharLiterals, stopPos, 1, stopLine, stopColumn));
 
                     charCount++;
                 }
@@ -267,7 +268,7 @@ namespace EchelonScriptCompiler.Parser {
                 retToken.Text = tokenizer.data.Slice (startPos, tokenizer.curPos - startPos);
 
                 if (charCount > 1)
-                    tokenizer.Errors.Add (new EchelonScriptErrorMessage (retToken, "Too many characters in character literal."));
+                    tokenizer.Errors.Add (new EchelonScriptErrorMessage (retToken, ES_Errors.TooLongCharLiteral));
 
                 return true;
             }
@@ -380,17 +381,21 @@ namespace EchelonScriptCompiler.Parser {
 
         #endregion
 
+        #region ================== Static fields
+
+        protected static readonly List<TokenParser> tokenParsers;
+        protected static readonly int tokenParsersMaxLength;
+
+        #endregion
+
         #region ================== Instance fields
 
         protected int curPos;
         protected ReadOnlyMemory<char> data;
-        protected (EchelonScriptToken, EchelonScriptToken?)? currentToken;
+        protected StructPooledList<(EchelonScriptToken, EchelonScriptToken?)> tokenBuffer;
 
         protected int curLine;
         protected int curLineStartPos;
-
-        protected static readonly List<TokenParser> tokenParsers;
-        protected static readonly int tokenParsersMaxLength;
 
         #endregion
 
@@ -421,7 +426,7 @@ namespace EchelonScriptCompiler.Parser {
         public EchelonScriptTokenizer (List<EchelonScriptErrorMessage> errorsList) {
             curPos = 0;
             data = null;
-            currentToken = null;
+            tokenBuffer = new StructPooledList<(EchelonScriptToken, EchelonScriptToken?)> (ClearMode.Auto);
 
             Errors = errorsList;
         }
@@ -437,7 +442,7 @@ namespace EchelonScriptCompiler.Parser {
             curPos = 0;
             curLine = 1;
             curLineStartPos = 0;
-            currentToken = null;
+            tokenBuffer.Clear ();
         }
 
         /// <summary>Sets the source data for the input text.</summary>
@@ -450,22 +455,37 @@ namespace EchelonScriptCompiler.Parser {
         /// <summary>Peeks a token from the input text.</summary>
         /// <returns>The next token in the input text.</returns>
         public (EchelonScriptToken tk, EchelonScriptToken? doc) PeekNextToken () {
-            if (currentToken != null)
-                return currentToken.Value;
+            if (tokenBuffer.Count > 0)
+                return tokenBuffer [0];
 
-            currentToken = NextToken ();
-            return currentToken.Value;
+            var newToken = InternalNextToken ();
+            tokenBuffer.Add (newToken);
+            return newToken;
+        }
+
+        /// <summary>Peeks a token from the input text with the specified offset.</summary>
+        /// <param name="offset">The offset of the token.</param>
+        /// <returns>The next token in the input text.</returns>
+        public (EchelonScriptToken tk, EchelonScriptToken? doc) PeekNextToken (int offset) {
+            while (tokenBuffer.Count < (offset + 1))
+                tokenBuffer.Add (InternalNextToken ());
+
+            return tokenBuffer [offset];
         }
 
         /// <summary>Reads a token from the input text.</summary>
         /// <returns>The next token in the input text.</returns>
         public (EchelonScriptToken tk, EchelonScriptToken? doc) NextToken () {
-            if (currentToken != null) {
-                var curToken = currentToken.Value;
-                currentToken = null;
+            if (tokenBuffer.Count > 0) {
+                var curToken = tokenBuffer [0];
+                tokenBuffer.RemoveAt (0);
                 return curToken;
             }
 
+            return InternalNextToken ();
+        }
+
+        protected (EchelonScriptToken tk, EchelonScriptToken? doc) InternalNextToken () {
             var docTk = SkipWhitespace ();
             var retToken = new EchelonScriptToken ();
             retToken.Type = EchelonScriptTokenType.Invalid;
@@ -794,7 +814,7 @@ namespace EchelonScriptCompiler.Parser {
                 }
 
                 if (!IsIntegerDigit (PeekChar ())) {
-                    Errors.Add (new EchelonScriptErrorMessage ("Invalid float literal.", startPos, curPos - startPos, line, column));
+                    Errors.Add (new EchelonScriptErrorMessage (ES_Errors.InvalidFloatLiteral, startPos, curPos - startPos, line, column));
                     curPos -= hasSign ? 2 : 1;
                     return;
                 }
@@ -829,6 +849,24 @@ namespace EchelonScriptCompiler.Parser {
         #endregion
 
         #endregion
+
+        #endregion
+
+        #region ================== IDisposable Support
+
+        public bool IsDisposed { get; private set; }
+
+        protected virtual void DoDispose () {
+            if (!IsDisposed) {
+                tokenBuffer.Dispose ();
+
+                IsDisposed = true;
+            }
+        }
+
+        public void Dispose () {
+            DoDispose ();
+        }
 
         #endregion
     }

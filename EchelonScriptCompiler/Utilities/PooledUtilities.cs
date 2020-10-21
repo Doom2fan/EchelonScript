@@ -216,6 +216,17 @@ namespace EchelonScriptCompiler.Utilities {
         }
 
         /// <inheritdoc/>
+        public void AddRange (ReadOnlySpan<T> newItems) {
+            int startPos = size;
+            EnsureCapacity (size + newItems.Length);
+
+            newItems.CopyTo (items.AsSpan (startPos, newItems.Length));
+
+            version++;
+            size++;
+        }
+
+        /// <inheritdoc/>
         public void Insert (int index, T item) {
             // Note that insertions at the end are legal.
             if ((uint) index > (uint) size)
@@ -485,17 +496,13 @@ namespace EchelonScriptCompiler.Utilities {
 
         public bool IsDisposed { get; private set; }
 
-        private void DoDispose () {
+        public void Dispose () {
             if (!IsDisposed) {
                 ReturnArray ();
                 size = 0;
 
                 IsDisposed = true;
             }
-        }
-
-        public void Dispose () {
-            DoDispose ();
         }
 
         #endregion

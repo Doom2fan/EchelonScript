@@ -18,8 +18,6 @@
 */
 
 using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace EchelonScriptCompiler.Parser {
     public enum EchelonScriptTokenType {
@@ -140,5 +138,20 @@ namespace EchelonScriptCompiler.Parser {
             Line = line;
             Column = column;
         }
+    }
+
+    public enum ES_AccessModifier {
+        /// <summary>The symbol is only accessible from the context it was defined in.</summary>
+        Private,
+        /// <summary>The symbol is accessible from the context it was defined in and anything inheriting from it.</summary>
+        Protected,
+        /// <summary>The symbol is accessible from the context it was defined in, anything inheriting from it and from
+        /// anything defined in the same program/library as the context it was defined in.</summary>
+        ProtectedInternal,
+        /// <summary>The symbol is accessible from the context it was defined in and from anything defined in the same
+        /// program/library as the context it was defined in.</summary>
+        Internal,
+        /// <summary>The symbol is accessible from any context.</summary>
+        Public,
     }
 }

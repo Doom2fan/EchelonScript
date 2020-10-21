@@ -18,9 +18,7 @@
 */
 
 using System;
-using System.Collections.Generic;
 using System.Windows.Controls;
-using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using EchelonScriptCompiler.Parser;
@@ -90,6 +88,219 @@ namespace TestSuiteWPF.Tests {
                     continue;
 
                 DisplayError (error.Column, error.Line, error.Length, error.Message);
+            }
+
+            astTreeView.Items.Clear ();
+
+            var rootItem = new TreeViewItem ();
+            rootItem.Header = "Code Unit";
+            rootItem.IsExpanded = true;
+            astTreeView.Items.Add (rootItem);
+
+            foreach (var import in astTree.ImportStatements)
+                AddAstNodeToTree (import, rootItem);
+            foreach (var alias in astTree.TypeAliases)
+                AddAstNodeToTree (alias, rootItem);
+            foreach (var nm in astTree.Namespaces)
+                AddAstNodeToTree (nm, rootItem);
+        }
+
+        private TreeViewItem AddNodeToTree (string nodeText, TreeViewItem parentItem) {
+            var thisItem = new TreeViewItem ();
+            parentItem.Items.Add (thisItem);
+            thisItem.Header = nodeText;
+
+            return thisItem;
+        }
+
+        private void AddAstNodeToTree (ES_AstTreeNode node, TreeViewItem parentItem) {
+            switch (node) {
+                case ES_AstNamespace nm: {
+                    var thisItem = AddNodeToTree ($"Namespace \"{nm.NamespaceName}\"", parentItem);
+
+                    foreach (var content in nm.Contents)
+                        AddAstNodeToTree (content, thisItem);
+                    break;
+                }
+
+                case ES_AstClassDefinition classDef: {
+                    var thisItem = AddNodeToTree ($"Class \"{classDef.Name.Text}\"", parentItem);
+
+                    var modifiersList = AddNodeToTree ("Access modifiers", thisItem);
+                    AddNodeToTree (classDef.AccessModifier.ToString (), modifiersList);
+                    if (classDef.Static)
+                        AddNodeToTree ("Static", modifiersList);
+
+                    if (classDef.InheritanceList != null && classDef.InheritanceList.Length > 0) {
+                        var inheritanceList = AddNodeToTree ("Inheritance list", thisItem);
+
+                        foreach (var types in classDef.InheritanceList)
+                            AddNodeToTree (types.ToString (), inheritanceList);
+                    }
+
+                    if (classDef.DocComment != null) {
+                        var docComNode = AddNodeToTree ("Documentation comment", thisItem);
+                        AddNodeToTree (classDef.DocComment.Value.Text.Span.ToString (), docComNode);
+                    }
+
+                    if (classDef.Contents != null && classDef.Contents.Length > 0) {
+                        var contentsList = AddNodeToTree ("Contents", thisItem);
+
+                        foreach (var childNode in classDef.Contents)
+                            AddAstNodeToTree (childNode, contentsList);
+                    }
+                    break;
+                }
+
+                case ES_AstStructDefinition structDef: {
+                    var thisItem = AddNodeToTree ($"Class \"{structDef.Name.Text}\"", parentItem);
+
+                    var modifiersList = AddNodeToTree ("Access modifiers", thisItem);
+                    AddNodeToTree (structDef.AccessModifier.ToString (), modifiersList);
+                    if (structDef.Static)
+                        AddNodeToTree ("Static", modifiersList);
+
+                    if (structDef.InterfacesList != null && structDef.InterfacesList.Length > 0) {
+                        var inheritanceList = AddNodeToTree ("Interfaces list", thisItem);
+
+                        foreach (var types in structDef.InterfacesList)
+                            AddAstNodeToTree (types, inheritanceList);
+                    }
+
+                    if (structDef.DocComment != null) {
+                        var docComNode = AddNodeToTree ("Documentation comment", thisItem);
+                        AddNodeToTree (structDef.DocComment.Value.Text.Span.ToString (), docComNode);
+                    }
+
+                    if (structDef.Contents != null && structDef.Contents.Length > 0) {
+                        var contentsList = AddNodeToTree ("Contents", thisItem);
+
+                        foreach (var childNode in structDef.Contents)
+                            AddAstNodeToTree (childNode, contentsList);
+                    }
+                    break;
+                }
+
+                case ES_AstEnumDefinition enumDef: {
+                    TreeViewItem thisItem;
+                    if (enumDef.BaseType == null)
+                        thisItem = AddNodeToTree ($"Enum {enumDef.Name.Text}", parentItem);
+                    else
+                        thisItem = AddNodeToTree ($"Enum {enumDef.Name.Text} ({enumDef.BaseType.Value})", parentItem);
+
+                    var modifiersList = AddNodeToTree ("Access modifiers", thisItem);
+                    AddNodeToTree (enumDef.AccessModifier.ToString (), modifiersList);
+
+                    if (enumDef.DocComment != null) {
+                        var docComNode = AddNodeToTree ("Documentation comment", thisItem);
+                        AddNodeToTree (enumDef.DocComment.Value.Text.Span.ToString (), docComNode);
+                    }
+
+                    var membersList = AddNodeToTree ("Members", thisItem);
+                    if (enumDef.MembersList != null) {
+                        foreach (var member in enumDef.MembersList) {
+                            var memberItem = AddNodeToTree (member.Item1.Text.ToString (), membersList);
+                            if (member.Item2 != null)
+                                AddAstNodeToTree (member.Item2, memberItem);
+                        }
+                    }
+
+                    break;
+                }
+
+                case ES_AstImportStatement importStatement: {
+                    var thisItem = AddNodeToTree ($"Import {importStatement.NamespaceName}", parentItem);
+
+                    if (importStatement.ImportedNames != null && importStatement.ImportedNames.Length > 0) {
+                        foreach (var symbol in importStatement.ImportedNames)
+                            AddNodeToTree (symbol.Text.ToString (), thisItem);
+                    }
+
+                    break;
+                }
+
+                case ES_AstTypeAlias alias: {
+                    AddNodeToTree ($"Type alias {alias.AliasName.Text} = {alias.OriginalName}", parentItem);
+                    break;
+                }
+
+                case ES_AstFunctionDefinition funcDef: {
+                    var thisItem = AddNodeToTree ($"Function {funcDef.Name.Text} ({funcDef.ReturnType})", parentItem);
+
+                    var modifiersList = AddNodeToTree ("Access modifiers", thisItem);
+                    AddNodeToTree (funcDef.AccessModifier.ToString (), modifiersList);
+                    if (funcDef.Static)
+                        AddNodeToTree ("Static", modifiersList);
+                    if (funcDef.Const)
+                        AddNodeToTree ("Const", modifiersList);
+
+                    if (funcDef.DocComment != null) {
+                        var docComNode = AddNodeToTree ("Documentation comment", thisItem);
+                        AddNodeToTree (funcDef.DocComment.Value.Text.Span.ToString (), docComNode);
+                    }
+
+                    var argsList = AddNodeToTree ("Arguments list", thisItem);
+                    var statements = AddNodeToTree ("Body", thisItem);
+
+                    foreach (var arg in funcDef.ArgumentsList) {
+                        string text;
+
+                        switch (arg.Mode) {
+                            case ES_AstFunctionArgument.ArgumentMode.Normal:
+                                text = $"{arg.ValueType} {arg.Name.Text}";
+                                break;
+                            case ES_AstFunctionArgument.ArgumentMode.Ref:
+                                text = $"ref {arg.ValueType} {arg.Name.Text}";
+                                break;
+                            case ES_AstFunctionArgument.ArgumentMode.In:
+                                text = $"in {arg.ValueType} {arg.Name.Text}";
+                                break;
+                            case ES_AstFunctionArgument.ArgumentMode.Out:
+                                text = $"out {arg.ValueType} {arg.Name.Text}";
+                                break;
+
+                            default:
+                                throw new NotImplementedException ();
+                        }
+
+                        var argItem = AddNodeToTree (text, argsList);
+
+                        if (arg.DefaultExpression != null)
+                            AddAstNodeToTree (arg.DefaultExpression, argItem);
+                    }
+
+                    if (funcDef.StatementsList != null) {
+                        foreach (var statement in funcDef.StatementsList)
+                            AddAstNodeToTree (statement, statements);
+                    }
+
+                    break;
+                }
+
+                case ES_AstMemberVarDefinition memberVarDef: {
+                    var thisItem = AddNodeToTree ($"Field {memberVarDef.Name.Text} ({memberVarDef.ValueType})", parentItem);
+
+                    var modifiersList = AddNodeToTree ("Access modifiers", thisItem);
+                    AddNodeToTree (memberVarDef.AccessModifier.ToString (), modifiersList);
+                    if (memberVarDef.Static)
+                        AddNodeToTree ("Static", modifiersList);
+
+                    if (memberVarDef.DocComment != null) {
+                        var docComNode = AddNodeToTree ("Documentation comment", thisItem);
+                        AddNodeToTree (memberVarDef.DocComment.Value.Text.Span.ToString (), docComNode);
+                    }
+
+                    if (memberVarDef.InitializationExpression != null) {
+                        var initializer = AddNodeToTree ("Initialization expression", thisItem);
+
+                        AddAstNodeToTree (memberVarDef.InitializationExpression, initializer);
+                    }
+
+                    break;
+                }
+
+                default:
+                    throw new NotImplementedException ();
             }
         }
 
