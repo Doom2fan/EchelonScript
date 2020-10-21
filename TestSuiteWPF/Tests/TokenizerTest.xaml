@@ -22,8 +22,8 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" />
-            <avalon:TextEditor x:Name="codeText" Grid.Column="0" ShowLineNumbers="True" ScrollViewer.HorizontalScrollBarVisibility="Auto" TextChanged="codeText_TextChanged"/>
-            <TreeView x:Name="tokensTree" Grid.Column="2">
+            <avalon:TextEditor x:Name="codeText" Grid.Column="0" ShowLineNumbers="True" ScrollViewer.HorizontalScrollBarVisibility="Auto" TextChanged="codeText_TextChanged" FontFamily="Courier New"/>
+            <TreeView x:Name="tokensTree" Grid.Column="2" FontFamily="Courier New">
                 <TreeView.ItemContainerStyle>
                     <Style TargetType="{x:Type TreeViewItem}">
                         <EventSetter Event="PreviewMouseLeftButtonDown" Handler="tokensTree_ClickItem" />
@@ -31,6 +31,6 @@
                 </TreeView.ItemContainerStyle>
             </TreeView>
         </Grid>
-        <ListBox x:Name="errorsList" IsSynchronizedWithCurrentItem="True" Grid.Row="2" ScrollViewer.VerticalScrollBarVisibility="Visible" MouseDoubleClick="errorsList_MouseDoubleClick"/>
+        <ListBox x:Name="errorsList" IsSynchronizedWithCurrentItem="True" Grid.Row="2" ScrollViewer.VerticalScrollBarVisibility="Visible" MouseDoubleClick="errorsList_MouseDoubleClick" FontFamily="Courier New"/>
     </Grid>
 </UserControl>
