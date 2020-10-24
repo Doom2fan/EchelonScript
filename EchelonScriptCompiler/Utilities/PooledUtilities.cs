@@ -223,7 +223,7 @@ namespace EchelonScriptCompiler.Utilities {
             newItems.CopyTo (items.AsSpan (startPos, newItems.Length));
 
             version++;
-            size++;
+            size += newItems.Length;
         }
 
         /// <inheritdoc/>
