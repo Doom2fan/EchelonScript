@@ -115,16 +115,20 @@ namespace TestSuiteWPF.Tests {
 
         private void AddAstNodeToTree (ES_AstTreeNode node, TreeViewItem parentItem) {
             switch (node) {
-                case ES_AstNamespace nm: {
-                    var thisItem = AddNodeToTree ($"Namespace \"{nm.NamespaceName}\"", parentItem);
+                case ES_AstNamespace namespaceDef: {
+                    var thisItem = AddNodeToTree ($"Namespace \"{namespaceDef.NamespaceName}\"", parentItem);
+                    thisItem.Tag = namespaceDef.NamespaceName;
 
-                    foreach (var content in nm.Contents)
+                    foreach (var content in namespaceDef.Contents)
                         AddAstNodeToTree (content, thisItem);
                     break;
                 }
 
+                #region Aggregates
+
                 case ES_AstClassDefinition classDef: {
                     var thisItem = AddNodeToTree ($"Class \"{classDef.Name.Text}\"", parentItem);
+                    thisItem.Tag = classDef.Name;
 
                     var modifiersList = AddNodeToTree ("Access modifiers", thisItem);
                     AddNodeToTree (classDef.AccessModifier.ToString (), modifiersList);
@@ -134,12 +138,15 @@ namespace TestSuiteWPF.Tests {
                     if (classDef.InheritanceList != null && classDef.InheritanceList.Length > 0) {
                         var inheritanceList = AddNodeToTree ("Inheritance list", thisItem);
 
-                        foreach (var types in classDef.InheritanceList)
-                            AddNodeToTree (types.ToString (), inheritanceList);
+                        foreach (var type in classDef.InheritanceList) {
+                            var typeItem = AddNodeToTree (type.ToString (), inheritanceList);
+                            typeItem.Tag = type;
+                        }
                     }
 
                     if (classDef.DocComment != null) {
                         var docComNode = AddNodeToTree ("Documentation comment", thisItem);
+                        docComNode.Tag = classDef.DocComment.Value;
                         AddNodeToTree (classDef.DocComment.Value.Text.Span.ToString (), docComNode);
                     }
 
@@ -153,7 +160,8 @@ namespace TestSuiteWPF.Tests {
                 }
 
                 case ES_AstStructDefinition structDef: {
-                    var thisItem = AddNodeToTree ($"Class \"{structDef.Name.Text}\"", parentItem);
+                    var thisItem = AddNodeToTree ($"Struct \"{structDef.Name.Text}\"", parentItem);
+                    thisItem.Tag = structDef.Name;
 
                     var modifiersList = AddNodeToTree ("Access modifiers", thisItem);
                     AddNodeToTree (structDef.AccessModifier.ToString (), modifiersList);
@@ -163,12 +171,15 @@ namespace TestSuiteWPF.Tests {
                     if (structDef.InterfacesList != null && structDef.InterfacesList.Length > 0) {
                         var inheritanceList = AddNodeToTree ("Interfaces list", thisItem);
 
-                        foreach (var types in structDef.InterfacesList)
-                            AddAstNodeToTree (types, inheritanceList);
+                        foreach (var type in structDef.InterfacesList) {
+                            var typeItem = AddNodeToTree (type.ToString (), inheritanceList);
+                            typeItem.Tag = type;
+                        }
                     }
 
                     if (structDef.DocComment != null) {
                         var docComNode = AddNodeToTree ("Documentation comment", thisItem);
+                        docComNode.Tag = structDef.DocComment.Value;
                         AddNodeToTree (structDef.DocComment.Value.Text.Span.ToString (), docComNode);
                     }
 
@@ -181,6 +192,32 @@ namespace TestSuiteWPF.Tests {
                     break;
                 }
 
+                case ES_AstMemberVarDefinition memberVarDef: {
+                    var thisItem = AddNodeToTree ($"Field {memberVarDef.Name.Text} ({memberVarDef.ValueType})", parentItem);
+                    thisItem.Tag = memberVarDef.Name;
+
+                    var modifiersList = AddNodeToTree ("Access modifiers", thisItem);
+                    AddNodeToTree (memberVarDef.AccessModifier.ToString (), modifiersList);
+                    if (memberVarDef.Static)
+                        AddNodeToTree ("Static", modifiersList);
+
+                    if (memberVarDef.DocComment != null) {
+                        var docComNode = AddNodeToTree ("Documentation comment", thisItem);
+                        docComNode.Tag = memberVarDef.DocComment.Value;
+                        AddNodeToTree (memberVarDef.DocComment.Value.Text.Span.ToString (), docComNode);
+                    }
+
+                    if (memberVarDef.InitializationExpression != null) {
+                        var initializer = AddNodeToTree ("Initialization expression", thisItem);
+
+                        AddAstNodeToTree (memberVarDef.InitializationExpression, initializer);
+                    }
+
+                    break;
+                }
+
+                #endregion
+
                 case ES_AstEnumDefinition enumDef: {
                     TreeViewItem thisItem;
                     if (enumDef.BaseType == null)
@@ -188,11 +225,14 @@ namespace TestSuiteWPF.Tests {
                     else
                         thisItem = AddNodeToTree ($"Enum {enumDef.Name.Text} ({enumDef.BaseType.Value})", parentItem);
 
+                    thisItem.Tag = enumDef.Name;
+
                     var modifiersList = AddNodeToTree ("Access modifiers", thisItem);
                     AddNodeToTree (enumDef.AccessModifier.ToString (), modifiersList);
 
                     if (enumDef.DocComment != null) {
                         var docComNode = AddNodeToTree ("Documentation comment", thisItem);
+                        docComNode.Tag = enumDef.DocComment.Value;
                         AddNodeToTree (enumDef.DocComment.Value.Text.Span.ToString (), docComNode);
                     }
 
@@ -200,6 +240,7 @@ namespace TestSuiteWPF.Tests {
                     if (enumDef.MembersList != null) {
                         foreach (var member in enumDef.MembersList) {
                             var memberItem = AddNodeToTree (member.Item1.Text.ToString (), membersList);
+                            memberItem.Tag = member.Item1;
                             if (member.Item2 != null)
                                 AddAstNodeToTree (member.Item2, memberItem);
                         }
@@ -208,24 +249,9 @@ namespace TestSuiteWPF.Tests {
                     break;
                 }
 
-                case ES_AstImportStatement importStatement: {
-                    var thisItem = AddNodeToTree ($"Import {importStatement.NamespaceName}", parentItem);
-
-                    if (importStatement.ImportedNames != null && importStatement.ImportedNames.Length > 0) {
-                        foreach (var symbol in importStatement.ImportedNames)
-                            AddNodeToTree (symbol.Text.ToString (), thisItem);
-                    }
-
-                    break;
-                }
-
-                case ES_AstTypeAlias alias: {
-                    AddNodeToTree ($"Type alias {alias.AliasName.Text} = {alias.OriginalName}", parentItem);
-                    break;
-                }
-
                 case ES_AstFunctionDefinition funcDef: {
                     var thisItem = AddNodeToTree ($"Function {funcDef.Name.Text} ({funcDef.ReturnType})", parentItem);
+                    thisItem.Tag = funcDef.Name;
 
                     var modifiersList = AddNodeToTree ("Access modifiers", thisItem);
                     AddNodeToTree (funcDef.AccessModifier.ToString (), modifiersList);
@@ -236,6 +262,7 @@ namespace TestSuiteWPF.Tests {
 
                     if (funcDef.DocComment != null) {
                         var docComNode = AddNodeToTree ("Documentation comment", thisItem);
+                        docComNode.Tag = funcDef.DocComment.Value;
                         AddNodeToTree (funcDef.DocComment.Value.Text.Span.ToString (), docComNode);
                     }
 
@@ -245,17 +272,17 @@ namespace TestSuiteWPF.Tests {
                     foreach (var arg in funcDef.ArgumentsList) {
                         string text;
 
-                        switch (arg.Mode) {
-                            case ES_AstFunctionArgument.ArgumentMode.Normal:
+                        switch (arg.ArgType) {
+                            case ES_ArgumentType.Normal:
                                 text = $"{arg.ValueType} {arg.Name.Text}";
                                 break;
-                            case ES_AstFunctionArgument.ArgumentMode.Ref:
+                            case ES_ArgumentType.Ref:
                                 text = $"ref {arg.ValueType} {arg.Name.Text}";
                                 break;
-                            case ES_AstFunctionArgument.ArgumentMode.In:
+                            case ES_ArgumentType.In:
                                 text = $"in {arg.ValueType} {arg.Name.Text}";
                                 break;
-                            case ES_AstFunctionArgument.ArgumentMode.Out:
+                            case ES_ArgumentType.Out:
                                 text = $"out {arg.ValueType} {arg.Name.Text}";
                                 break;
 
@@ -264,6 +291,7 @@ namespace TestSuiteWPF.Tests {
                         }
 
                         var argItem = AddNodeToTree (text, argsList);
+                        argItem.Tag = arg.Name;
 
                         if (arg.DefaultExpression != null)
                             AddAstNodeToTree (arg.DefaultExpression, argItem);
@@ -277,27 +305,27 @@ namespace TestSuiteWPF.Tests {
                     break;
                 }
 
-                case ES_AstMemberVarDefinition memberVarDef: {
-                    var thisItem = AddNodeToTree ($"Field {memberVarDef.Name.Text} ({memberVarDef.ValueType})", parentItem);
+                #region Statements
 
-                    var modifiersList = AddNodeToTree ("Access modifiers", thisItem);
-                    AddNodeToTree (memberVarDef.AccessModifier.ToString (), modifiersList);
-                    if (memberVarDef.Static)
-                        AddNodeToTree ("Static", modifiersList);
+                case ES_AstTypeAlias alias: {
+                    var thisItem = AddNodeToTree ($"Type alias {alias.AliasName.Text} = {alias.OriginalName}", parentItem);
+                    thisItem.Tag = alias.AliasName;
+                    break;
+                }
 
-                    if (memberVarDef.DocComment != null) {
-                        var docComNode = AddNodeToTree ("Documentation comment", thisItem);
-                        AddNodeToTree (memberVarDef.DocComment.Value.Text.Span.ToString (), docComNode);
-                    }
+                case ES_AstImportStatement importStatement: {
+                    var thisItem = AddNodeToTree ($"Import {importStatement.NamespaceName}", parentItem);
+                    thisItem.Tag = importStatement.NamespaceName;
 
-                    if (memberVarDef.InitializationExpression != null) {
-                        var initializer = AddNodeToTree ("Initialization expression", thisItem);
-
-                        AddAstNodeToTree (memberVarDef.InitializationExpression, initializer);
+                    if (importStatement.ImportedNames != null && importStatement.ImportedNames.Length > 0) {
+                        foreach (var symbol in importStatement.ImportedNames)
+                            AddNodeToTree (symbol.Text.ToString (), thisItem);
                     }
 
                     break;
                 }
+
+                #endregion
 
                 default:
                     throw new NotImplementedException ();
@@ -320,15 +348,35 @@ namespace TestSuiteWPF.Tests {
             var selectedItem = (TreeViewItem) astTreeView.SelectedItem;
             if (selectedItem == null)
                 return;
-            var token = (EchelonScriptToken?) selectedItem.Tag;
-            if (token == null)
-                return;
 
-            e.Handled = true;
-            codeText.Focus ();
-            codeText.Select (token.Value.TextStartPos, token.Value.Text.Length);
-            codeText.UpdateLayout ();
-            codeText.ScrollTo (token.Value.TextLine, token.Value.TextColumn);
+            if (selectedItem.Tag is EchelonScriptToken?) {
+                var token = selectedItem.Tag as EchelonScriptToken?;
+
+                e.Handled = true;
+                codeText.Focus ();
+                codeText.Select (token.Value.TextStartPos, token.Value.Text.Length);
+                codeText.UpdateLayout ();
+                codeText.ScrollTo (token.Value.TextLine, token.Value.TextColumn);
+            } else if (selectedItem.Tag is ES_AstDottableIdentifier) {
+                var id = selectedItem.Tag as ES_AstDottableIdentifier;
+
+                if (id.Parts == null || id.Parts.Length < 1)
+                    return;
+
+                int startPos = int.MaxValue;
+                int endPos = int.MinValue;
+
+                foreach (var token in id.Parts) {
+                    startPos = Math.Min (startPos, token.TextStartPos);
+                    endPos = Math.Max (endPos, token.TextStartPos + token.Text.Length);
+                }
+
+                e.Handled = true;
+                codeText.Focus ();
+                codeText.Select (startPos, endPos - startPos);
+                codeText.UpdateLayout ();
+                codeText.ScrollTo (id.Parts [0].TextLine, id.Parts [0].TextColumn);
+            }
         }
 
         #endregion
