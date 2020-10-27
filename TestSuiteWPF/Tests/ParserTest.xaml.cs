@@ -18,6 +18,7 @@
 */
 
 using System;
+using System.Text;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -109,11 +110,15 @@ namespace TestSuiteWPF.Tests {
             var thisItem = new TreeViewItem ();
             parentItem.Items.Add (thisItem);
             thisItem.Header = nodeText;
+            thisItem.IsExpanded = true;
 
             return thisItem;
         }
 
         private void AddAstNodeToTree (ES_AstTreeNode node, TreeViewItem parentItem) {
+            if (node == null)
+                return;
+
             switch (node) {
                 case ES_AstNamespace namespaceDef: {
                     var thisItem = AddNodeToTree ($"Namespace \"{namespaceDef.NamespaceName}\"", parentItem);
@@ -307,6 +312,30 @@ namespace TestSuiteWPF.Tests {
 
                 #region Statements
 
+                case ES_AstLabeledStatement labeledStatement: {
+                    var thisItem = AddNodeToTree ($"{labeledStatement.LabelName}:", parentItem);
+                    AddAstNodeToTree (labeledStatement.Statement, parentItem);
+                    thisItem.Tag = labeledStatement.LabelName;
+                    break;
+                }
+
+                case ES_AstBlockStatement blockStatement: {
+                    var thisItem = AddNodeToTree ("Statement block", parentItem);
+
+                    if (blockStatement.Statements != null) {
+                        foreach (var statement in blockStatement.Statements)
+                            AddAstNodeToTree (statement, thisItem);
+                    }
+                    break;
+                }
+
+                case ES_AstEmptyStatement emptyStatement: {
+                    AddNodeToTree ("Empty statement", parentItem);
+                    break;
+                }
+
+                #region Symbol definition
+
                 case ES_AstTypeAlias alias: {
                     var thisItem = AddNodeToTree ($"Type alias {alias.AliasName.Text} = {alias.OriginalName}", parentItem);
                     thisItem.Tag = alias.AliasName;
@@ -325,10 +354,463 @@ namespace TestSuiteWPF.Tests {
                     break;
                 }
 
+                case ES_AstLocalVarDefinition localVarDefStatement: {
+                    if (localVarDefStatement.Variables == null)
+                        break;
+
+                    string baseText = $"{(localVarDefStatement.UsingVar ? "using " : "")}{localVarDefStatement.ValueType?.ToString () ?? "var"}";
+                    foreach (var variable in localVarDefStatement.Variables) {
+                        string exprText = variable.InitializationExpression != null ? " = [...]" : "";
+
+                        var varNode = AddNodeToTree ($"{baseText} {variable.Name}{exprText}", parentItem);
+                        varNode.Tag = variable.Name;
+
+                        AddAstNodeToTree (variable.InitializationExpression, varNode);
+                    }
+
+                    break;
+                }
+
+                #endregion
+
+                #region Jumps
+
+                case ES_AstConditionalStatement condStatement: {
+                    var thisItem = AddNodeToTree ("if (...)", parentItem);
+
+                    var conditionItem = AddNodeToTree ("Condition", thisItem);
+                    var thenItem = AddNodeToTree ("Then", thisItem);
+
+                    AddAstNodeToTree (condStatement.ConditionExpression, conditionItem);
+                    AddAstNodeToTree (condStatement.ThenStatement, thenItem);
+
+                    if (condStatement.ElseStatement != null) {
+                        var elseItem = AddNodeToTree ("Else", thisItem);
+                        AddAstNodeToTree (condStatement.ElseStatement, elseItem);
+                    }
+
+                    break;
+                }
+
+                case ES_AstSwitchStatement switchStatement: {
+                    var thisItem = AddNodeToTree ("switch (...) [NOT IMPLEMENTED]", parentItem);
+
+                    break;
+                }
+
+                case ES_AstBreakStatement breakStatement: {
+                    var itemText = breakStatement.LabelName != null ? "break" : $"break {breakStatement.LabelName}";
+                    var thisItem = AddNodeToTree (itemText, parentItem);
+                    if (breakStatement.LabelName != null)
+                        thisItem.Tag = breakStatement.LabelName;
+
+                    break;
+                }
+
+                case ES_AstContinueStatement continueStatement: {
+                    var itemText = continueStatement.LabelName != null ? "continue" : $"continue {continueStatement.LabelName}";
+                    var thisItem = AddNodeToTree (itemText, parentItem);
+                    if (continueStatement.LabelName != null)
+                        thisItem.Tag = continueStatement.LabelName;
+
+                    break;
+                }
+
+                case ES_AstGotoLabelStatement gotoLabelStatement: {
+                    var thisItem = AddNodeToTree ($"goto {gotoLabelStatement.LabelName}", parentItem);
+                    thisItem.Tag = gotoLabelStatement.LabelName;
+
+                    break;
+                }
+
+                case ES_AstGotoCaseStatement gotoCaseStatement: {
+                    var thisItem = AddNodeToTree (gotoCaseStatement.CaseExpression != null ? "goto case (...)" : "goto default", parentItem);
+                    AddAstNodeToTree (gotoCaseStatement.CaseExpression, thisItem);
+
+                    break;
+                }
+
+                case ES_AstReturnStatement returnStatement: {
+                    var thisItem = AddNodeToTree (returnStatement.ReturnExpression != null ? "return (...)" : "return", parentItem);
+                    AddAstNodeToTree (returnStatement.ReturnExpression, thisItem);
+
+                    break;
+                }
+
+                #endregion
+
+                #region Loops
+
+                case ES_AstLoopStatement loopStatement: {
+                    string itemString;
+                    bool forLoop = false;
+
+                    if (
+                        loopStatement.InitializationStatement != null ||
+                        loopStatement.ConditionExpression == null ||
+                        loopStatement.IterationExpressions != null
+                    ) {
+                        string initString = loopStatement.InitializationStatement != null ? "..." : "";
+                        string condString = loopStatement.ConditionExpression != null ? " ..." : "";
+                        string iterString = loopStatement.IterationExpressions != null ? " ..." : "";
+
+                        itemString = $"for ({initString};{condString};{iterString})";
+                        forLoop = true;
+                    } else
+                        itemString = "while (...)";
+
+                    var thisItem = AddNodeToTree (itemString, parentItem);
+
+                    if (forLoop) {
+                        if (loopStatement.InitializationStatement != null) {
+                            var initItem = AddNodeToTree ("Initialization", thisItem);
+                            AddAstNodeToTree (loopStatement.InitializationStatement, initItem);
+                        }
+
+                        if (loopStatement.ConditionExpression != null) {
+                            var condItem = AddNodeToTree ("Condition", thisItem);
+                            AddAstNodeToTree (loopStatement.ConditionExpression, condItem);
+                        }
+
+                        if (loopStatement.IterationExpressions != null) {
+                            var iterItem = AddNodeToTree ("Iteration", thisItem);
+
+                            foreach (var expr in loopStatement.IterationExpressions)
+                                AddAstNodeToTree (expr, iterItem);
+                        }
+                    } else {
+                        var condItem = AddNodeToTree ("Condition", thisItem);
+                        AddAstNodeToTree (loopStatement.ConditionExpression, condItem);
+                    }
+
+                    var bodyItem = AddNodeToTree ("Body", thisItem);
+                    AddAstNodeToTree (loopStatement.LoopBody, bodyItem);
+
+                    break;
+                }
+
+                #endregion
+
+                case ES_AstExpressionStatement exprStatement: {
+                    AddAstNodeToTree (exprStatement.Expression, parentItem);
+                    break;
+                }
+
+                #endregion
+
+                #region Expressions
+
+                #region Primary expressions
+
+                case ES_AstParenthesisExpression parenthesisExpr: {
+                    var thisItem = AddNodeToTree ($"()", parentItem);
+                    AddAstNodeToTree (parenthesisExpr.Inner, thisItem);
+                    break;
+                }
+
+                case ES_AstIntegerLiteralExpression intLiteralExpr: {
+                    var thisItem = AddNodeToTree ($"Int literal {intLiteralExpr.Value}{(intLiteralExpr.Unsigned ? "u" : "")}{(intLiteralExpr.Long ? "L" : "")}", parentItem);
+                    thisItem.Tag = intLiteralExpr.Token;
+
+                    break;
+                }
+
+                case ES_AstFloatLiteralExpression floatLiteralExpr: {
+                    string nodeText;
+                    if (floatLiteralExpr.IsFloat)
+                        nodeText = $"Float literal {floatLiteralExpr.ValueFloat}f";
+                    else
+                        nodeText = $"Float literal {floatLiteralExpr.ValueDouble}d";
+
+                    var thisItem = AddNodeToTree (nodeText, parentItem);
+                    thisItem.Tag = floatLiteralExpr.Token;
+
+                    break;
+                }
+
+                case ES_AstStringLiteralExpression strLiteralExpr: {
+                    string nodeText;
+                    if (!strLiteralExpr.Verbatim)
+                        nodeText = $"String literal \"{strLiteralExpr.ValueUTF16}\"";
+                    else
+                        nodeText = $"Verbatim string literal \"{strLiteralExpr.ValueUTF16}\"";
+
+                    var thisItem = AddNodeToTree (nodeText, parentItem);
+                    thisItem.Tag = strLiteralExpr.Token;
+
+                    break;
+                }
+
+                case ES_AstCharLiteralExpression charLiteralExpr: {
+                    Span<char> charBuf = stackalloc char [2];
+
+                    var rune = new Rune (charLiteralExpr.Value);
+                    rune.EncodeToUtf16 (charBuf);
+
+                    var thisItem = AddNodeToTree ($"Char literal '{charBuf.ToString ()}'", parentItem);
+                    thisItem.Tag = charLiteralExpr.Token;
+
+                    break;
+                }
+
+                case ES_AstNameExpression nameExpr: {
+                    var thisItem = AddNodeToTree ($"Name \"{nameExpr.Value.Text}\"", parentItem);
+                    thisItem.Tag = nameExpr.Value;
+                    break;
+                }
+
+                case ES_AstFunctionCallExpression funcCallExpr: {
+                    var thisItem = AddNodeToTree ("Function call", parentItem);
+                    var funcExpr = AddNodeToTree ("Expression", thisItem);
+                    var argsList = AddNodeToTree ("Arguments", thisItem);
+
+                    AddAstNodeToTree (funcCallExpr.FunctionExpression, funcExpr);
+                    AddArgumentsListToTree (funcCallExpr.Arguments, argsList);
+
+                    break;
+                }
+
+                case ES_AstIndexingExpression indexingExpr: {
+                    var thisItem = AddNodeToTree ("Indexing", parentItem);
+                    var indexedExpr = AddNodeToTree ("Expression", thisItem);
+                    var ranksList = AddNodeToTree ("Ranks", thisItem);
+
+                    AddAstNodeToTree (indexingExpr.IndexedExpression, indexedExpr);
+                    foreach (var rank in indexingExpr.RankExpressions)
+                        AddAstNodeToTree (rank, ranksList);
+
+                    break;
+                }
+
+                case ES_AstNewExpression newExpr: {
+                    string thisItemText;
+
+                    if (newExpr.Arguments.Length < 1)
+                        thisItemText = $"new {newExpr.TypeDeclaration} ()";
+                    else
+                        thisItemText = $"new {newExpr.TypeDeclaration} ([...])";
+
+                    var thisItem = AddNodeToTree (thisItemText, parentItem);
+                    AddArgumentsListToTree (newExpr.Arguments, thisItem);
+
+                    break;
+                }
+
+                #endregion
+
+                case ES_AstIncDecExpression incDecExpr: {
+                    string sideText = incDecExpr.Postfix ? "Postfix" : "Prefix";
+                    string opText = !incDecExpr.Decrement ? "Increment" : "Decrement";
+                    var thisItem = AddNodeToTree ($"{sideText} {opText}", parentItem);
+                    AddAstNodeToTree (incDecExpr.Inner, thisItem);
+
+                    break;
+                }
+
+                #region Unary expressions
+
+                case ES_AstSimpleUnaryExpression simpleUnaryExpr: {
+                    string opText;
+                    switch (simpleUnaryExpr.ExpressionType) {
+                        case SimpleUnaryExprType.Positive:
+                            opText = "Positive";
+                            break;
+                        case SimpleUnaryExprType.Negative:
+                            opText = "Negative";
+                            break;
+                        case SimpleUnaryExprType.LogicalNot:
+                            opText = "Logical NOT";
+                            break;
+                        case SimpleUnaryExprType.BitNot:
+                            opText = "Bitwise NOT";
+                            break;
+
+                        default:
+                            throw new NotImplementedException ();
+                    }
+                    var thisItem = AddNodeToTree (opText, parentItem);
+                    AddAstNodeToTree (simpleUnaryExpr.Inner, thisItem);
+
+                    break;
+                }
+
+                case ES_AstCastExpression castExpr: {
+                    var thisItem = AddNodeToTree ($"Cast ({castExpr.DestinationType})", parentItem);
+                    AddAstNodeToTree (castExpr.InnerExpression, thisItem);
+
+                    break;
+                }
+
+                #endregion
+
+                case ES_AstSimpleBinaryExpression simpleBinaryExpr: {
+                    string opText;
+                    switch (simpleBinaryExpr.ExpressionType) {
+                        case SimpleBinaryExprType.MemberAccess:
+                            opText = "Member access";
+                            break;
+
+                        case SimpleBinaryExprType.Power:
+                            opText = "Exponentiation";
+                            break;
+
+                        case SimpleBinaryExprType.Multiply:
+                            opText = "Multiplication";
+                            break;
+                        case SimpleBinaryExprType.Divide:
+                            opText = "Division";
+                            break;
+                        case SimpleBinaryExprType.Modulo:
+                            opText = "Modulo";
+                            break;
+
+                        case SimpleBinaryExprType.Add:
+                            opText = "Addition";
+                            break;
+                        case SimpleBinaryExprType.Subtract:
+                            opText = "Subtraction";
+                            break;
+
+                        case SimpleBinaryExprType.ShiftLeft:
+                            opText = "Bitshift left";
+                            break;
+                        case SimpleBinaryExprType.ShiftRight:
+                            opText = "Bitshift right";
+                            break;
+                        case SimpleBinaryExprType.ShiftRightUnsigned:
+                            opText = "Bitshift right unsigned";
+                            break;
+
+                        case SimpleBinaryExprType.LesserThan:
+                            opText = "Lesser than";
+                            break;
+                        case SimpleBinaryExprType.GreaterThan:
+                            opText = "Greater than";
+                            break;
+                        case SimpleBinaryExprType.LesserThanEqual:
+                            opText = "Lesser than or equals";
+                            break;
+                        case SimpleBinaryExprType.GreaterThanEqual:
+                            opText = "Greater than or equals";
+                            break;
+
+                        case SimpleBinaryExprType.Equals:
+                            opText = "Equals";
+                            break;
+                        case SimpleBinaryExprType.NotEquals:
+                            opText = "Not equals";
+                            break;
+
+                        case SimpleBinaryExprType.BitAnd:
+                            opText = "Bitwise AND";
+                            break;
+                        case SimpleBinaryExprType.BitXor:
+                            opText = "Bitwise XOR";
+                            break;
+                        case SimpleBinaryExprType.BitOr:
+                            opText = "Bitwise OR";
+                            break;
+
+                        case SimpleBinaryExprType.LogicalAnd:
+                            opText = "Logical AND";
+                            break;
+                        case SimpleBinaryExprType.LogicalOr:
+                            opText = "Logical OR";
+                            break;
+
+                        #region Assignment
+
+                        case SimpleBinaryExprType.Assign:
+                            opText = "Assignment";
+                            break;
+
+                        case SimpleBinaryExprType.AssignAdd:
+                            opText = "Assign-Addition";
+                            break;
+                        case SimpleBinaryExprType.AssignSubtract:
+                            opText = "Assign-Subtraction";
+                            break;
+
+                        case SimpleBinaryExprType.AssignMultiply:
+                            opText = "Assign-Multiplication";
+                            break;
+                        case SimpleBinaryExprType.AssignDivide:
+                            opText = "Assign-Division";
+                            break;
+                        case SimpleBinaryExprType.AssignModulo:
+                            opText = "Assign-Modulo";
+                            break;
+                        case SimpleBinaryExprType.AssignPower:
+                            opText = "Assign-Exponentiation";
+                            break;
+
+                        case SimpleBinaryExprType.AssignBitAnd:
+                            opText = "Assign-Bitwise AND";
+                            break;
+                        case SimpleBinaryExprType.AssignBitOr:
+                            opText = "Assign-Bitwise OR";
+                            break;
+                        case SimpleBinaryExprType.AssignXor:
+                            opText = "Assign-Bitwise XOR";
+                            break;
+
+                        case SimpleBinaryExprType.AssignTilde:
+                            opText = "Assign-Concatenation";
+                            break;
+
+                        case SimpleBinaryExprType.AssignShiftLeft:
+                            opText = "Assign-Shift left";
+                            break;
+                        case SimpleBinaryExprType.AssignShiftRight:
+                            opText = "Assign-Shift right";
+                            break;
+                        case SimpleBinaryExprType.AssignShiftRightUnsigned:
+                            opText = "Assign-Shift right unsigned";
+                            break;
+
+                        #endregion
+
+                        default:
+                            throw new NotImplementedException ();
+                    }
+                    var thisItem = AddNodeToTree (opText, parentItem);
+                    AddAstNodeToTree (simpleBinaryExpr.Left, thisItem);
+                    AddAstNodeToTree (simpleBinaryExpr.Right, thisItem);
+
+                    break;
+                }
+
                 #endregion
 
                 default:
                     throw new NotImplementedException ();
+            }
+        }
+
+        private void AddArgumentsListToTree (ES_AstFunctionCallArgument [] argsList, TreeViewItem parentItem) {
+            foreach (var arg in argsList) {
+                string typeString;
+
+                switch (arg.ArgType) {
+                    case ES_ArgumentType.Normal:
+                        typeString = "By-value";
+                        break;
+                    case ES_ArgumentType.Ref:
+                        typeString = "By-ref";
+                        break;
+                    case ES_ArgumentType.Out:
+                        typeString = "Out";
+                        break;
+
+                    case ES_ArgumentType.In:
+                        throw new Exception ("What? This shouldn't happen.");
+
+                    default:
+                        throw new NotImplementedException ();
+                }
+
+                var argItem = AddNodeToTree (typeString, parentItem);
+                AddAstNodeToTree (arg.ValueExpression, argItem);
             }
         }
 
