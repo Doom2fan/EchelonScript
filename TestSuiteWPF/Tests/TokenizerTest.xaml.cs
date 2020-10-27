@@ -121,6 +121,9 @@ namespace TestSuiteWPF.Tests {
                 return;
 
             var error = errors [errorsList.SelectedIndex];
+            if (error.Length == 0)
+                return;
+
             codeText.Focus ();
             codeText.Select (error.StartPos, error.Length);
         }
