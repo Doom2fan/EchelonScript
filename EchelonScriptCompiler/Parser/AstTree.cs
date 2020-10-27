@@ -250,6 +250,10 @@ namespace EchelonScriptCompiler.Parser {
         public ES_AstStatement [] Statements;
     }
 
+    public class ES_AstEmptyStatement : ES_AstStatement {
+        // NOP
+    }
+
     #region Symbol definition
 
     public class ES_AstImportStatement : ES_AstStatement {
@@ -262,8 +266,6 @@ namespace EchelonScriptCompiler.Parser {
         public ES_AstDottableIdentifier OriginalName;
     }
 
-    #endregion
-
     public class ES_AstLocalVarDefinition : ES_AstStatement {
         public bool UsingVar;
         public ES_AstTypeDeclaration ValueType;
@@ -271,7 +273,9 @@ namespace EchelonScriptCompiler.Parser {
         public (EchelonScriptToken Name, ES_AstExpression InitializationExpression) [] Variables;
     }
 
-    #region Jump statements
+    #endregion
+
+    #region Jumps
 
     public class ES_AstConditionalStatement : ES_AstStatement {
         public ES_AstExpression ConditionExpression;
@@ -366,6 +370,8 @@ namespace EchelonScriptCompiler.Parser {
 
         #region Assignment
 
+        TAG_AssignExpr_Start,
+
         Assign,
 
         AssignAdd,
@@ -385,6 +391,8 @@ namespace EchelonScriptCompiler.Parser {
         AssignShiftLeft,
         AssignShiftRight,
         AssignShiftRightUnsigned,
+
+        TAG_AssignExpr_End
 
         #endregion
     }

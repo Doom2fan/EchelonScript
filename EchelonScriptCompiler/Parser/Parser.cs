@@ -328,7 +328,7 @@ namespace EchelonScriptCompiler.Parser {
                                 isUnsigned = true;
                         }
 
-                        if (long.TryParse (chars.Slice (charsCount), System.Globalization.NumberStyles.None, null, out var resultLong)) {
+                        if (long.TryParse (chars.Slice (0, charsCount), System.Globalization.NumberStyles.None, null, out var resultLong)) {
                             expr = new ES_AstIntegerLiteralExpression {
                                 Unsigned = isUnsigned,
                                 Long = isLong,
@@ -336,7 +336,7 @@ namespace EchelonScriptCompiler.Parser {
 
                                 Token = token,
                             };
-                        } else if (ulong.TryParse (chars.Slice (charsCount), System.Globalization.NumberStyles.None, null, out var resultULong)) {
+                        } else if (ulong.TryParse (chars.Slice (0, charsCount), System.Globalization.NumberStyles.None, null, out var resultULong)) {
                             expr = new ES_AstIntegerLiteralExpression {
                                 Unsigned = isUnsigned,
                                 Long = isLong,
@@ -364,7 +364,7 @@ namespace EchelonScriptCompiler.Parser {
                                 isUnsigned = true;
                         }
 
-                        if (ulong.TryParse (chars.Slice (charsCount), System.Globalization.NumberStyles.AllowHexSpecifier, null, out var resultULong)) {
+                        if (ulong.TryParse (chars.Slice (0, charsCount), System.Globalization.NumberStyles.AllowHexSpecifier, null, out var resultULong)) {
                             expr = new ES_AstIntegerLiteralExpression {
                                 Unsigned = isUnsigned,
                                 Long = isLong,
@@ -1990,7 +1990,16 @@ namespace EchelonScriptCompiler.Parser {
         protected ES_AstStatement ParseEmbeddedStatement () {
             var tkPair = tokenizer.PeekNextToken ();
 
-            if (tkPair.tk.Type == EchelonScriptTokenType.Identifier) {
+            if (tkPair.tk.Type == EchelonScriptTokenType.Semicolon) {
+                tokenizer.NextToken ();
+                return new ES_AstEmptyStatement ();
+            } if (tkPair.tk.Type == EchelonScriptTokenType.BraceOpen) {
+                var blockStatement = new ES_AstBlockStatement {
+                    Statements = ParseStatementsBlock (),
+                };
+
+                return blockStatement;
+            } else if (tkPair.tk.Type == EchelonScriptTokenType.Identifier) {
                 var tkTextStr = StringPool.Shared.GetOrAdd (tkPair.tk.Text.Span);
 
                 switch (tkTextStr) {
@@ -2016,15 +2025,26 @@ namespace EchelonScriptCompiler.Parser {
                 }
             }
 
-            if (tkPair.tk.Type == EchelonScriptTokenType.BraceOpen) {
-                var blockStatement = new ES_AstBlockStatement {
-                    Statements = ParseStatementsBlock (),
-                };
+            var retExpr = ParseStatement_Expression ();
 
-                return blockStatement;
+            var isAllowedExpression = (
+                retExpr.Expression is ES_AstFunctionCallExpression ||
+                retExpr.Expression is ES_AstIncDecExpression
+            );
+
+            if (retExpr.Expression is ES_AstSimpleBinaryExpression) {
+                var binExpr = retExpr.Expression as ES_AstSimpleBinaryExpression;
+
+                if (binExpr.ExpressionType >= SimpleBinaryExprType.TAG_AssignExpr_Start &&
+                    binExpr.ExpressionType >= SimpleBinaryExprType.TAG_AssignExpr_End)
+                    isAllowedExpression = true;
             }
 
-            return ParseStatement_Expression ();
+            if (!isAllowedExpression) {
+                //errorsList.Add (new EchelonScriptErrorMessage (ES_Errors.NonAllowedExpressionStatement));
+            }
+
+            return retExpr;
         }
 
         protected ES_AstStatement [] ParseStatementsBlock () {
@@ -2213,7 +2233,8 @@ namespace EchelonScriptCompiler.Parser {
             if (EnsureToken (tkPair.tk, EchelonScriptTokenType.ParenOpen, null) != EnsureTokenResult.Correct) {
                 errorsList.Add (ES_Errors.GenExpectedXGotY ("'('", tkPair.tk));
                 return null;
-            }
+            } else
+                tokenizer.NextToken ();
 
             var conditionExpr = ParseExpression ();
 
