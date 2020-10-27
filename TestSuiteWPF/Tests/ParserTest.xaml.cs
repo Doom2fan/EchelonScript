@@ -115,7 +115,7 @@ namespace TestSuiteWPF.Tests {
             return thisItem;
         }
 
-        private void AddAstNodeToTree (ES_AstTreeNode node, TreeViewItem parentItem) {
+        private void AddAstNodeToTree (ES_AstNode node, TreeViewItem parentItem) {
             if (node == null)
                 return;
 
@@ -850,7 +850,7 @@ namespace TestSuiteWPF.Tests {
 
                 foreach (var token in id.Parts) {
                     startPos = Math.Min (startPos, token.TextStartPos);
-                    endPos = Math.Max (endPos, token.TextStartPos + token.Text.Length);
+                    endPos = Math.Max (endPos, token.TextEndPos);
                 }
 
                 e.Handled = true;

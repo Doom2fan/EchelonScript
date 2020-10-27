@@ -446,6 +446,84 @@ namespace EchelonScriptCompiler.Parser {
 
         #endregion
 
+        #region ================== Static functions
+
+        public static int CalcColumn (ReadOnlySpan<char> srcText, int columnStart, int textPos) {
+            int charCount = 0;
+
+            int maxPos = Math.Min (srcText.Length, textPos);
+            for (int i = columnStart; i < maxPos;) {
+                Rune.DecodeFromUtf16 (srcText [i..^0], out _, out var offs);
+                i += offs;
+                charCount++;
+            }
+
+            return charCount + 1;
+        }
+
+        public static void CalcLine (ReadOnlySpan<char> srcText, int curPos, out int curLine, out int curLineStart) {
+            int lineCount = 1;
+            int lineStart = 0;
+            int maxPos = Math.Min (srcText.Length, curPos);
+            for (int i = 0; i < maxPos;) {
+                Rune.DecodeFromUtf16 (srcText [i..^1], out var rune, out var offs);
+                i += offs;
+
+                if (rune.Value == '\n') {
+                    lineCount++;
+                    lineStart = i;
+                }
+            }
+
+            curLine = lineCount;
+            curLineStart = lineStart;
+        }
+
+        #region Common pattern matching
+
+        public static bool IsLatinLetter (char? c) {
+            return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+        }
+
+        public static bool IsIntegerDigit (char? c) {
+            return c >= '0' && c <= '9';
+        }
+
+        public static bool IsHexDigit (char? c) {
+            if (IsIntegerDigit (c))
+                return true;
+
+            return (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+        }
+
+        public static bool IsBinaryDigit (char? c) {
+            return c == '0' || c == '1';
+        }
+
+        public static bool IsFloatSuffix (char? c) {
+            switch (c) {
+                case 'f':
+                case 'F':
+                case 'd':
+                case 'D':
+                    return true;
+
+                default:
+                    return false;
+            }
+        }
+
+        public static bool IsHexDigit (Rune? c) {
+            if (c == null)
+                return false;
+
+            return c.Value.IsBmp && IsHexDigit ((char) c.Value.Value);
+        }
+
+        #endregion
+
+        #endregion
+
         #region ================== Instance methods
 
         #region Public methods
@@ -498,66 +576,12 @@ namespace EchelonScriptCompiler.Parser {
             return InternalNextToken ();
         }
 
-        #region Common pattern matching
-
-        public static bool IsLatinLetter (char? c) {
-            return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
-        }
-
-        public static bool IsIntegerDigit (char? c) {
-            return c >= '0' && c <= '9';
-        }
-
-        public static bool IsHexDigit (char? c) {
-            if (IsIntegerDigit (c))
-                return true;
-
-            return (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
-        }
-
-        public static bool IsBinaryDigit (char? c) {
-            return c == '0' || c == '1';
-        }
-
-        public static bool IsFloatSuffix (char? c) {
-            switch (c) {
-                case 'f':
-                case 'F':
-                case 'd':
-                case 'D':
-                    return true;
-
-                default:
-                    return false;
-            }
-        }
-
-
-        public static bool IsHexDigit (Rune? c) {
-            if (c == null)
-                return false;
-
-            return c.Value.IsBmp && IsHexDigit ((char) c.Value.Value);
-        }
-
-        #endregion
-
         #endregion
 
         #region Protected methods
 
         protected int CalcColumn (int columnStart, int textPos) {
-            int charCount = 0;
-
-            var dataSpan = data.Span;
-            int maxPos = Math.Min (data.Length, textPos);
-            for (int i = columnStart; i < maxPos;) {
-                Rune.DecodeFromUtf16 (dataSpan [i..^0], out _, out var offs);
-                i += offs;
-                charCount++;
-            }
-
-            return charCount + 1;
+            return CalcColumn (data.Span, columnStart, textPos);
         }
 
         protected (EchelonScriptToken tk, EchelonScriptToken? doc) InternalNextToken () {

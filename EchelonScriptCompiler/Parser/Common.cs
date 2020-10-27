@@ -106,6 +106,7 @@ namespace EchelonScriptCompiler.Parser {
         public int TextStartPos;
         public int TextLine;
         public int TextColumn;
+        public int TextEndPos => TextStartPos + Text.Length;
 
         public ReadOnlyMemory<char> Text;
         public string DecodedStringUTF16;
@@ -129,6 +130,18 @@ namespace EchelonScriptCompiler.Parser {
 
             Line = tk.TextLine;
             Column = tk.TextColumn;
+        }
+
+        public EchelonScriptErrorMessage (ReadOnlySpan<char> srcText, ES_AstNodeBounds bounds, string message = null) {
+
+            Message = message;
+
+            StartPos = bounds.StartPos;
+            Length = bounds.EndPos - bounds.StartPos;
+
+            EchelonScriptTokenizer.CalcLine (srcText, StartPos, out var curLine, out var curLineStart);
+            Line = curLine;
+            Column = EchelonScriptTokenizer.CalcColumn (srcText, curLineStart, Length);
         }
 
         public EchelonScriptErrorMessage (string message, int startPos, int length, int line, int column) {
