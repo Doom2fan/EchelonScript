@@ -108,6 +108,8 @@ namespace EchelonScriptCompiler.Parser {
         public int TextColumn;
 
         public ReadOnlyMemory<char> Text;
+        public string DecodedStringUTF16;
+        public int [] DecodedStringUTF32;
     }
 
     public struct EchelonScriptErrorMessage {

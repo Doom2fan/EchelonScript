@@ -20,6 +20,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Text;
 using EchelonScriptCompiler.Utilities;
 using Microsoft.Toolkit.HighPerformance.Buffers;
 
@@ -89,6 +90,7 @@ namespace EchelonScriptCompiler.Parser {
         public const string New = "new";
         public const string Cast = "cast";
 
+        public const string Void = "void";
         public const string Const = "const";
         public const string Immutable = "immutable";
 
@@ -103,17 +105,663 @@ namespace EchelonScriptCompiler.Parser {
         public const string Struct = "struct";
         public const string Enum = "enum";
 
+        public const string Ref = "ref";
+        public const string In = "in";
+        public const string Out = "out";
+
         public const string If = "if";
+        public const string Else = "else";
+        public const string Switch = "switch";
+        public const string Break = "break";
+        public const string Continue = "continue";
+        public const string Goto = "goto";
+        public const string Return = "return";
+
         public const string While = "while";
         public const string For = "for";
-        public const string Return = "return";
+
+        public const string Case = "case";
+        public const string Default = "default";
     }
 
     public class EchelonScriptParser : IDisposable {
+        #region ================== Expression parsing
+
+        protected enum ExpressionPrecedence {
+            NO_PRECEDENCE = 0,
+
+            Assignment,
+            ConditionalOr,
+            ConditionalAnd,
+            BitOr,
+            BitXor,
+            BitAnd,
+            Equality,
+            Comparison,
+            Shift,
+            Additive,
+            Multiplicative,
+            Exponentiation,
+            Concatenation,
+            Unary,
+            Primary,
+        }
+
+        protected interface IPrefixExpressionParselet {
+            public ExpressionPrecedence PrefixPrecedence { get; }
+
+            public bool CheckCanParse (EchelonScriptParser parser, EchelonScriptToken token);
+
+            public ES_AstExpression Parse (EchelonScriptParser parser, EchelonScriptToken token);
+        }
+
+        protected interface IPostfixExpressionParselet {
+            public ExpressionPrecedence PostfixPrecedence { get; }
+
+            public bool CheckCanParse (EchelonScriptParser parser, ES_AstExpression left, EchelonScriptToken token);
+
+            public ES_AstExpression Parse (EchelonScriptParser parser, ES_AstExpression left, EchelonScriptToken token);
+        }
+
+        protected class SimpleBinaryExpressionParselet : IPostfixExpressionParselet {
+            #region ================== Instance fields
+
+            protected ExpressionPrecedence opPrecedence;
+            protected EchelonScriptTokenType tokenType;
+            protected SimpleBinaryExprType expressionType;
+
+            #endregion
+
+            #region ================== Instance properties
+
+            public ExpressionPrecedence PostfixPrecedence => opPrecedence;
+
+            #endregion
+
+            #region ================== Constructors
+
+            public SimpleBinaryExpressionParselet (ExpressionPrecedence precedence, EchelonScriptTokenType type, SimpleBinaryExprType exprType) {
+                opPrecedence = precedence;
+                tokenType = type;
+                expressionType = exprType;
+            }
+
+            #endregion
+
+            #region ================== Instance methods
+
+            public bool CheckCanParse (EchelonScriptParser parser, ES_AstExpression left, EchelonScriptToken token) {
+                return token.Type == tokenType;
+            }
+
+            public ES_AstExpression Parse (EchelonScriptParser parser, ES_AstExpression left, EchelonScriptToken token) {
+                parser.tokenizer.NextToken ();
+
+                var right = parser.ParseExpression (opPrecedence);
+
+                return new ES_AstSimpleBinaryExpression {
+                    ExpressionType = expressionType,
+                    Left = left,
+                    Right = right,
+                };
+            }
+
+            #endregion
+        }
+
+        protected class SimpleUnaryExpressionParselet : IPrefixExpressionParselet {
+            #region ================== Instance fields
+
+            protected ExpressionPrecedence opPrecedence;
+            protected EchelonScriptTokenType tokenType;
+            protected SimpleUnaryExprType expressionType;
+
+            #endregion
+
+            #region ================== Instance properties
+
+            public ExpressionPrecedence PrefixPrecedence => opPrecedence;
+
+            #endregion
+
+            #region ================== Constructors
+
+            public SimpleUnaryExpressionParselet (ExpressionPrecedence precedence, EchelonScriptTokenType type, SimpleUnaryExprType exprType) {
+                opPrecedence = precedence;
+                tokenType = type;
+                expressionType = exprType;
+            }
+
+            #endregion
+
+            #region ================== Instance methods
+
+            public bool CheckCanParse (EchelonScriptParser parser, EchelonScriptToken token) {
+                return token.Type == tokenType;
+            }
+
+            public ES_AstExpression Parse (EchelonScriptParser parser, EchelonScriptToken token) {
+                parser.tokenizer.NextToken ();
+
+                var inner = parser.ParseExpression ();
+
+                return new ES_AstSimpleUnaryExpression {
+                    ExpressionType = expressionType,
+                    Inner = inner,
+                };
+            }
+
+            #endregion
+        }
+
+        #region Primary expressions
+
+        protected class ParenthesisExpressionParselet : IPrefixExpressionParselet {
+            #region ================== Instance properties
+
+            public ExpressionPrecedence PrefixPrecedence => ExpressionPrecedence.Primary;
+
+            #endregion
+
+            #region ================== Instance methods
+
+            public bool CheckCanParse (EchelonScriptParser parser, EchelonScriptToken token) {
+                return token.Type == EchelonScriptTokenType.ParenOpen;
+            }
+
+            public ES_AstExpression Parse (EchelonScriptParser parser, EchelonScriptToken token) {
+                parser.tokenizer.NextToken ();
+
+                var expr = parser.ParseExpression ();
+
+                var tkPair = parser.tokenizer.PeekNextToken ();
+                if (EnsureToken (tkPair.tk, EchelonScriptTokenType.ParenClose, null) != EnsureTokenResult.Correct)
+                    parser.errorsList.Add (ES_Errors.GenExpectedXGotY ("')'", tkPair.tk));
+                else
+                    parser.tokenizer.NextToken ();
+
+                return new ES_AstParenthesisExpression {
+                    Inner = expr,
+                };
+            }
+
+            #endregion
+        }
+
+        protected class LiteralExpressionParselet : IPrefixExpressionParselet {
+            #region ================== Instance properties
+
+            public ExpressionPrecedence PrefixPrecedence => ExpressionPrecedence.Primary;
+
+            #endregion
+
+            #region ================== Instance methods
+
+            public bool CheckCanParse (EchelonScriptParser parser, EchelonScriptToken token) {
+                return (
+                    token.Type == EchelonScriptTokenType.DecIntegerLiteral ||
+                    token.Type == EchelonScriptTokenType.HexIntegerLiteral ||
+                    token.Type == EchelonScriptTokenType.BinIntegerLiteral ||
+                    token.Type == EchelonScriptTokenType.FloatLiteral ||
+                    token.Type == EchelonScriptTokenType.RegularStringLiteral ||
+                    token.Type == EchelonScriptTokenType.VerbatimStringLiteral ||
+                    token.Type == EchelonScriptTokenType.CharacterLiteral
+                );
+            }
+
+            public ES_AstExpression Parse (EchelonScriptParser parser, EchelonScriptToken token) {
+                ES_AstExpression expr = null;
+
+                switch (token.Type) {
+                    case EchelonScriptTokenType.DecIntegerLiteral: {
+                        bool isLong = false;
+                        bool isUnsigned = false;
+
+                        Span<char> chars = stackalloc char [token.Text.Length];
+                        int charsCount = 0;
+                        foreach (var c in token.Text.Span) {
+                            if (EchelonScriptTokenizer.IsIntegerDigit (c))
+                                chars [charsCount++] = c;
+                            else if (c == 'L')
+                                isLong = true;
+                            else if (c == 'u' || c == 'U')
+                                isUnsigned = true;
+                        }
+
+                        if (long.TryParse (chars.Slice (charsCount), System.Globalization.NumberStyles.None, null, out var resultLong)) {
+                            expr = new ES_AstIntegerLiteralExpression {
+                                Unsigned = isUnsigned,
+                                Long = isLong,
+                                Value = (ulong) resultLong,
+
+                                Token = token,
+                            };
+                        } else if (ulong.TryParse (chars.Slice (charsCount), System.Globalization.NumberStyles.None, null, out var resultULong)) {
+                            expr = new ES_AstIntegerLiteralExpression {
+                                Unsigned = isUnsigned,
+                                Long = isLong,
+                                Value = resultULong,
+
+                                Token = token,
+                            };
+                        } else
+                            parser.errorsList.Add (new EchelonScriptErrorMessage (token, ES_Errors.IntLiteralTooBig));
+
+                        break;
+                    }
+                    case EchelonScriptTokenType.HexIntegerLiteral: {
+                        bool isLong = false;
+                        bool isUnsigned = false;
+
+                        Span<char> chars = stackalloc char [token.Text.Length];
+                        int charsCount = 0;
+                        foreach (var c in token.Text.Span.Slice (2)) {
+                            if (EchelonScriptTokenizer.IsHexDigit (c))
+                                chars [charsCount++] = c;
+                            else if (c == 'L')
+                                isLong = true;
+                            else if (c == 'u' || c == 'U')
+                                isUnsigned = true;
+                        }
+
+                        if (ulong.TryParse (chars.Slice (charsCount), System.Globalization.NumberStyles.AllowHexSpecifier, null, out var resultULong)) {
+                            expr = new ES_AstIntegerLiteralExpression {
+                                Unsigned = isUnsigned,
+                                Long = isLong,
+                                Value = resultULong,
+
+                                Token = token,
+                            };
+                        } else
+                            parser.errorsList.Add (new EchelonScriptErrorMessage (token, ES_Errors.IntLiteralTooBig));
+
+                        break;
+                    }
+                    case EchelonScriptTokenType.BinIntegerLiteral: {
+                        bool isLong = false;
+                        bool isUnsigned = false;
+
+                        Span<char> chars = stackalloc char [token.Text.Length];
+                        int charsCount = 0;
+                        foreach (var c in token.Text.Span.Slice (2)) {
+                            if (EchelonScriptTokenizer.IsBinaryDigit (c))
+                                chars [charsCount++] = c;
+                            else if (c == 'L')
+                                isLong = true;
+                            else if (c == 'u' || c == 'U')
+                                isUnsigned = true;
+                        }
+
+                        if (charsCount > 64)
+                            parser.errorsList.Add (new EchelonScriptErrorMessage (token, ES_Errors.IntLiteralTooBig));
+
+                        ulong value = 0;
+                        int bitOffs = 0;
+                        foreach (var c in chars.Slice (0, charsCount)) {
+                            if (c == '1')
+                                value |= 1uL << bitOffs;
+
+                            bitOffs++;
+                        }
+
+                        expr = new ES_AstIntegerLiteralExpression {
+                            Unsigned = isUnsigned,
+                            Long = isLong,
+                            Value = value,
+
+                            Token = token,
+                        };
+
+                        break;
+                    }
+
+                    case EchelonScriptTokenType.FloatLiteral: {
+                        bool isFloat = false;
+
+                        ReadOnlySpan<char> chars = token.Text.Span;
+                        {
+                            var lastChar = chars [^1];
+                            if (lastChar == 'f' || lastChar == 'F') {
+                                isFloat = true;
+                                chars = chars [0..^1];
+                            } else if (lastChar == 'd' || lastChar == 'D')
+                                chars = chars [0..^1];
+                        }
+
+                        if (isFloat && float.TryParse (chars, System.Globalization.NumberStyles.Float, null, out var resultFloat)) {
+                            expr = new ES_AstFloatLiteralExpression {
+                                IsFloat = true,
+                                ValueFloat = resultFloat,
+
+                                Token = token,
+                            };
+                        } else if (!isFloat && double.TryParse (chars, System.Globalization.NumberStyles.Float, null, out var resultDouble)) {
+                            expr = new ES_AstFloatLiteralExpression {
+                                IsFloat = false,
+                                ValueDouble = resultDouble,
+
+                                Token = token,
+                            };
+                        } else
+                            parser.errorsList.Add (new EchelonScriptErrorMessage (token, ES_Errors.InvalidFloatLiteral));
+
+                        break;
+                    }
+
+                    case EchelonScriptTokenType.RegularStringLiteral: {
+                        if (token.DecodedStringUTF16 == null) {
+                            expr = new ES_AstStringLiteralExpression {
+                                Verbatim = false,
+                                ValueUTF16 = null,
+                                ValueUTF32 = null,
+
+                                Token = token,
+                            };
+                        } else {
+                            expr = new ES_AstStringLiteralExpression {
+                                Verbatim = false,
+                                ValueUTF16 = token.DecodedStringUTF16,
+                                ValueUTF32 = token.DecodedStringUTF32,
+
+                                Token = token,
+                            };
+                        }
+
+                        break;
+                    }
+                    case EchelonScriptTokenType.VerbatimStringLiteral: {
+                        if (token.DecodedStringUTF16 == null) {
+                            expr = new ES_AstStringLiteralExpression {
+                                Verbatim = true,
+                                ValueUTF16 = null,
+                                ValueUTF32 = null,
+
+                                Token = token,
+                            };
+                        } else {
+                            expr = new ES_AstStringLiteralExpression {
+                                Verbatim = true,
+                                ValueUTF16 = token.DecodedStringUTF16,
+                                ValueUTF32 = token.DecodedStringUTF32,
+
+                                Token = token,
+                            };
+                        }
+
+                        break;
+                    }
+
+                    case EchelonScriptTokenType.CharacterLiteral: {
+                        if (token.DecodedStringUTF16 == null || token.DecodedStringUTF16.Length != 1)
+                            expr = new ES_AstCharLiteralExpression ();
+                        else {
+                            Rune.DecodeFromUtf16 (token.DecodedStringUTF16, out var rune, out _);
+                            expr = new ES_AstCharLiteralExpression {
+                                Value = rune.Value,
+
+                                Token = token,
+                            };
+                        }
+
+                        break;
+                    }
+
+                    default:
+                        throw new Exception ();
+                }
+
+                parser.tokenizer.NextToken ();
+
+                return expr;
+            }
+
+            #endregion
+        }
+
+        protected class NameExpressionParselet : IPrefixExpressionParselet {
+            #region ================== Instance properties
+
+            public ExpressionPrecedence PrefixPrecedence => ExpressionPrecedence.Primary;
+
+            #endregion
+
+            #region ================== Instance methods
+
+            public bool CheckCanParse (EchelonScriptParser parser, EchelonScriptToken token) {
+                return
+                    token.Type == EchelonScriptTokenType.Identifier &&
+                    !token.Text.Span.Equals (ES_Keywords.New, StringComparison.Ordinal) &&
+                    !token.Text.Span.Equals (ES_Keywords.Cast, StringComparison.Ordinal);
+            }
+
+            public ES_AstExpression Parse (EchelonScriptParser parser, EchelonScriptToken token) {
+                parser.tokenizer.NextToken ();
+
+                return new ES_AstNameExpression {
+                    Value = token,
+                };
+            }
+
+            #endregion
+        }
+
+        protected class FunctionCallExpressionParselet : IPostfixExpressionParselet {
+            #region ================== Instance properties
+
+            public ExpressionPrecedence PostfixPrecedence => ExpressionPrecedence.Primary;
+
+            #endregion
+
+            #region ================== Instance methods
+
+            public bool CheckCanParse (EchelonScriptParser parser, ES_AstExpression left, EchelonScriptToken token) {
+                return token.Type == EchelonScriptTokenType.ParenOpen;
+            }
+
+            public ES_AstExpression Parse (EchelonScriptParser parser, ES_AstExpression left, EchelonScriptToken token) {
+                var args = parser.ParseArgumentsList ();
+
+                return new ES_AstFunctionCallExpression {
+                    FunctionExpression = left,
+                    Arguments = args,
+                };
+            }
+
+            #endregion
+        }
+
+        protected class IndexingExpressionParselet : IPostfixExpressionParselet {
+            #region ================== Instance properties
+
+            public ExpressionPrecedence PostfixPrecedence => ExpressionPrecedence.Primary;
+
+            #endregion
+
+            #region ================== Instance methods
+
+            public bool CheckCanParse (EchelonScriptParser parser, ES_AstExpression left, EchelonScriptToken token) {
+                return token.Type == EchelonScriptTokenType.BracketOpen;
+            }
+
+            public ES_AstExpression Parse (EchelonScriptParser parser, ES_AstExpression left, EchelonScriptToken token) {
+                var tkPair = parser.tokenizer.NextToken ();
+                if (EnsureToken (tkPair.tk, EchelonScriptTokenType.BracketOpen, null) != EnsureTokenResult.Correct)
+                    parser.errorsList.Add (ES_Errors.GenExpectedXGotY ("'['", tkPair.tk));
+
+                if (parser.tokenizer.PeekNextToken ().tk.Type == EchelonScriptTokenType.BracketClose) {
+                    parser.tokenizer.NextToken ();
+
+                    return new ES_AstIndexingExpression {
+                        IndexedExpression = left,
+                        RankExpressions = Array.Empty<ES_AstExpression> (),
+                    };
+                }
+
+                using var ranksList = new StructPooledList<ES_AstExpression> (ClearMode.Auto);
+
+                while (true) {
+                    tkPair = parser.tokenizer.PeekNextToken ();
+
+                    if (tkPair.tk.Type == EchelonScriptTokenType.EOF) {
+                        parser.errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.UnexpectedEOF));
+                        break;
+                    }
+
+                    var argumentExpr = parser.ParseExpression ();
+                    ranksList.Add (argumentExpr);
+
+                    tkPair = parser.tokenizer.NextToken ();
+                    if (tkPair.tk.Type == EchelonScriptTokenType.BracketClose)
+                        break;
+                    else if (tkPair.tk.Type != EchelonScriptTokenType.Comma)
+                        parser.errorsList.Add (ES_Errors.GenExpectedXGotY ("',' or ']'", tkPair.tk));
+                }
+
+                return new ES_AstIndexingExpression {
+                    IndexedExpression = left,
+                    RankExpressions = ranksList.ToArray (),
+                };
+            }
+
+            #endregion
+        }
+
+        protected class NewExpressionParselet : IPrefixExpressionParselet {
+            #region ================== Instance properties
+
+            public ExpressionPrecedence PrefixPrecedence => ExpressionPrecedence.Primary;
+
+            #endregion
+
+            #region ================== Instance methods
+
+            public bool CheckCanParse (EchelonScriptParser parser, EchelonScriptToken token) {
+                return token.Type == EchelonScriptTokenType.Identifier && token.Text.Span.Equals (ES_Keywords.New, StringComparison.Ordinal);
+            }
+
+            public ES_AstExpression Parse (EchelonScriptParser parser, EchelonScriptToken token) {
+                parser.tokenizer.NextToken ();
+
+                var typeDecl = parser.ParseTypeDeclaration ();
+
+                var args = parser.ParseArgumentsList ();
+
+                return new ES_AstNewExpression {
+                    TypeDeclaration = typeDecl,
+                    Arguments = args,
+                };
+            }
+
+            #endregion
+        }
+
+        #endregion
+
+        protected class IncDecExpressionParselet : IPrefixExpressionParselet, IPostfixExpressionParselet {
+            #region ================== Instance properties
+
+            public ExpressionPrecedence PrefixPrecedence => ExpressionPrecedence.Unary;
+            public ExpressionPrecedence PostfixPrecedence => ExpressionPrecedence.Primary;
+
+            #endregion
+
+            #region ================== Instance methods
+
+            #region Prefix
+
+            public bool CheckCanParse (EchelonScriptParser parser, EchelonScriptToken token) {
+                return token.Type == EchelonScriptTokenType.PlusPlus || token.Type == EchelonScriptTokenType.MinusMinus;
+            }
+
+            public ES_AstExpression Parse (EchelonScriptParser parser, EchelonScriptToken token) {
+                parser.tokenizer.NextToken ();
+
+                var innerExpr = parser.ParseExpression ();
+
+                return new ES_AstIncDecExpression {
+                    Decrement = token.Type == EchelonScriptTokenType.MinusMinus,
+                    Postfix = false,
+                    Inner = innerExpr,
+                };
+            }
+
+            #endregion
+
+            #region Postfix
+
+            public bool CheckCanParse (EchelonScriptParser parser, ES_AstExpression left, EchelonScriptToken token) {
+                return token.Type == EchelonScriptTokenType.PlusPlus || token.Type == EchelonScriptTokenType.MinusMinus;
+            }
+
+            public ES_AstExpression Parse (EchelonScriptParser parser, ES_AstExpression left, EchelonScriptToken token) {
+                parser.tokenizer.NextToken ();
+
+                return new ES_AstIncDecExpression {
+                    Decrement = token.Type == EchelonScriptTokenType.MinusMinus,
+                    Postfix = true,
+                    Inner = left,
+                };
+            }
+
+            #endregion
+
+            #endregion
+        }
+
+        #region Unary expressions
+
+        protected class CastExpressionParselet : IPrefixExpressionParselet {
+            #region ================== Instance properties
+
+            public ExpressionPrecedence PrefixPrecedence => ExpressionPrecedence.Unary;
+
+            #endregion
+
+            #region ================== Instance methods
+
+            public bool CheckCanParse (EchelonScriptParser parser, EchelonScriptToken token) {
+                return token.Type == EchelonScriptTokenType.Identifier && token.Text.Span.Equals (ES_Keywords.Cast, StringComparison.Ordinal);
+            }
+
+            public ES_AstExpression Parse (EchelonScriptParser parser, EchelonScriptToken token) {
+                parser.tokenizer.NextToken ();
+
+                var tkPair = parser.tokenizer.PeekNextToken ();
+                if (EnsureToken (tkPair.tk, EchelonScriptTokenType.ParenOpen, null) != EnsureTokenResult.Correct)
+                    parser.errorsList.Add (ES_Errors.GenExpectedXGotY ("'('", tkPair.tk));
+                else
+                    parser.tokenizer.NextToken ();
+
+                var typeDecl = parser.ParseTypeDeclaration ();
+
+                tkPair = parser.tokenizer.PeekNextToken ();
+                if (EnsureToken (tkPair.tk, EchelonScriptTokenType.ParenClose, null) != EnsureTokenResult.Correct)
+                    parser.errorsList.Add (ES_Errors.GenExpectedXGotY ("')'", tkPair.tk));
+                else
+                    parser.tokenizer.NextToken ();
+
+                var innerExpr = parser.ParseExpression ();
+
+                return new ES_AstCastExpression {
+                    DestinationType = typeDecl,
+                    InnerExpression = innerExpr,
+                };
+            }
+
+            #endregion
+        }
+
+        #endregion
+
+        #endregion
+
         #region ================== Static properties
 
         public static string [] PrimitiveTypes { get; private set; }
         public static string [] Keywords { get; private set; }
+
+        protected static Dictionary<EchelonScriptTokenType, List<IPrefixExpressionParselet>> PrefixExprParsers { get; private set; }
+        protected static Dictionary<EchelonScriptTokenType, List<IPostfixExpressionParselet>> PostfixExprParsers { get; private set; }
 
         #endregion
 
@@ -131,6 +779,38 @@ namespace EchelonScriptCompiler.Parser {
         #endregion
 
         #region ================== Constructors
+
+        #region Util functions
+
+        static void AddPrefixParselet (EchelonScriptTokenType tokenType, IPrefixExpressionParselet parselet) {
+            if (!PrefixExprParsers.ContainsKey (tokenType))
+                PrefixExprParsers.Add (tokenType, new List<IPrefixExpressionParselet> ());
+
+            PrefixExprParsers [tokenType].Add (parselet);
+        }
+
+        static void AddPostfixParselet (EchelonScriptTokenType tokenType, IPostfixExpressionParselet parselet) {
+            if (!PostfixExprParsers.ContainsKey (tokenType))
+                PostfixExprParsers.Add (tokenType, new List<IPostfixExpressionParselet> ());
+
+            PostfixExprParsers [tokenType].Add (parselet);
+        }
+
+        static void AddSimpleBinaryExpr (ExpressionPrecedence precedence, EchelonScriptTokenType tokenType, SimpleBinaryExprType exprType) {
+            if (!PostfixExprParsers.ContainsKey (tokenType))
+                PostfixExprParsers.Add (tokenType, new List<IPostfixExpressionParselet> ());
+
+            PostfixExprParsers [tokenType].Add (new SimpleBinaryExpressionParselet (precedence, tokenType, exprType));
+        }
+
+        static void AddSimpleUnaryExpr (ExpressionPrecedence precedence, EchelonScriptTokenType tokenType, SimpleUnaryExprType exprType) {
+            if (!PrefixExprParsers.ContainsKey (tokenType))
+                PrefixExprParsers.Add (tokenType, new List<IPrefixExpressionParselet> ());
+
+            PrefixExprParsers [tokenType].Add (new SimpleUnaryExpressionParselet (precedence, tokenType, exprType));
+        }
+
+        #endregion
 
         static EchelonScriptParser () {
             // Primitive types
@@ -154,6 +834,114 @@ namespace EchelonScriptCompiler.Parser {
             }
 
             Keywords = keywordsList.ToArray ();
+
+            // Parselets
+            PrefixExprParsers = new Dictionary<EchelonScriptTokenType, List<IPrefixExpressionParselet>> ();
+            PostfixExprParsers = new Dictionary<EchelonScriptTokenType, List<IPostfixExpressionParselet>> ();
+
+            var incDecParselet = new IncDecExpressionParselet ();
+
+            #region Primary expressions
+
+            AddPrefixParselet (EchelonScriptTokenType.ParenOpen, new ParenthesisExpressionParselet ());
+            var literalExprParselet = new LiteralExpressionParselet ();
+            {
+                AddPrefixParselet (EchelonScriptTokenType.DecIntegerLiteral, literalExprParselet);
+                AddPrefixParselet (EchelonScriptTokenType.HexIntegerLiteral, literalExprParselet);
+                AddPrefixParselet (EchelonScriptTokenType.BinIntegerLiteral, literalExprParselet);
+                AddPrefixParselet (EchelonScriptTokenType.FloatLiteral, literalExprParselet);
+                AddPrefixParselet (EchelonScriptTokenType.RegularStringLiteral, literalExprParselet);
+                AddPrefixParselet (EchelonScriptTokenType.VerbatimStringLiteral, literalExprParselet);
+                AddPrefixParselet (EchelonScriptTokenType.CharacterLiteral, literalExprParselet);
+            }
+            AddPrefixParselet (EchelonScriptTokenType.Identifier, new NameExpressionParselet ());
+            AddSimpleBinaryExpr (ExpressionPrecedence.Primary, EchelonScriptTokenType.Dot, SimpleBinaryExprType.MemberAccess);
+            AddPostfixParselet (EchelonScriptTokenType.ParenOpen, new FunctionCallExpressionParselet ());
+            AddPostfixParselet (EchelonScriptTokenType.BracketOpen, new IndexingExpressionParselet ());
+            AddPostfixParselet (EchelonScriptTokenType.PlusPlus, incDecParselet);
+            AddPostfixParselet (EchelonScriptTokenType.MinusMinus, incDecParselet);
+            AddPrefixParselet (EchelonScriptTokenType.Identifier, new NewExpressionParselet ());
+
+            #endregion
+
+            #region Unary expressions
+
+            AddSimpleUnaryExpr (ExpressionPrecedence.Unary, EchelonScriptTokenType.Plus, SimpleUnaryExprType.Positive);
+            AddSimpleUnaryExpr (ExpressionPrecedence.Unary, EchelonScriptTokenType.Minus, SimpleUnaryExprType.Negative);
+            AddSimpleUnaryExpr (ExpressionPrecedence.Unary, EchelonScriptTokenType.Bang, SimpleUnaryExprType.LogicalNot);
+            AddSimpleUnaryExpr (ExpressionPrecedence.Unary, EchelonScriptTokenType.Tilde, SimpleUnaryExprType.BitNot);
+            AddPostfixParselet (EchelonScriptTokenType.PlusPlus, incDecParselet);
+            AddPostfixParselet (EchelonScriptTokenType.MinusMinus, incDecParselet);
+            AddPrefixParselet (EchelonScriptTokenType.Identifier, new CastExpressionParselet ());
+
+            #endregion
+
+            #region Binary ops
+
+            AddSimpleBinaryExpr (ExpressionPrecedence.Concatenation, EchelonScriptTokenType.Tilde, SimpleBinaryExprType.Concatenation);
+
+            AddSimpleBinaryExpr (ExpressionPrecedence.Exponentiation, EchelonScriptTokenType.PowerOp, SimpleBinaryExprType.Power);
+
+            AddSimpleBinaryExpr (ExpressionPrecedence.Multiplicative, EchelonScriptTokenType.Asterisk, SimpleBinaryExprType.Multiply);
+            AddSimpleBinaryExpr (ExpressionPrecedence.Multiplicative, EchelonScriptTokenType.Divide, SimpleBinaryExprType.Divide);
+            AddSimpleBinaryExpr (ExpressionPrecedence.Multiplicative, EchelonScriptTokenType.Modulo, SimpleBinaryExprType.Modulo);
+
+            AddSimpleBinaryExpr (ExpressionPrecedence.Additive, EchelonScriptTokenType.Plus, SimpleBinaryExprType.Add);
+            AddSimpleBinaryExpr (ExpressionPrecedence.Additive, EchelonScriptTokenType.Minus, SimpleBinaryExprType.Subtract);
+
+            AddSimpleBinaryExpr (ExpressionPrecedence.Shift, EchelonScriptTokenType.ShiftLeft, SimpleBinaryExprType.ShiftLeft);
+            AddSimpleBinaryExpr (ExpressionPrecedence.Shift, EchelonScriptTokenType.ShiftRight, SimpleBinaryExprType.ShiftRight);
+            AddSimpleBinaryExpr (ExpressionPrecedence.Shift, EchelonScriptTokenType.ShiftRightU, SimpleBinaryExprType.ShiftRightUnsigned);
+
+            AddSimpleBinaryExpr (ExpressionPrecedence.Comparison, EchelonScriptTokenType.LesserThan, SimpleBinaryExprType.LesserThan);
+            AddSimpleBinaryExpr (ExpressionPrecedence.Comparison, EchelonScriptTokenType.GreaterThan, SimpleBinaryExprType.GreaterThan);
+            AddSimpleBinaryExpr (ExpressionPrecedence.Comparison, EchelonScriptTokenType.LesserThanEq, SimpleBinaryExprType.LesserThanEqual);
+            AddSimpleBinaryExpr (ExpressionPrecedence.Comparison, EchelonScriptTokenType.GreaterThanEq, SimpleBinaryExprType.GreaterThanEqual);
+
+            AddSimpleBinaryExpr (ExpressionPrecedence.Equality, EchelonScriptTokenType.EqualsEquals, SimpleBinaryExprType.Equals);
+            AddSimpleBinaryExpr (ExpressionPrecedence.Equality, EchelonScriptTokenType.NotEquals, SimpleBinaryExprType.NotEquals);
+
+            AddSimpleBinaryExpr (ExpressionPrecedence.BitAnd, EchelonScriptTokenType.And, SimpleBinaryExprType.BitAnd);
+
+            AddSimpleBinaryExpr (ExpressionPrecedence.BitXor, EchelonScriptTokenType.Xor, SimpleBinaryExprType.BitXor);
+
+            AddSimpleBinaryExpr (ExpressionPrecedence.BitOr, EchelonScriptTokenType.BitOr, SimpleBinaryExprType.BitOr);
+
+            AddSimpleBinaryExpr (ExpressionPrecedence.ConditionalAnd, EchelonScriptTokenType.AndAnd, SimpleBinaryExprType.LogicalAnd);
+
+            AddSimpleBinaryExpr (ExpressionPrecedence.ConditionalOr, EchelonScriptTokenType.OrOr, SimpleBinaryExprType.LogicalOr);
+
+            #region Assignments
+
+            AddSimpleBinaryExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.Equals, SimpleBinaryExprType.Assign);
+
+            AddSimpleBinaryExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.PlusEq, SimpleBinaryExprType.AssignAdd);
+            AddSimpleBinaryExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.MinusEq, SimpleBinaryExprType.AssignSubtract);
+
+            AddSimpleBinaryExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.MultiplyEq, SimpleBinaryExprType.AssignMultiply);
+            AddSimpleBinaryExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.DivideEq, SimpleBinaryExprType.AssignDivide);
+            AddSimpleBinaryExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.ModuloEq, SimpleBinaryExprType.AssignModulo);
+            AddSimpleBinaryExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.PowerOpEq, SimpleBinaryExprType.AssignPower);
+
+            AddSimpleBinaryExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.AndEq, SimpleBinaryExprType.AssignBitAnd);
+            AddSimpleBinaryExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.BitOrEq, SimpleBinaryExprType.AssignBitOr);
+            AddSimpleBinaryExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.XorEq, SimpleBinaryExprType.AssignXor);
+
+            AddSimpleBinaryExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.TildeEq, SimpleBinaryExprType.AssignTilde);
+
+            AddSimpleBinaryExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.ShiftLeftEq, SimpleBinaryExprType.AssignShiftLeft);
+            AddSimpleBinaryExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.ShiftRightEq, SimpleBinaryExprType.AssignShiftRight);
+            AddSimpleBinaryExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.ShiftRightUEq, SimpleBinaryExprType.AssignShiftRightUnsigned);
+
+            #endregion
+
+            #endregion
+
+            // Shrink the lists to fit
+            foreach (var kvp in PrefixExprParsers)
+                kvp.Value.Capacity = kvp.Value.Count;
+            foreach (var kvp in PostfixExprParsers)
+                kvp.Value.Capacity = kvp.Value.Count;
         }
 
         public EchelonScriptParser () {
@@ -197,7 +985,7 @@ namespace EchelonScriptCompiler.Parser {
             WrongText,
         }
 
-        protected EnsureTokenResult EnsureToken (EchelonScriptToken tk, EchelonScriptTokenType type, string text) {
+        protected static EnsureTokenResult EnsureToken (EchelonScriptToken tk, EchelonScriptTokenType type, string text) {
             if (tk.Type != type)
                 return EnsureTokenResult.WrongType;
 
@@ -209,14 +997,12 @@ namespace EchelonScriptCompiler.Parser {
 
         protected EnsureTokenResult EnsureTokenPeek (EchelonScriptTokenType type, string text) {
             var tkPair = tokenizer.PeekNextToken ();
+            return EnsureToken (tkPair.tk, type, text);
+        }
 
-            if (tkPair.tk.Type != type)
-                return EnsureTokenResult.WrongType;
-
-            if (text != null && !tkPair.tk.Text.Span.Equals (text, StringComparison.Ordinal))
-                return EnsureTokenResult.WrongText;
-
-            return EnsureTokenResult.Correct;
+        protected EnsureTokenResult EnsureTokenPeek (int offset, EchelonScriptTokenType type, string text) {
+            var tkPair = tokenizer.PeekNextToken (offset);
+            return EnsureToken (tkPair.tk, type, text);
         }
 
         protected bool CheckNoAccessModifierErrors (EchelonScriptToken tk, ES_AggregateModifiers currentModifiers) {
@@ -248,7 +1034,7 @@ namespace EchelonScriptCompiler.Parser {
             return (
                 tk.Type == EchelonScriptTokenType.DecIntegerLiteral ||
                 tk.Type == EchelonScriptTokenType.BinIntegerLiteral ||
-                tk.Type == EchelonScriptTokenType.HexIntegerLiteral 
+                tk.Type == EchelonScriptTokenType.HexIntegerLiteral
             );
         }
 
@@ -289,7 +1075,7 @@ namespace EchelonScriptCompiler.Parser {
             var tkPair = tokenizer.NextToken ();
 
             if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Identifier, null) != EnsureTokenResult.Correct) {
-                errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.GenExpectedIdentifier (tkPair.tk)));
+                errorsList.Add (ES_Errors.GenExpectedIdentifier (tkPair.tk));
                 return null;
             }
 
@@ -301,7 +1087,7 @@ namespace EchelonScriptCompiler.Parser {
             token = tkPair.tk;
 
             if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Identifier, null) != EnsureTokenResult.Correct) {
-                errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.GenExpectedIdentifier (tkPair.tk)));
+                errorsList.Add (ES_Errors.GenExpectedIdentifier (tkPair.tk));
                 return false;
             }
 
@@ -376,13 +1162,13 @@ namespace EchelonScriptCompiler.Parser {
 
                         tkPair = tokenizer.NextToken ();
                         if (EnsureToken (tkPair.tk, EchelonScriptTokenType.ParenOpen, null) != EnsureTokenResult.Correct)
-                            errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.GenExpectedXGotY ("'('", tkPair.tk)));
+                            errorsList.Add (ES_Errors.GenExpectedXGotY ("'('", tkPair.tk));
 
                         var innerType = ParseTypeDeclaration ();
 
                         tkPair = tokenizer.PeekNextToken ();
                         if (EnsureToken (tkPair.tk, EchelonScriptTokenType.ParenClose, null) != EnsureTokenResult.Correct)
-                            errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.GenExpectedXGotY ("')'", tkPair.tk)));
+                            errorsList.Add (ES_Errors.GenExpectedXGotY ("')'", tkPair.tk));
                         else
                             tokenizer.NextToken ();
 
@@ -405,14 +1191,14 @@ namespace EchelonScriptCompiler.Parser {
 
                     tkPair = tokenizer.PeekNextToken ();
                     if (EnsureToken (tkPair.tk, EchelonScriptTokenType.ParenClose, null) != EnsureTokenResult.Correct)
-                        errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.GenExpectedXGotY ("')'", tkPair.tk)));
+                        errorsList.Add (ES_Errors.GenExpectedXGotY ("')'", tkPair.tk));
                     else
                         tokenizer.NextToken ();
 
                     innerDecl = innerType;
                 } else if (tkPair.tk.Type == EchelonScriptTokenType.Asterisk) {
                     if (innerDecl == null) {
-                        errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.GenUnexpectedToken (tkPair.tk)));
+                        errorsList.Add (ES_Errors.GenUnexpectedToken (tkPair.tk));
                         break;
                     }
 
@@ -422,7 +1208,7 @@ namespace EchelonScriptCompiler.Parser {
                     };
                 } else if (tkPair.tk.Type == EchelonScriptTokenType.Question) {
                     if (innerDecl == null) {
-                        errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.GenUnexpectedToken (tkPair.tk)));
+                        errorsList.Add (ES_Errors.GenUnexpectedToken (tkPair.tk));
                         break;
                     }
 
@@ -432,11 +1218,11 @@ namespace EchelonScriptCompiler.Parser {
                     };
                 } else if (tkPair.tk.Type == EchelonScriptTokenType.BracketOpen) {
                     if (innerDecl == null) {
-                        errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.GenUnexpectedToken (tkPair.tk)));
+                        errorsList.Add (ES_Errors.GenUnexpectedToken (tkPair.tk));
                         break;
                     }
 
-                    using var ranks = new StructPooledList<ES_AstExpression?> (ClearMode.Auto);
+                    using var ranks = new StructPooledList<ES_AstExpression> (ClearMode.Auto);
 
                     ES_AstExpression lastDim = null;
                     while (true) {
@@ -495,21 +1281,21 @@ namespace EchelonScriptCompiler.Parser {
                 }
 
                 var textSpan = tkPair.tk.Text.Span;
-                if (textSpan.Equals ("using", StringComparison.Ordinal)) {
+                if (textSpan.Equals (ES_Keywords.Using, StringComparison.Ordinal)) {
                     if (namespacesList.Count > 0)
                         errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.ImportAfterNamespace));
 
-                    var importStatement = ParseImportStatement ();
+                    var importStatement = ParseStatement_Import ();
                     if (importStatement != null)
                         importsList.Add (importStatement);
-                } else if (textSpan.Equals ("alias", StringComparison.Ordinal)) {
+                } else if (textSpan.Equals (ES_Keywords.Alias, StringComparison.Ordinal)) {
                     if (namespacesList.Count > 0)
                         errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.AliasAfterNamespace));
 
-                    var aliasStatement = ParseAliasStatement ();
+                    var aliasStatement = ParseStatement_Alias ();
                     if (aliasStatement != null)
                         aliasesList.Add (aliasStatement);
-                } else if (textSpan.Equals ("namespace", StringComparison.Ordinal)) {
+                } else if (textSpan.Equals (ES_Keywords.Namespace, StringComparison.Ordinal)) {
                     var namespaceNode = ParseNamespace ();
                     if (namespaceNode != null)
                         namespacesList.Add (namespaceNode);
@@ -534,7 +1320,7 @@ namespace EchelonScriptCompiler.Parser {
 
             var tkPair = tokenizer.PeekNextToken ();
             if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Identifier, null) != EnsureTokenResult.Correct) {
-                errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.GenExpectedIdentifier (tkPair.tk)));
+                errorsList.Add (ES_Errors.GenExpectedIdentifier (tkPair.tk));
                 return null;
             }
 
@@ -564,7 +1350,7 @@ namespace EchelonScriptCompiler.Parser {
 
             var tkPair = tokenizer.NextToken ();
             if (EnsureToken (tkPair.tk, EchelonScriptTokenType.BraceOpen, null) != EnsureTokenResult.Correct) {
-                errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.GenExpectedXGotY ("'{'", tkPair.tk)));
+                errorsList.Add (ES_Errors.GenExpectedXGotY ("'{'", tkPair.tk));
                 return Array.Empty<ES_AstTreeNode> ();
             }
 
@@ -585,7 +1371,7 @@ namespace EchelonScriptCompiler.Parser {
                 if (tkPair.tk.Type == EchelonScriptTokenType.BraceClose) {
                     tokenizer.NextToken ();
                     if (currentModifiers.AnySet ())
-                        errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.GenExpectedAggregateContent (tkPair.tk)));
+                        errorsList.Add (ES_Errors.GenExpectedAggregateContent (tkPair.tk));
 
                     break;
                 } else if (tkPair.tk.Type == EchelonScriptTokenType.Identifier) {
@@ -609,8 +1395,7 @@ namespace EchelonScriptCompiler.Parser {
                                 break;
                             }
 
-                            tkPair = tokenizer.PeekNextToken ();
-                            if (tkPair.tk.Type == EchelonScriptTokenType.Identifier && tkPair.tk.Text.Span.Equals ("internal", StringComparison.Ordinal)) {
+                            if (EnsureTokenPeek (EchelonScriptTokenType.Identifier, ES_Keywords.Internal) == EnsureTokenResult.Correct) {
                                 tokenizer.NextToken ();
 
                                 if (CheckNoAccessModifierErrors (tkPair.tk, currentModifiers) && CheckNoAccessModifierErrors (tkPair.tk, baseModifiers))
@@ -734,9 +1519,9 @@ namespace EchelonScriptCompiler.Parser {
                             tokenizer.NextToken ();
 
                             if (!isNamespace)
-                                errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.GenExpectedXGotY ("a keyword, function definition, variable definition or '}'", tkPair.tk)));
+                                errorsList.Add (ES_Errors.GenExpectedXGotY ("a keyword, function definition, variable definition or '}'", tkPair.tk));
                             else
-                                errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.GenExpectedXGotY ("a keyword, function definition or '}'", tkPair.tk)));
+                                errorsList.Add (ES_Errors.GenExpectedXGotY ("a keyword, function definition or '}'", tkPair.tk));
                         }
                     }
                 }
@@ -766,7 +1551,7 @@ namespace EchelonScriptCompiler.Parser {
                 }
 
                 if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Identifier, null) != EnsureTokenResult.Correct)
-                    errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.GenExpectedIdentifier (tkPair.tk)));
+                    errorsList.Add (ES_Errors.GenExpectedIdentifier (tkPair.tk));
                 else
                     listContents.Add (ParseDottableUserIdentifier ());
 
@@ -778,258 +1563,6 @@ namespace EchelonScriptCompiler.Parser {
             }
 
             return listContents.ToArray ();
-        }
-
-        protected ES_AstClassDefinition ParseClass (ES_AggregateModifiers classModifiers, bool parseStartKeyword) {
-            // Check if all the modifiers are defined/set. (If not, someone forgot to fill them with the defaults.)
-            if (classModifiers.AnyUndefined ())
-                throw new ArgumentException ("Modifiers set contains undefined values.", nameof (classModifiers));
-
-            var defaultModifiers = new ES_AggregateModifiers {
-                AccessModifier = ES_AccessModifier.Private,
-                Static = false,
-                Const = false,
-            };
-
-            // Parse the 'class' keyword.
-            if (parseStartKeyword) {
-                var kwTkPair = tokenizer.NextToken ();
-                if (EnsureToken (kwTkPair.tk, EchelonScriptTokenType.Identifier, ES_Keywords.Class) != EnsureTokenResult.Correct)
-                    errorsList.Add (new EchelonScriptErrorMessage (kwTkPair.tk, ES_Errors.GenExpectedXGotY ($"\"{ES_Keywords.Class}\"", kwTkPair.tk)));
-            }
-
-            // Parse the class' name.
-            var nameTkPair = tokenizer.PeekNextToken ();
-            if (EnsureToken (nameTkPair.tk, EchelonScriptTokenType.Identifier, null) != EnsureTokenResult.Correct)
-                errorsList.Add (new EchelonScriptErrorMessage (nameTkPair.tk, ES_Errors.GenExpectedIdentifier (nameTkPair.tk)));
-            else
-                tokenizer.NextToken ();
-
-            if (classModifiers.Const == true)
-                errorsList.Add (new EchelonScriptErrorMessage (nameTkPair.tk, ES_Errors.ConstOnlyOnFunctions));
-            classModifiers.Const = false;
-
-            // Error out if this is a static class and it has an inheritance list.
-            var colonTkPair = tokenizer.PeekNextToken ();
-            if (classModifiers.Static == true && colonTkPair.tk.Type == EchelonScriptTokenType.Colon)
-                errorsList.Add (new EchelonScriptErrorMessage (colonTkPair.tk, ES_Errors.InheritanceOnStaticClass));
-
-            // Parse the inheritance list.
-            var inheritanceList = ParseInheritanceList ();
-            if (inheritanceList == null)
-                inheritanceList = Array.Empty<ES_AstDottableIdentifier> ();
-
-            // Parse the class' contents.
-            var contents = ParseAggregateOrNamespace (null, defaultModifiers, false);
-
-            // Create the class AST node.
-            var classDef = new ES_AstClassDefinition {
-                DocComment = classModifiers.DocComment,
-
-                AccessModifier = classModifiers.AccessModifier.Value,
-                Static = classModifiers.Static.Value,
-
-                Name = nameTkPair.tk,
-                InheritanceList = inheritanceList,
-
-                Contents = contents,
-            };
-
-            return classDef;
-        }
-
-        protected ES_AstStructDefinition ParseStruct (ES_AggregateModifiers structModifiers, bool parseStartKeyword) {
-            // Check if all the modifiers are defined/set. (If not, someone forgot to fill them with the defaults.)
-            if (structModifiers.AnyUndefined ())
-                throw new ArgumentException ("Modifiers set contains undefined values.", nameof (structModifiers));
-
-            var defaultModifiers = new ES_AggregateModifiers {
-                AccessModifier = ES_AccessModifier.Private,
-                Static = false,
-                Const = false,
-            };
-
-            // Parse the 'struct' keyword.
-            if (parseStartKeyword) {
-                var kwTkPair = tokenizer.NextToken ();
-                if (EnsureToken (kwTkPair.tk, EchelonScriptTokenType.Identifier, ES_Keywords.Struct) != EnsureTokenResult.Correct)
-                    errorsList.Add (new EchelonScriptErrorMessage (kwTkPair.tk, ES_Errors.GenExpectedXGotY ($"\"{ES_Keywords.Struct}\"", kwTkPair.tk)));
-            }
-
-            // Parse the struct's name.
-            var nameTkPair = tokenizer.PeekNextToken ();
-            if (EnsureToken (nameTkPair.tk, EchelonScriptTokenType.Identifier, null) != EnsureTokenResult.Correct)
-                errorsList.Add (new EchelonScriptErrorMessage (nameTkPair.tk, ES_Errors.GenExpectedIdentifier (nameTkPair.tk)));
-            else
-                tokenizer.NextToken ();
-
-            if (structModifiers.Const == true)
-                errorsList.Add (new EchelonScriptErrorMessage (nameTkPair.tk, ES_Errors.ConstOnlyOnFunctions));
-            structModifiers.Const = false;
-
-            // Error out if this is a static struct and it has an inheritance list.
-            var colonTkPair = tokenizer.PeekNextToken ();
-            if (structModifiers.Static == true && colonTkPair.tk.Type == EchelonScriptTokenType.Colon)
-                errorsList.Add (new EchelonScriptErrorMessage (colonTkPair.tk, ES_Errors.InheritanceOnStaticStruct));
-
-            // Parse the inheritance list.
-            var interfacesList = ParseInheritanceList ();
-            if (interfacesList == null)
-                interfacesList = Array.Empty<ES_AstDottableIdentifier> ();
-
-            // Parse the struct's contents
-            var contents = ParseAggregateOrNamespace (null, defaultModifiers, false);
-
-            // Create the struct AST node.
-            var structDef = new ES_AstStructDefinition {
-                DocComment = structModifiers.DocComment,
-
-                AccessModifier = structModifiers.AccessModifier.Value,
-                Static = structModifiers.Static.Value,
-
-                Name = nameTkPair.tk,
-                InterfacesList = interfacesList,
-
-                Contents = contents,
-            };
-
-            return structDef;
-        }
-
-        #endregion
-
-        protected ES_AstEnumDefinition ParseEnum (ES_AggregateModifiers enumModifiers, bool parseStartKeyword) {
-            // Check if all the modifiers are defined/set. (If not, someone forgot to fill them with the defaults.)
-            if (enumModifiers.AnyUndefined ())
-                throw new ArgumentException ("Modifiers set contains undefined values.", nameof (enumModifiers));
-
-            // Parse the 'enum' keyword.
-            if (parseStartKeyword) {
-                var kwTkPair = tokenizer.NextToken ();
-                if (EnsureToken (kwTkPair.tk, EchelonScriptTokenType.Identifier, ES_Keywords.Enum) != EnsureTokenResult.Correct)
-                    errorsList.Add (new EchelonScriptErrorMessage (kwTkPair.tk, ES_Errors.GenExpectedXGotY ($"\"{ES_Keywords.Enum}\"", kwTkPair.tk)));
-            }
-
-            // Parse the enum's name.
-            ParseUserIdentifier (out var nameToken);
-
-            if (enumModifiers.Const == true)
-                errorsList.Add (new EchelonScriptErrorMessage (nameToken, ES_Errors.ConstOnlyOnFunctions));
-            enumModifiers.Const = false;
-
-            // Parse the enum's type, if any.
-            EchelonScriptToken? baseType = null;
-            if (tokenizer.PeekNextToken ().tk.Type == EchelonScriptTokenType.Colon) {
-                tokenizer.NextToken ();
-
-                baseType = ParseIdentifier ();
-            }
-
-            // Parse the opening brace.
-            {
-                var openBraceTkPair = tokenizer.NextToken ();
-                if (EnsureToken (openBraceTkPair.tk, EchelonScriptTokenType.BraceOpen, null) != EnsureTokenResult.Correct)
-                    errorsList.Add (new EchelonScriptErrorMessage (openBraceTkPair.tk, ES_Errors.GenExpectedXGotY ("'{'", openBraceTkPair.tk)));
-            }
-
-            // Parse the enum's members
-            using var membersList = new StructPooledList<(EchelonScriptToken, ES_AstExpression)> (ClearMode.Auto);
-
-            bool expectingEnd = false;
-            while (true) {
-                var tkPair = tokenizer.PeekNextToken ();
-
-                if (tkPair.tk.Type == EchelonScriptTokenType.EOF) {
-                    errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.UnexpectedEOF));
-                    break;
-                }
-
-                if (tkPair.tk.Type == EchelonScriptTokenType.BraceClose) {
-                    tokenizer.NextToken ();
-                    break;
-                } else if (tkPair.tk.Type == EchelonScriptTokenType.Identifier) {
-                    ParseUserIdentifier (out var memberName);
-                    ES_AstExpression assignExpr = null;
-
-                    // Error out if the previous member had no comma.
-                    if (expectingEnd)
-                        errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.GenExpectedXGotY ("'}'", tkPair.tk)));
-
-                    // Read the value expression
-                    tkPair = tokenizer.PeekNextToken ();
-                    if (tkPair.tk.Type == EchelonScriptTokenType.Equals) {
-                        tokenizer.NextToken ();
-
-                        assignExpr = ParseExpression ();
-                    }
-
-                    // Check for a comma.
-                    tkPair = tokenizer.PeekNextToken ();
-                    if (tkPair.tk.Type == EchelonScriptTokenType.Comma)
-                        tokenizer.NextToken ();
-                    else
-                        expectingEnd = true;
-
-                    membersList.Add ((memberName, assignExpr));
-                } else {
-                    errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.GenExpectedXGotY ("a keyword or '}'", tkPair.tk)));
-                    tokenizer.NextToken ();
-                }
-            }
-
-            // Create the enum AST node.
-            var enumDef = new ES_AstEnumDefinition {
-                AccessModifier = enumModifiers.AccessModifier.Value,
-                DocComment = enumModifiers.DocComment,
-
-                Name = nameToken,
-                BaseType = baseType,
-
-                MembersList = membersList.ToArray (),
-            };
-
-            return enumDef;
-        }
-
-        protected ES_AstTreeNode [] ParseFunctionOrVariable (ES_AggregateModifiers modifiers) {
-            var typeDecl = ParseTypeDeclaration ();
-
-            var nextTkPair = tokenizer.PeekNextToken (1);
-            if (nextTkPair.tk.Type == EchelonScriptTokenType.ParenOpen)
-                return new ES_AstTreeNode [] { ParseFunction (modifiers, typeDecl) };
-            else
-                return ParseMemberVar (modifiers, typeDecl);
-        }
-
-        protected ES_AstFunctionDefinition ParseFunction (ES_AggregateModifiers funcModifiers, ES_AstTypeDeclaration returnType) {
-            // Check if all the modifiers are defined/set. (If not, someone forgot to fill them with the defaults.)
-            if (funcModifiers.AnyUndefined ())
-                throw new ArgumentException ("Modifiers set contains undefined values.", nameof (funcModifiers));
-
-            if (returnType == null)
-                returnType = ParseTypeDeclaration ();
-
-            ParseUserIdentifier (out var functionName);
-
-            var argumentsList = ParseArgumentsList ();
-
-            var statements = ParseStatementsBlock ();
-
-            var functionDef = new ES_AstFunctionDefinition {
-                AccessModifier = funcModifiers.AccessModifier.Value,
-                DocComment = funcModifiers.DocComment,
-
-                Static = funcModifiers.Static.Value,
-                Const = funcModifiers.Const.Value,
-
-                Name = functionName,
-                ReturnType = returnType,
-                ArgumentsList = argumentsList,
-
-                StatementsList = statements,
-            };
-
-            return functionDef;
         }
 
         protected ES_AstMemberVarDefinition [] ParseMemberVar (ES_AggregateModifiers varModifiers, ES_AstTypeDeclaration valueType) {
@@ -1085,24 +1618,276 @@ namespace EchelonScriptCompiler.Parser {
 
             var semicolonTkPair = tokenizer.PeekNextToken ();
             if (EnsureToken (semicolonTkPair.tk, EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)
-                errorsList.Add (new EchelonScriptErrorMessage (semicolonTkPair.tk, ES_Errors.GenExpectedXGotY ("';'", semicolonTkPair.tk)));
+                errorsList.Add (ES_Errors.GenExpectedXGotY ("';'", semicolonTkPair.tk));
             else
                 tokenizer.NextToken ();
 
             return variables.ToArray ();
         }
 
-        protected ES_AstFunctionArgument [] ParseArgumentsList () {
+        protected ES_AstTreeNode [] ParseFunctionOrVariable (ES_AggregateModifiers modifiers) {
+            var typeDecl = ParseTypeDeclaration ();
+
+            var nextTkPair = tokenizer.PeekNextToken (1);
+            if (nextTkPair.tk.Type == EchelonScriptTokenType.ParenOpen)
+                return new ES_AstTreeNode [] { ParseFunction (modifiers, typeDecl) };
+            else
+                return ParseMemberVar (modifiers, typeDecl);
+        }
+
+        protected ES_AstClassDefinition ParseClass (ES_AggregateModifiers classModifiers, bool parseStartKeyword) {
+            // Check if all the modifiers are defined/set. (If not, someone forgot to fill them with the defaults.)
+            if (classModifiers.AnyUndefined ())
+                throw new ArgumentException ("Modifiers set contains undefined values.", nameof (classModifiers));
+
+            var defaultModifiers = new ES_AggregateModifiers {
+                AccessModifier = ES_AccessModifier.Private,
+                Static = false,
+                Const = false,
+            };
+
+            // Parse the 'class' keyword.
+            if (parseStartKeyword) {
+                var kwTkPair = tokenizer.NextToken ();
+                if (EnsureToken (kwTkPair.tk, EchelonScriptTokenType.Identifier, ES_Keywords.Class) != EnsureTokenResult.Correct)
+                    errorsList.Add (ES_Errors.GenExpectedXGotY ($"\"{ES_Keywords.Class}\"", kwTkPair.tk));
+            }
+
+            // Parse the class' name.
+            var nameTkPair = tokenizer.PeekNextToken ();
+            if (EnsureToken (nameTkPair.tk, EchelonScriptTokenType.Identifier, null) != EnsureTokenResult.Correct)
+                errorsList.Add (ES_Errors.GenExpectedIdentifier (nameTkPair.tk));
+            else
+                tokenizer.NextToken ();
+
+            if (classModifiers.Const == true)
+                errorsList.Add (new EchelonScriptErrorMessage (nameTkPair.tk, ES_Errors.ConstOnlyOnFunctions));
+            classModifiers.Const = false;
+
+            // Error out if this is a static class and it has an inheritance list.
+            var colonTkPair = tokenizer.PeekNextToken ();
+            if (classModifiers.Static == true && colonTkPair.tk.Type == EchelonScriptTokenType.Colon)
+                errorsList.Add (new EchelonScriptErrorMessage (colonTkPair.tk, ES_Errors.InheritanceOnStaticClass));
+
+            // Parse the inheritance list.
+            var inheritanceList = ParseInheritanceList ();
+            if (inheritanceList == null)
+                inheritanceList = Array.Empty<ES_AstDottableIdentifier> ();
+
+            // Parse the class' contents.
+            var contents = ParseAggregateOrNamespace (null, defaultModifiers, false);
+
+            // Create the class AST node.
+            var classDef = new ES_AstClassDefinition {
+                DocComment = classModifiers.DocComment,
+
+                AccessModifier = classModifiers.AccessModifier.Value,
+                Static = classModifiers.Static.Value,
+
+                Name = nameTkPair.tk,
+                InheritanceList = inheritanceList,
+
+                Contents = contents,
+            };
+
+            return classDef;
+        }
+
+        protected ES_AstStructDefinition ParseStruct (ES_AggregateModifiers structModifiers, bool parseStartKeyword) {
+            // Check if all the modifiers are defined/set. (If not, someone forgot to fill them with the defaults.)
+            if (structModifiers.AnyUndefined ())
+                throw new ArgumentException ("Modifiers set contains undefined values.", nameof (structModifiers));
+
+            var defaultModifiers = new ES_AggregateModifiers {
+                AccessModifier = ES_AccessModifier.Private,
+                Static = false,
+                Const = false,
+            };
+
+            // Parse the 'struct' keyword.
+            if (parseStartKeyword) {
+                var kwTkPair = tokenizer.NextToken ();
+                if (EnsureToken (kwTkPair.tk, EchelonScriptTokenType.Identifier, ES_Keywords.Struct) != EnsureTokenResult.Correct)
+                    errorsList.Add (ES_Errors.GenExpectedXGotY ($"\"{ES_Keywords.Struct}\"", kwTkPair.tk));
+            }
+
+            // Parse the struct's name.
+            var nameTkPair = tokenizer.PeekNextToken ();
+            if (EnsureToken (nameTkPair.tk, EchelonScriptTokenType.Identifier, null) != EnsureTokenResult.Correct)
+                errorsList.Add (ES_Errors.GenExpectedIdentifier (nameTkPair.tk));
+            else
+                tokenizer.NextToken ();
+
+            if (structModifiers.Const == true)
+                errorsList.Add (new EchelonScriptErrorMessage (nameTkPair.tk, ES_Errors.ConstOnlyOnFunctions));
+            structModifiers.Const = false;
+
+            // Error out if this is a static struct and it has an inheritance list.
+            var colonTkPair = tokenizer.PeekNextToken ();
+            if (structModifiers.Static == true && colonTkPair.tk.Type == EchelonScriptTokenType.Colon)
+                errorsList.Add (new EchelonScriptErrorMessage (colonTkPair.tk, ES_Errors.InheritanceOnStaticStruct));
+
+            // Parse the inheritance list.
+            var interfacesList = ParseInheritanceList ();
+            if (interfacesList == null)
+                interfacesList = Array.Empty<ES_AstDottableIdentifier> ();
+
+            // Parse the struct's contents
+            var contents = ParseAggregateOrNamespace (null, defaultModifiers, false);
+
+            // Create the struct AST node.
+            var structDef = new ES_AstStructDefinition {
+                DocComment = structModifiers.DocComment,
+
+                AccessModifier = structModifiers.AccessModifier.Value,
+                Static = structModifiers.Static.Value,
+
+                Name = nameTkPair.tk,
+                InterfacesList = interfacesList,
+
+                Contents = contents,
+            };
+
+            return structDef;
+        }
+
+        #endregion
+
+        protected ES_AstEnumDefinition ParseEnum (ES_AggregateModifiers enumModifiers, bool parseStartKeyword) {
+            // Check if all the modifiers are defined/set. (If not, someone forgot to fill them with the defaults.)
+            if (enumModifiers.AnyUndefined ())
+                throw new ArgumentException ("Modifiers set contains undefined values.", nameof (enumModifiers));
+
+            // Parse the 'enum' keyword.
+            if (parseStartKeyword) {
+                var kwTkPair = tokenizer.NextToken ();
+                if (EnsureToken (kwTkPair.tk, EchelonScriptTokenType.Identifier, ES_Keywords.Enum) != EnsureTokenResult.Correct)
+                    errorsList.Add (ES_Errors.GenExpectedXGotY ($"\"{ES_Keywords.Enum}\"", kwTkPair.tk));
+            }
+
+            // Parse the enum's name.
+            ParseUserIdentifier (out var nameToken);
+
+            if (enumModifiers.Const == true)
+                errorsList.Add (new EchelonScriptErrorMessage (nameToken, ES_Errors.ConstOnlyOnFunctions));
+            enumModifiers.Const = false;
+
+            // Parse the enum's type, if any.
+            EchelonScriptToken? baseType = null;
+            if (tokenizer.PeekNextToken ().tk.Type == EchelonScriptTokenType.Colon) {
+                tokenizer.NextToken ();
+
+                baseType = ParseIdentifier ();
+            }
+
+            // Parse the opening brace.
+            {
+                var openBraceTkPair = tokenizer.NextToken ();
+                if (EnsureToken (openBraceTkPair.tk, EchelonScriptTokenType.BraceOpen, null) != EnsureTokenResult.Correct)
+                    errorsList.Add (ES_Errors.GenExpectedXGotY ("'{'", openBraceTkPair.tk));
+            }
+
+            // Parse the enum's members
+            using var membersList = new StructPooledList<(EchelonScriptToken, ES_AstExpression)> (ClearMode.Auto);
+
+            bool expectingEnd = false;
+            while (true) {
+                var tkPair = tokenizer.PeekNextToken ();
+
+                if (tkPair.tk.Type == EchelonScriptTokenType.EOF) {
+                    errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.UnexpectedEOF));
+                    break;
+                }
+
+                if (tkPair.tk.Type == EchelonScriptTokenType.BraceClose) {
+                    tokenizer.NextToken ();
+                    break;
+                } else if (tkPair.tk.Type == EchelonScriptTokenType.Identifier) {
+                    ParseUserIdentifier (out var memberName);
+                    ES_AstExpression assignExpr = null;
+
+                    // Error out if the previous member had no comma.
+                    if (expectingEnd)
+                        errorsList.Add (ES_Errors.GenExpectedXGotY ("'}'", tkPair.tk));
+
+                    // Read the value expression
+                    tkPair = tokenizer.PeekNextToken ();
+                    if (tkPair.tk.Type == EchelonScriptTokenType.Equals) {
+                        tokenizer.NextToken ();
+
+                        assignExpr = ParseExpression ();
+                    }
+
+                    // Check for a comma.
+                    tkPair = tokenizer.PeekNextToken ();
+                    if (tkPair.tk.Type == EchelonScriptTokenType.Comma)
+                        tokenizer.NextToken ();
+                    else
+                        expectingEnd = true;
+
+                    membersList.Add ((memberName, assignExpr));
+                } else {
+                    errorsList.Add (ES_Errors.GenExpectedXGotY ("a keyword or '}'", tkPair.tk));
+                    tokenizer.NextToken ();
+                }
+            }
+
+            // Create the enum AST node.
+            var enumDef = new ES_AstEnumDefinition {
+                AccessModifier = enumModifiers.AccessModifier.Value,
+                DocComment = enumModifiers.DocComment,
+
+                Name = nameToken,
+                BaseType = baseType,
+
+                MembersList = membersList.ToArray (),
+            };
+
+            return enumDef;
+        }
+
+        protected ES_AstFunctionDefinition ParseFunction (ES_AggregateModifiers funcModifiers, ES_AstTypeDeclaration returnType) {
+            // Check if all the modifiers are defined/set. (If not, someone forgot to fill them with the defaults.)
+            if (funcModifiers.AnyUndefined ())
+                throw new ArgumentException ("Modifiers set contains undefined values.", nameof (funcModifiers));
+
+            if (returnType == null)
+                returnType = ParseTypeDeclaration ();
+
+            ParseUserIdentifier (out var functionName);
+
+            var argumentsList = ParseArgumentsDefinitionList ();
+
+            var statements = ParseStatementsBlock ();
+
+            var functionDef = new ES_AstFunctionDefinition {
+                AccessModifier = funcModifiers.AccessModifier.Value,
+                DocComment = funcModifiers.DocComment,
+
+                Static = funcModifiers.Static.Value,
+                Const = funcModifiers.Const.Value,
+
+                Name = functionName,
+                ReturnType = returnType,
+                ArgumentsList = argumentsList,
+
+                StatementsList = statements,
+            };
+
+            return functionDef;
+        }
+
+        protected ES_AstFunctionArgumentDefinition [] ParseArgumentsDefinitionList () {
             var tkPair = tokenizer.NextToken ();
             if (EnsureToken (tkPair.tk, EchelonScriptTokenType.ParenOpen, null) != EnsureTokenResult.Correct)
-                errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.GenExpectedXGotY ("'('", tkPair.tk)));
+                errorsList.Add (ES_Errors.GenExpectedXGotY ("'('", tkPair.tk));
 
             if (tokenizer.PeekNextToken ().tk.Type == EchelonScriptTokenType.ParenClose) {
                 tokenizer.NextToken ();
-                return Array.Empty<ES_AstFunctionArgument> ();
+                return Array.Empty<ES_AstFunctionArgumentDefinition> ();
             }
 
-            using var argsList = new StructPooledList<ES_AstFunctionArgument> (ClearMode.Auto);
+            using var argsList = new StructPooledList<ES_AstFunctionArgumentDefinition> (ClearMode.Auto);
 
             while (true) {
                 tkPair = tokenizer.PeekNextToken ();
@@ -1112,33 +1897,29 @@ namespace EchelonScriptCompiler.Parser {
                     break;
                 }
 
-                var mode = ES_AstFunctionArgument.ArgumentMode.Normal;
+                var mode = ES_ArgumentType.Normal;
 
                 if (tkPair.tk.Type == EchelonScriptTokenType.Identifier) {
                     var textSpan = tkPair.tk.Text.Span;
-                    if (textSpan.Equals ("ref", StringComparison.Ordinal))
-                        mode = ES_AstFunctionArgument.ArgumentMode.Ref;
-                    else if (textSpan.Equals ("in", StringComparison.Ordinal))
-                        mode = ES_AstFunctionArgument.ArgumentMode.In;
-                    else if (textSpan.Equals ("out", StringComparison.Ordinal))
-                        mode = ES_AstFunctionArgument.ArgumentMode.Out;
+                    if (textSpan.Equals (ES_Keywords.Ref, StringComparison.Ordinal))
+                        mode = ES_ArgumentType.Ref;
+                    else if (textSpan.Equals (ES_Keywords.In, StringComparison.Ordinal))
+                        mode = ES_ArgumentType.In;
+                    else if (textSpan.Equals (ES_Keywords.Out, StringComparison.Ordinal))
+                        mode = ES_ArgumentType.Out;
 
-                    if (mode != ES_AstFunctionArgument.ArgumentMode.Normal) {
+                    if (mode != ES_ArgumentType.Normal) {
                         tokenizer.NextToken ();
                         tkPair = tokenizer.PeekNextToken ();
 
                         if (tkPair.tk.Type != EchelonScriptTokenType.Identifier)
-                            errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.GenExpectedIdentifier (tkPair.tk)));
+                            errorsList.Add (ES_Errors.GenExpectedIdentifier (tkPair.tk));
                     }
                 }
 
                 var argumentType = ParseTypeDeclaration ();
 
-                tkPair = tokenizer.NextToken ();
-                if (tkPair.tk.Type != EchelonScriptTokenType.Identifier)
-                    errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.GenExpectedIdentifier (tkPair.tk)));
-
-                var argumentName = tkPair.tk;
+                ParseUserIdentifier (out var argumentName);
                 ES_AstExpression argumentExpr = null;
 
                 tkPair = tokenizer.PeekNextToken ();
@@ -1148,8 +1929,8 @@ namespace EchelonScriptCompiler.Parser {
                     argumentExpr = ParseExpression ();
                 }
 
-                var functionArgDef = new ES_AstFunctionArgument {
-                    Mode = mode,
+                var functionArgDef = new ES_AstFunctionArgumentDefinition {
+                    ArgType = mode,
                     ValueType = argumentType,
                     Name = argumentName,
                     DefaultExpression = argumentExpr,
@@ -1160,24 +1941,101 @@ namespace EchelonScriptCompiler.Parser {
                 if (tkPair.tk.Type == EchelonScriptTokenType.ParenClose)
                     break;
                 else if (tkPair.tk.Type != EchelonScriptTokenType.Comma)
-                    errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.GenExpectedXGotY ("',' or ')'", tkPair.tk)));
+                    errorsList.Add (ES_Errors.GenExpectedXGotY ("',' or ')'", tkPair.tk));
             }
 
             return argsList.ToArray ();
         }
 
+        #region Statements
+
+        protected ES_AstStatement ParseStatement () {
+            var tkPair = tokenizer.PeekNextToken ();
+
+            if (tkPair.tk.Type == EchelonScriptTokenType.Identifier) {
+                var tkTextStr = StringPool.Shared.GetOrAdd (tkPair.tk.Text.Span);
+
+                var nextTkPair = tokenizer.PeekNextToken (1);
+                if (nextTkPair.tk.Type == EchelonScriptTokenType.Colon) {
+                    // Labeled statement
+                    var labelName = tokenizer.NextToken ().tk;
+                    tokenizer.NextToken (); // Read the colon
+
+                    var statement = ParseStatement ();
+
+                    return new ES_AstLabeledStatement {
+                        LabelName = labelName,
+                        Statement = statement,
+                    };
+                }
+
+                switch (tkTextStr) {
+                    case ES_Keywords.Var:
+                        return ParseStatement_Variable (false);
+                    case ES_Keywords.Using: {
+                        if (EnsureTokenPeek (1, EchelonScriptTokenType.Identifier, ES_Keywords.Var) == EnsureTokenResult.Correct) {
+                            tokenizer.NextToken ();
+                            return ParseStatement_Variable (true);
+                        } else
+                            return ParseStatement_Import ();
+                    }
+                    case ES_Keywords.Alias:
+                        return ParseStatement_Alias ();
+                }
+            }
+
+            return ParseEmbeddedStatement ();
+        }
+
+        protected ES_AstStatement ParseEmbeddedStatement () {
+            var tkPair = tokenizer.PeekNextToken ();
+
+            if (tkPair.tk.Type == EchelonScriptTokenType.Identifier) {
+                var tkTextStr = StringPool.Shared.GetOrAdd (tkPair.tk.Text.Span);
+
+                switch (tkTextStr) {
+                    case ES_Keywords.If:
+                        return ParseStatement_IfElse ();
+                    case ES_Keywords.Switch:
+                        return ParseStatement_Switch ();
+
+                    case ES_Keywords.Break:
+                        return ParseStatement_Break ();
+                    case ES_Keywords.Continue:
+                        return ParseStatement_Continue ();
+                    case ES_Keywords.Goto:
+                        return ParseStatement_Goto ();
+
+                    case ES_Keywords.While:
+                        return ParseStatement_While ();
+                    case ES_Keywords.For:
+                        return ParseStatement_For ();
+
+                    case ES_Keywords.Return:
+                        return ParseStatement_Return ();
+                }
+            }
+
+            if (tkPair.tk.Type == EchelonScriptTokenType.BraceOpen) {
+                var blockStatement = new ES_AstBlockStatement {
+                    Statements = ParseStatementsBlock (),
+                };
+
+                return blockStatement;
+            }
+
+            return ParseStatement_Expression ();
+        }
+
         protected ES_AstStatement [] ParseStatementsBlock () {
             var tkPair = tokenizer.NextToken ();
             if (EnsureToken (tkPair.tk, EchelonScriptTokenType.BraceOpen, null) != EnsureTokenResult.Correct) {
-                errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.GenExpectedXGotY ("'{'", tkPair.tk)));
+                errorsList.Add (ES_Errors.GenExpectedXGotY ("'{'", tkPair.tk));
                 return null;
             }
 
             using var contents = new StructPooledList<ES_AstStatement> (ClearMode.Auto);
-            ES_AggregateModifiers currentModifiers = new ES_AggregateModifiers ();
-            currentModifiers.ResetToNull ();
 
-            // TODO: Actually implement statement blocks
             while (true) {
                 tkPair = tokenizer.PeekNextToken ();
 
@@ -1188,33 +2046,24 @@ namespace EchelonScriptCompiler.Parser {
 
                 if (tkPair.tk.Type == EchelonScriptTokenType.BraceClose) {
                     tokenizer.NextToken ();
-                    if (currentModifiers.AnySet ())
-                        errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.GenExpectedAggregateContent (tkPair.tk)));
 
                     break;
-                } else if (tkPair.tk.Type == EchelonScriptTokenType.Identifier) {
-                    var textSpan = tkPair.tk.Text.Span;
-                    var textString = StringPool.Shared.GetOrAdd (textSpan);
-
-                    tokenizer.NextToken ();
-                } else {
-                    //errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.GenExpectedXGotY ("a keyword or '}'", tkPair.tk)));
-                    tokenizer.NextToken ();
-                }
+                } else
+                    contents.Add (ParseStatement ());
             }
 
             return contents.ToArray ();
         }
 
-        #region Statements
+        #region Symbol definition statements
 
-        protected ES_AstImportStatement ParseImportStatement () {
+        protected ES_AstImportStatement ParseStatement_Import () {
             if (EnsureToken (tokenizer.NextToken ().tk, EchelonScriptTokenType.Identifier, ES_Keywords.Using) != EnsureTokenResult.Correct)
                 throw new Exception ("The calling function must check for the correct initial token first.");
 
             var tkPair = tokenizer.PeekNextToken ();
             if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Identifier, null) != EnsureTokenResult.Correct) {
-                errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.GenExpectedIdentifier (tkPair.tk)));
+                errorsList.Add (ES_Errors.GenExpectedIdentifier (tkPair.tk));
                 return null;
             }
 
@@ -1240,7 +2089,7 @@ namespace EchelonScriptCompiler.Parser {
                         tokenizer.NextToken ();
                         break;
                     } else if (tkPair.tk.Type != EchelonScriptTokenType.Comma) {
-                        errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.GenExpectedXGotY ("',' or ';'", tkPair.tk)));
+                        errorsList.Add (ES_Errors.GenExpectedXGotY ("',' or ';'", tkPair.tk));
                         break;
                     } else
                         tokenizer.NextToken ();
@@ -1251,12 +2100,12 @@ namespace EchelonScriptCompiler.Parser {
             } else if (tkPair.tk.Type == EchelonScriptTokenType.Semicolon) {
                 tokenizer.NextToken ();
             } else
-                errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.GenExpectedXGotY ("',' or ';'", tkPair.tk)));
+                errorsList.Add (ES_Errors.GenExpectedXGotY ("',' or ';'", tkPair.tk));
 
             return new ES_AstImportStatement () { NamespaceName = namespaceName, ImportedNames = importedNamesList.ToArray () };
         }
 
-        protected ES_AstTypeAlias ParseAliasStatement () {
+        protected ES_AstTypeAlias ParseStatement_Alias () {
             if (EnsureToken (tokenizer.NextToken ().tk, EchelonScriptTokenType.Identifier, ES_Keywords.Alias) != EnsureTokenResult.Correct)
                 throw new Exception ("The calling function must check for the correct initial token first.");
 
@@ -1265,31 +2114,529 @@ namespace EchelonScriptCompiler.Parser {
 
             var tkPair = tokenizer.NextToken ();
             if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Equals, null) != EnsureTokenResult.Correct) {
-                errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.GenExpectedXGotY ("'='", tkPair.tk)));
+                errorsList.Add (ES_Errors.GenExpectedXGotY ("'='", tkPair.tk));
                 return null;
             }
 
             tkPair = tokenizer.PeekNextToken ();
             if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Identifier, null) != EnsureTokenResult.Correct) {
-                errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.GenExpectedIdentifier (tkPair.tk)));
+                errorsList.Add (ES_Errors.GenExpectedIdentifier (tkPair.tk));
                 return null;
             }
             var originalName = ParseDottableUserIdentifier ();
 
             tkPair = tokenizer.NextToken ();
             if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)
-                errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.GenExpectedXGotY ("';'", tkPair.tk)));
+                errorsList.Add (ES_Errors.GenExpectedXGotY ("';'", tkPair.tk));
 
             return new ES_AstTypeAlias () { AliasName = aliasName, OriginalName = originalName };
+        }
+
+        protected ES_AstLocalVarDefinition ParseStatement_Variable (bool usingVar) {
+            var tkPair = tokenizer.NextToken ();
+            if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Identifier, ES_Keywords.Var) != EnsureTokenResult.Correct)
+                throw new Exception ("The calling function must check for the correct initial token first.");
+
+            ES_AstTypeDeclaration valueType;
+            using var variables = new StructPooledList<(EchelonScriptToken, ES_AstExpression)> (ClearMode.Auto);
+            bool initRequired;
+
+            if (tokenizer.PeekNextToken ().tk.Type == EchelonScriptTokenType.Identifier &&
+                tokenizer.PeekNextToken (1).tk.Type == EchelonScriptTokenType.Equals
+            ) {
+                initRequired = true;
+                valueType = null;
+            } else {
+                initRequired = false;
+                valueType = ParseTypeDeclaration ();
+            }
+
+            if (usingVar)
+                initRequired = true;
+
+            while (true) {
+                EchelonScriptToken varName = new EchelonScriptToken ();
+                ES_AstExpression initializationExpr = null;
+
+                tkPair = tokenizer.PeekNextToken ();
+                if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Identifier, null) != EnsureTokenResult.Correct)
+                    errorsList.Add (ES_Errors.GenExpectedIdentifier (tkPair.tk));
+                else
+                    varName = tkPair.tk;
+
+                tkPair = tokenizer.PeekNextToken ();
+                if (!initRequired) {
+                    if (tkPair.tk.Type == EchelonScriptTokenType.Equals) {
+                        tokenizer.NextToken ();
+
+                        initializationExpr = ParseExpression ();
+                    }
+                } else if (initRequired) {
+                    if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Equals, null) != EnsureTokenResult.Correct)
+                        errorsList.Add (ES_Errors.GenExpectedXGotY ("'='", tkPair.tk));
+                    else
+                        tokenizer.NextToken ();
+
+                    initializationExpr = ParseExpression ();
+                }
+
+                variables.Add ((varName, initializationExpr));
+
+                tkPair = tokenizer.PeekNextToken ();
+                if (tkPair.tk.Type == EchelonScriptTokenType.Comma) {
+                    tokenizer.NextToken ();
+                } else
+                    break;
+            }
+
+            tkPair = tokenizer.PeekNextToken ();
+            if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)
+                errorsList.Add (ES_Errors.GenExpectedXGotY ("';'", tkPair.tk));
+
+            return new ES_AstLocalVarDefinition {
+                UsingVar = usingVar,
+                ValueType = valueType,
+
+                Variables = variables.ToArray (),
+            };
+        }
+
+        #endregion
+
+        #region Jump statements
+
+        protected ES_AstConditionalStatement ParseStatement_IfElse () {
+            if (EnsureToken (tokenizer.NextToken ().tk, EchelonScriptTokenType.Identifier, ES_Keywords.If) != EnsureTokenResult.Correct)
+                throw new Exception ("The calling function must check for the correct initial token first.");
+
+            var tkPair = tokenizer.PeekNextToken ();
+            if (EnsureToken (tkPair.tk, EchelonScriptTokenType.ParenOpen, null) != EnsureTokenResult.Correct) {
+                errorsList.Add (ES_Errors.GenExpectedXGotY ("'('", tkPair.tk));
+                return null;
+            }
+
+            var conditionExpr = ParseExpression ();
+
+            tkPair = tokenizer.PeekNextToken ();
+            if (EnsureToken (tkPair.tk, EchelonScriptTokenType.ParenClose, null) != EnsureTokenResult.Correct)
+                errorsList.Add (ES_Errors.GenExpectedXGotY ("')'", tkPair.tk));
+            else
+                tokenizer.NextToken ();
+
+            var thenStatement = ParseEmbeddedStatement ();
+            ES_AstStatement elseStatement = null;
+
+            if (EnsureTokenPeek (EchelonScriptTokenType.Identifier, ES_Keywords.Else) == EnsureTokenResult.Correct) {
+                tokenizer.NextToken ();
+
+                elseStatement = ParseEmbeddedStatement ();
+            }
+
+            return new ES_AstConditionalStatement {
+                ConditionExpression = conditionExpr,
+                ThenStatement = thenStatement,
+                ElseStatement = elseStatement,
+            };
+        }
+
+        protected ES_AstSwitchStatement ParseStatement_Switch () {
+            if (EnsureToken (tokenizer.NextToken ().tk, EchelonScriptTokenType.Identifier, ES_Keywords.Switch) != EnsureTokenResult.Correct)
+                throw new Exception ("The calling function must check for the correct initial token first.");
+
+            var tkPair = tokenizer.PeekNextToken ();
+            if (EnsureToken (tkPair.tk, EchelonScriptTokenType.ParenOpen, null) != EnsureTokenResult.Correct) {
+                errorsList.Add (ES_Errors.GenExpectedXGotY ("'('", tkPair.tk));
+                return null;
+            }
+
+            var valueExpr = ParseExpression ();
+
+            tkPair = tokenizer.PeekNextToken ();
+            if (EnsureToken (tkPair.tk, EchelonScriptTokenType.ParenClose, null) != EnsureTokenResult.Correct)
+                errorsList.Add (ES_Errors.GenExpectedXGotY ("')'", tkPair.tk));
+            else
+                tokenizer.NextToken ();
+
+            tkPair = tokenizer.PeekNextToken ();
+            if (EnsureToken (tkPair.tk, EchelonScriptTokenType.BraceOpen, null) != EnsureTokenResult.Correct)
+                errorsList.Add (ES_Errors.GenExpectedXGotY ("'{'", tkPair.tk));
+            else
+                tokenizer.NextToken ();
+
+            using var sections = new StructPooledList<(ES_AstExpression [], ES_AstStatement [])> (ClearMode.Auto);
+            using var sectionExpressions = new StructPooledList<ES_AstExpression> (ClearMode.Auto);
+            while (true) {
+                tkPair = tokenizer.NextToken ();
+                if (tkPair.tk.Type == EchelonScriptTokenType.EOF) {
+                    errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.UnexpectedEOF));
+                    break;
+                }
+
+                if (tkPair.tk.Type != EchelonScriptTokenType.Identifier) {
+                    errorsList.Add (ES_Errors.GenExpectedIdentifier (tkPair.tk));
+                }
+
+                if (tkPair.tk.Text.Span.Equals (ES_Keywords.Default, StringComparison.Ordinal))
+                    sectionExpressions.Add (null);
+                else if (tkPair.tk.Text.Span.Equals (ES_Keywords.Case, StringComparison.Ordinal))
+                    sectionExpressions.Add (ParseExpression ());
+                else
+                    errorsList.Add (ES_Errors.GenExpectedXGotY ($"\"{ES_Keywords.Case}\" or \"{ES_Keywords.Default}\"", tkPair.tk));
+
+                tkPair = tokenizer.PeekNextToken ();
+                if (
+                    EnsureTokenPeek (EchelonScriptTokenType.Identifier, ES_Keywords.Case   ) == EnsureTokenResult.Correct ||
+                    EnsureTokenPeek (EchelonScriptTokenType.Identifier, ES_Keywords.Default) == EnsureTokenResult.Correct
+                ) {
+                    continue;
+                }
+
+                var statementsBlock = ParseStatementsBlock ();
+
+                sections.Add ((sectionExpressions.ToArray (), statementsBlock));
+                sectionExpressions.Clear ();
+            }
+
+            return new ES_AstSwitchStatement {
+                ValueExpression = valueExpr,
+                Sections = sections.ToArray (),
+            };
+        }
+
+        protected ES_AstBreakStatement ParseStatement_Break () {
+            if (EnsureToken (tokenizer.NextToken ().tk, EchelonScriptTokenType.Identifier, ES_Keywords.Break) != EnsureTokenResult.Correct)
+                throw new Exception ("The calling function must check for the correct initial token first.");
+
+            EchelonScriptToken? labelName = null;
+            var tkPair = tokenizer.PeekNextToken ();
+            if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Identifier, null) == EnsureTokenResult.Correct)
+                labelName = tokenizer.NextToken ().tk;
+
+            tkPair = tokenizer.PeekNextToken ();
+            if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)
+                errorsList.Add (ES_Errors.GenExpectedXGotY ("';'", tkPair.tk));
+            else
+                tokenizer.NextToken ();
+
+            return new ES_AstBreakStatement { LabelName = labelName, };
+        }
+
+        protected ES_AstContinueStatement ParseStatement_Continue () {
+            if (EnsureToken (tokenizer.NextToken ().tk, EchelonScriptTokenType.Identifier, ES_Keywords.Continue) != EnsureTokenResult.Correct)
+                throw new Exception ("The calling function must check for the correct initial token first.");
+
+            EchelonScriptToken? labelName = null;
+            var tkPair = tokenizer.PeekNextToken ();
+            if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Identifier, null) == EnsureTokenResult.Correct)
+                labelName = tokenizer.NextToken ().tk;
+
+            tkPair = tokenizer.PeekNextToken ();
+            if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)
+                errorsList.Add (ES_Errors.GenExpectedXGotY ("';'", tkPair.tk));
+            else
+                tokenizer.NextToken ();
+
+            return new ES_AstContinueStatement { LabelName = labelName, };
+        }
+
+        protected ES_AstStatement ParseStatement_Goto () {
+            if (EnsureToken (tokenizer.NextToken ().tk, EchelonScriptTokenType.Identifier, ES_Keywords.Goto) != EnsureTokenResult.Correct)
+                throw new Exception ("The calling function must check for the correct initial token first.");
+
+            ES_AstStatement statement = null;
+
+            var tkPair = tokenizer.PeekNextToken ();
+            if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Identifier, null) != EnsureTokenResult.Correct)
+                errorsList.Add (ES_Errors.GenExpectedIdentifier (tkPair.tk));
+            else if (tkPair.tk.Text.Span.Equals (ES_Keywords.Case, StringComparison.Ordinal)) {
+                tokenizer.NextToken ();
+
+                statement = new ES_AstGotoCaseStatement {
+                    CaseExpression = ParseExpression ()
+                };
+            } else if (tkPair.tk.Text.Span.Equals (ES_Keywords.Default, StringComparison.Ordinal)) {
+                tokenizer.NextToken ();
+
+                statement = new ES_AstGotoCaseStatement {
+                    CaseExpression = null
+                };
+            } else {
+                tokenizer.NextToken ();
+
+                statement = new ES_AstGotoLabelStatement {
+                    LabelName = tkPair.tk,
+                };
+            }
+
+            tkPair = tokenizer.PeekNextToken ();
+            if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Identifier, null) != EnsureTokenResult.Correct)
+                errorsList.Add (ES_Errors.GenExpectedXGotY ("';'", tkPair.tk));
+            else
+                tokenizer.NextToken ();
+
+            return statement;
+        }
+
+        protected ES_AstReturnStatement ParseStatement_Return () {
+            if (EnsureToken (tokenizer.NextToken ().tk, EchelonScriptTokenType.Identifier, ES_Keywords.Return) != EnsureTokenResult.Correct)
+                throw new Exception ("The calling function must check for the correct initial token first.");
+
+            ES_AstExpression retExpr = null;
+
+            if (EnsureTokenPeek (EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)
+                retExpr = ParseExpression ();
+
+            var tkPair = tokenizer.PeekNextToken ();
+            if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)
+                errorsList.Add (ES_Errors.GenExpectedXGotY ("';'", tkPair.tk));
+            else
+                tokenizer.NextToken ();
+
+            return new ES_AstReturnStatement {
+                ReturnExpression = retExpr,
+            };
+        }
+
+        #endregion
+
+        #region Loop statements
+
+        protected ES_AstLoopStatement ParseStatement_While () {
+            if (EnsureToken (tokenizer.NextToken ().tk, EchelonScriptTokenType.Identifier, ES_Keywords.While) != EnsureTokenResult.Correct)
+                throw new Exception ("The calling function must check for the correct initial token first.");
+
+            var tkPair = tokenizer.PeekNextToken ();
+            if (EnsureToken (tkPair.tk, EchelonScriptTokenType.ParenOpen, null) != EnsureTokenResult.Correct) {
+                errorsList.Add (ES_Errors.GenExpectedXGotY ("'('", tkPair.tk));
+                return null;
+            }
+
+            var conditionExpr = ParseExpression ();
+
+            tkPair = tokenizer.PeekNextToken ();
+            if (EnsureToken (tkPair.tk, EchelonScriptTokenType.ParenClose, null) != EnsureTokenResult.Correct)
+                errorsList.Add (ES_Errors.GenExpectedXGotY ("')'", tkPair.tk));
+            else
+                tokenizer.NextToken ();
+
+            var bodyStatement = ParseEmbeddedStatement ();
+
+            return new ES_AstLoopStatement {
+                InitializationStatement = null,
+                ConditionExpression = conditionExpr,
+                IterationExpressions = null,
+
+                LoopBody = bodyStatement,
+            };
+        }
+
+        protected ES_AstLoopStatement ParseStatement_For () {
+            if (EnsureToken (tokenizer.NextToken ().tk, EchelonScriptTokenType.Identifier, ES_Keywords.For) != EnsureTokenResult.Correct)
+                throw new Exception ("The calling function must check for the correct initial token first.");
+
+            ES_AstStatement initStatement;
+            ES_AstExpression conditionExpr;
+            ES_AstExpression [] iterExpressions;
+
+            var tkPair = tokenizer.PeekNextToken ();
+            if (EnsureToken (tkPair.tk, EchelonScriptTokenType.ParenOpen, null) != EnsureTokenResult.Correct) {
+                errorsList.Add (ES_Errors.GenExpectedXGotY ("'('", tkPair.tk));
+                return null;
+            }
+
+            // Initialization statement
+            tkPair = tokenizer.PeekNextToken ();
+            if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Identifier, ES_Keywords.Var) == EnsureTokenResult.Correct) {
+                initStatement = ParseStatement_Variable (false);
+            } else {
+                if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)
+                    initStatement = new ES_AstExpressionListStatement { Expressions = ParseExpressionList (), }; 
+                else
+                    initStatement = null;
+            }
+
+            tkPair = tokenizer.PeekNextToken ();
+            if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)
+                errorsList.Add (ES_Errors.GenExpectedXGotY ("';'", tkPair.tk));
+            else
+                tokenizer.NextToken ();
+
+            // Condition expression
+            if (EnsureTokenPeek (EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)
+                conditionExpr = ParseExpression ();
+            else
+                conditionExpr = null;
+
+            tkPair = tokenizer.PeekNextToken ();
+            if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)
+                errorsList.Add (ES_Errors.GenExpectedXGotY ("';'", tkPair.tk));
+            else
+                tokenizer.NextToken ();
+
+            // Iteration expressions
+            if (EnsureTokenPeek (EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)
+                iterExpressions = ParseExpressionList ();
+            else
+                iterExpressions = null;
+
+            tkPair = tokenizer.PeekNextToken ();
+            if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)
+                errorsList.Add (ES_Errors.GenExpectedXGotY ("';'", tkPair.tk));
+            else
+                tokenizer.NextToken ();
+
+            // Closing parenthesis
+            tkPair = tokenizer.PeekNextToken ();
+            if (EnsureToken (tkPair.tk, EchelonScriptTokenType.ParenClose, null) != EnsureTokenResult.Correct)
+                errorsList.Add (ES_Errors.GenExpectedXGotY ("')'", tkPair.tk));
+            else
+                tokenizer.NextToken ();
+
+            // Loop body statement
+            var bodyStatement = ParseEmbeddedStatement ();
+
+            return new ES_AstLoopStatement {
+                InitializationStatement = initStatement,
+                ConditionExpression = conditionExpr,
+                IterationExpressions = iterExpressions,
+
+                LoopBody = bodyStatement,
+            };
+        }
+
+        #endregion
+
+        protected ES_AstExpressionStatement ParseStatement_Expression () {
+            var expr = ParseExpression ();
+
+            var tkPair = tokenizer.PeekNextToken ();
+            if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)
+                errorsList.Add (ES_Errors.GenExpectedXGotY ("';'", tkPair.tk));
+            else
+                tokenizer.NextToken ();
+
+            return new ES_AstExpressionStatement { Expression = expr, };
         }
 
         #endregion
 
         #region Expressions
 
-        public ES_AstExpression ParseExpression () {
-            //throw new NotImplementedException ("Expression parsing is not implemented yet");
-            return null;
+        protected ES_AstExpression [] ParseExpressionList () {
+            using var exprList = new StructPooledList<ES_AstExpression> (ClearMode.Auto);
+
+            while (true) {
+                var tkPair = tokenizer.PeekNextToken ();
+                if (tkPair.tk.Type == EchelonScriptTokenType.EOF) {
+                    errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.UnexpectedEOF));
+                    break;
+                }
+
+                exprList.Add (ParseExpression ());
+
+                if (EnsureTokenPeek (EchelonScriptTokenType.Comma, null) != EnsureTokenResult.Correct)
+                    break;
+            }
+
+            return exprList.ToArray ();
+        }
+
+        protected ES_AstExpression ParseExpression (ExpressionPrecedence precedence = ExpressionPrecedence.NO_PRECEDENCE) {
+            var tkPair = tokenizer.PeekNextToken ();
+
+            if (!PrefixExprParsers.TryGetValue (tkPair.tk.Type, out var prefixParsers)) {
+                errorsList.Add (ES_Errors.GenUnexpectedToken (tkPair.tk));
+                tokenizer.NextToken ();
+                return null;
+            }
+
+            ES_AstExpression left = null;
+
+            foreach (var parser in prefixParsers) {
+                if (parser.CheckCanParse (this, tkPair.tk)) {
+                    left = parser.Parse (this, tkPair.tk);
+                    break;
+                }
+            }
+
+            if (left == null)
+                return null;
+
+            while (true) {
+                tkPair = tokenizer.PeekNextToken ();
+
+                if (!PostfixExprParsers.TryGetValue (tkPair.tk.Type, out var postfixParsers))
+                    return left;
+
+                bool parsed = false;
+                foreach (var parser in postfixParsers) {
+                    if (precedence < parser.PostfixPrecedence && parser.CheckCanParse (this, left, tkPair.tk)) {
+                        left = parser.Parse (this, left, tkPair.tk);
+                        parsed = true;
+                        break;
+                    }
+                }
+
+                if (!parsed)
+                    return left;
+            }
+        }
+
+        protected ES_AstFunctionCallArgument [] ParseArgumentsList () {
+            var tkPair = tokenizer.NextToken ();
+            if (EnsureToken (tkPair.tk, EchelonScriptTokenType.ParenOpen, null) != EnsureTokenResult.Correct)
+                errorsList.Add (ES_Errors.GenExpectedXGotY ("'('", tkPair.tk));
+
+            if (tokenizer.PeekNextToken ().tk.Type == EchelonScriptTokenType.ParenClose) {
+                tokenizer.NextToken ();
+                return Array.Empty<ES_AstFunctionCallArgument> ();
+            }
+
+            using var argsList = new StructPooledList<ES_AstFunctionCallArgument> (ClearMode.Auto);
+
+            while (true) {
+                tkPair = tokenizer.PeekNextToken ();
+
+                if (tkPair.tk.Type == EchelonScriptTokenType.EOF) {
+                    errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_Errors.UnexpectedEOF));
+                    break;
+                }
+
+                var mode = ES_ArgumentType.Normal;
+                if (tkPair.tk.Type == EchelonScriptTokenType.Identifier) {
+                    var textSpan = tkPair.tk.Text.Span;
+                    if (textSpan.Equals (ES_Keywords.Ref, StringComparison.Ordinal))
+                        mode = ES_ArgumentType.Ref;
+                    else if (textSpan.Equals (ES_Keywords.In, StringComparison.Ordinal))
+                        errorsList.Add (ES_Errors.GenUnexpectedIdentifier (tkPair.tk));
+                    else if (textSpan.Equals (ES_Keywords.Out, StringComparison.Ordinal))
+                        mode = ES_ArgumentType.Out;
+
+                    if (mode != ES_ArgumentType.Normal) {
+                        tokenizer.NextToken ();
+                        tkPair = tokenizer.PeekNextToken ();
+
+                        if (tkPair.tk.Type != EchelonScriptTokenType.Identifier)
+                            errorsList.Add (ES_Errors.GenExpectedIdentifier (tkPair.tk));
+                    }
+                }
+
+                var argumentExpr = ParseExpression ();
+
+                var functionCallArgDef = new ES_AstFunctionCallArgument {
+                    ArgType = mode,
+                    ValueExpression = argumentExpr,
+                };
+                argsList.Add (functionCallArgDef);
+
+                tkPair = tokenizer.NextToken ();
+                if (tkPair.tk.Type == EchelonScriptTokenType.ParenClose)
+                    break;
+                else if (tkPair.tk.Type != EchelonScriptTokenType.Comma)
+                    errorsList.Add (ES_Errors.GenExpectedXGotY ("',' or ')'", tkPair.tk));
+            }
+
+            return argsList.ToArray ();
         }
 
         #endregion

@@ -33,6 +33,7 @@ namespace EchelonScriptCompiler.Parser {
         public const string NoCRInRegularStrings = "Carriage return characters are not allowed in regular strings.";
         public const string NoLFInRegularStrings = "Newline characters are not allowed in regular strings.";
 
+        public const string EmptyCharLiteral = "Empty character literal.";
         public const string TooLongCharLiteral = "Too many characters in character literal.";
         public const string UnclosedCharLiteral = "Unclosed string literal.";
         public const string NoCRInCharLiterals = "Carriage return characters are not allowed in character literals.";
@@ -68,38 +69,49 @@ namespace EchelonScriptCompiler.Parser {
         public const string InheritanceOnStaticClass = "Static classes cannot inherit from other classes or implement interfaces.";
         public const string InheritanceOnStaticStruct = "Static structs cannot implement interfaces.";
 
+        public const string NoVarDefsInThisContext = "Variable definitions are not allowed in this context.";
+        public const string NoImportsInThisContext = "Import statements are not allowed in this context.";
+        public const string NoAliasesInThisContext = "Type aliases are not allowed in this context.";
+
+        public const string IntLiteralTooBig = "The specified integer literal is larger than 64 bits.";
+
         #region Generation functions
 
-        public static string GenExpectedXGotY (string expected, EchelonScriptToken token) {
+        public static EchelonScriptErrorMessage GenExpectedXGotY (string expected, EchelonScriptToken token) {
             var tokenText = StringPool.Shared.GetOrAdd (token.Text.Span);
-            return ExpectedXGotY.Replace ("{0}", expected).Replace ("{1}", tokenText);
+            var errorMessage = ExpectedXGotY.Replace ("{0}", expected).Replace ("{1}", tokenText);
+            return new EchelonScriptErrorMessage (token, errorMessage);
         }
 
-        public static string GenExpectedIdentifier (EchelonScriptToken token) {
+        public static EchelonScriptErrorMessage GenExpectedIdentifier (EchelonScriptToken token) {
             return GenExpectedXGotY ("an identifier", token);
         }
 
-        public static string GenGotXExpectedY (EchelonScriptToken token, string expected) {
+        public static EchelonScriptErrorMessage GenGotXExpectedY (EchelonScriptToken token, string expected) {
             var tokenText = StringPool.Shared.GetOrAdd (token.Text.Span);
-            return GotXExpectedY.Replace ("{0}", tokenText).Replace ("{1}", expected);
+            var errorMessage = GotXExpectedY.Replace ("{0}", tokenText).Replace ("{1}", expected);
+            return new EchelonScriptErrorMessage (token, errorMessage);
         }
 
-        public static string GenUnrecognizedIdentifier (EchelonScriptToken token) {
+        public static EchelonScriptErrorMessage GenUnrecognizedIdentifier (EchelonScriptToken token) {
             var tokenText = StringPool.Shared.GetOrAdd (token.Text.Span);
-            return UnrecognizedX.Replace ("{0}", "identifier").Replace ("{1}", tokenText);
+            var errorMessage = UnrecognizedX.Replace ("{0}", "identifier").Replace ("{1}", tokenText);
+            return new EchelonScriptErrorMessage (token, errorMessage);
         }
 
-        public static string GenUnexpectedToken (EchelonScriptToken token) {
+        public static EchelonScriptErrorMessage GenUnexpectedToken (EchelonScriptToken token) {
             var tokenText = StringPool.Shared.GetOrAdd (token.Text.Span);
-            return UnexpectedX.Replace ("{0}", "token").Replace ("{1}", tokenText);
+            var errorMessage = UnexpectedX.Replace ("{0}", "token").Replace ("{1}", tokenText);
+            return new EchelonScriptErrorMessage (token, errorMessage);
         }
 
-        public static string GenUnexpectedIdentifier (EchelonScriptToken token) {
+        public static EchelonScriptErrorMessage GenUnexpectedIdentifier (EchelonScriptToken token) {
             var tokenText = StringPool.Shared.GetOrAdd (token.Text.Span);
-            return UnexpectedX.Replace ("{0}", "identifier").Replace ("{1}", tokenText);
+            var errorMessage = UnexpectedX.Replace ("{0}", "identifier").Replace ("{1}", tokenText);
+            return new EchelonScriptErrorMessage (token, errorMessage);
         }
 
-        public static string GenExpectedAggregateContent (EchelonScriptToken token) {
+        public static EchelonScriptErrorMessage GenExpectedAggregateContent (EchelonScriptToken token) {
             return GenExpectedXGotY ($"{ES_Keywords.Class}, {ES_Keywords.Struct} or {ES_Keywords.Enum}", token);
         }
 

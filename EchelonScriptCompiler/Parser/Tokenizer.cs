@@ -19,6 +19,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Text;
 using EchelonScriptCompiler.Utilities;
 
 namespace EchelonScriptCompiler.Parser {
@@ -198,31 +199,36 @@ namespace EchelonScriptCompiler.Parser {
                     retToken.Type = EchelonScriptTokenType.RegularStringLiteral;
 
                 tokenizer.ReadChar ();
+                int textStartLine = tokenizer.curLine;
+                int textStartLinePos = tokenizer.curLineStartPos;
+                int textStartPos = tokenizer.curPos;
 
+                bool unclosed = false;
                 while (true) {
-                    var c = tokenizer.ReadUntil (ch => ch == '\\' || ch == '"' || ch == '\r' || ch == '\n', false);
-                    int stopPos = tokenizer.curPos;
-                    int stopLine = tokenizer.curLine;
-                    int stopColumn = CalcColumn (tokenizer.curLineStartPos, stopPos);
-                    tokenizer.ReadChar ();
+                    var c = tokenizer.ReadChar ();
 
                     if (c == '"')
                         break;
                     else if (c == null) {
                         tokenizer.Errors.Add (new EchelonScriptErrorMessage (ES_Errors.UnclosedStringLiteral, startPos, tokenizer.curPos - startPos, retToken.TextLine, retToken.TextColumn));
+                        unclosed = true;
                         break;
-                    } else if (c == '\\') {
-                        if (!verbatim && !tokenizer.ReadEscapeSequence ())
-                            tokenizer.Errors.Add (new EchelonScriptErrorMessage (ES_Errors.UnrecognizedEscape, stopPos, 2, stopLine, stopColumn));
-                        if (verbatim && tokenizer.PeekChar () == '"')
-                            tokenizer.ReadChar ();
-                    } else if (c == '\r' && !verbatim)
-                        tokenizer.Errors.Add (new EchelonScriptErrorMessage (ES_Errors.NoCRInRegularStrings, stopPos, 1, stopLine, stopColumn));
-                    else if (c == '\n' && !verbatim)
-                        tokenizer.Errors.Add (new EchelonScriptErrorMessage (ES_Errors.NoLFInRegularStrings, stopPos, 1, stopLine, stopColumn));
+                    } else if (c == '\\' && tokenizer.PeekChar () == '"')
+                        tokenizer.ReadChar ();
+                    else if (!verbatim && (c == '\r' || c == '\n')) {
+                        var err = new EchelonScriptErrorMessage (c == '\r' ? ES_Errors.NoCRInRegularStrings : ES_Errors.NoLFInRegularStrings,
+                            tokenizer.curPos, 1, tokenizer.curLine, tokenizer.CalcColumn (tokenizer.curLineStartPos, tokenizer.curPos)
+                        );
+                        tokenizer.Errors.Add (err);
+                    }
                 }
 
                 retToken.Text = tokenizer.data.Slice (startPos, tokenizer.curPos - startPos);
+                if (!unclosed) {
+                    tokenizer.DecodeStringToken (retToken.Text.Span [(!verbatim ? 1 : 2)..^1], out retToken.DecodedStringUTF16, out retToken.DecodedStringUTF32,
+                        textStartLine, textStartLinePos, textStartPos, verbatim
+                    );
+                }
 
                 return true;
             }
@@ -241,34 +247,41 @@ namespace EchelonScriptCompiler.Parser {
                 retToken.Type = EchelonScriptTokenType.CharacterLiteral;
 
                 tokenizer.ReadChar ();
+                int textStartLine = tokenizer.curLine;
+                int textStartLinePos = tokenizer.curLineStartPos;
+                int textStartPos = tokenizer.curPos;
 
-                int charCount = 0;
+                bool unclosed = false;
                 while (true) {
-                    var c = tokenizer.ReadUntil (ch => ch == '\\' || ch == '\'' || ch == '\r' || ch == '\n', false);
-                    int stopPos = tokenizer.curPos;
-                    int stopLine = tokenizer.curLine;
-                    int stopColumn = CalcColumn (tokenizer.curLineStartPos, stopPos);
-                    tokenizer.ReadChar ();
+                    var c = tokenizer.ReadChar ();
 
                     if (c == '\'')
                         break;
                     else if (c == null) {
                         tokenizer.Errors.Add (new EchelonScriptErrorMessage (ES_Errors.UnclosedCharLiteral, startPos, tokenizer.curPos - startPos, retToken.TextLine, retToken.TextColumn));
+                        unclosed = true;
                         break;
-                    } else if (c == '\\' && !tokenizer.ReadEscapeSequence ())
-                        tokenizer.Errors.Add (new EchelonScriptErrorMessage (ES_Errors.UnrecognizedEscape, stopPos, 2, stopLine, stopColumn));
-                    else if (c == '\r')
-                        tokenizer.Errors.Add (new EchelonScriptErrorMessage (ES_Errors.NoCRInCharLiterals, stopPos, 1, stopLine, stopColumn));
-                    else if (c == '\n')
-                        tokenizer.Errors.Add (new EchelonScriptErrorMessage (ES_Errors.NoLFInCharLiterals, stopPos, 1, stopLine, stopColumn));
-
-                    charCount++;
+                    } else if (c == '\\' && tokenizer.PeekChar () == '\'')
+                        tokenizer.ReadChar ();
+                    else if (c == '\r' || c == '\n') {
+                        var err = new EchelonScriptErrorMessage (c == '\r' ? ES_Errors.NoCRInCharLiterals : ES_Errors.NoLFInCharLiterals,
+                            tokenizer.curPos, 1, tokenizer.curLine, tokenizer.CalcColumn (tokenizer.curLineStartPos, tokenizer.curPos)
+                        );
+                        tokenizer.Errors.Add (err);
+                    }
                 }
 
                 retToken.Text = tokenizer.data.Slice (startPos, tokenizer.curPos - startPos);
+                if (!unclosed) {
+                    tokenizer.DecodeStringToken (retToken.Text.Span [1..^1], out retToken.DecodedStringUTF16, out retToken.DecodedStringUTF32,
+                        textStartLine, textStartLinePos, textStartPos, false
+                    );
+                }
 
-                if (charCount > 1)
+                if (retToken.DecodedStringUTF32?.Length > 1)
                     tokenizer.Errors.Add (new EchelonScriptErrorMessage (retToken, ES_Errors.TooLongCharLiteral));
+                else if (retToken.DecodedStringUTF32?.Length < 1)
+                    tokenizer.Errors.Add (new EchelonScriptErrorMessage (retToken, ES_Errors.EmptyCharLiteral));
 
                 return true;
             }
@@ -485,6 +498,68 @@ namespace EchelonScriptCompiler.Parser {
             return InternalNextToken ();
         }
 
+        #region Common pattern matching
+
+        public static bool IsLatinLetter (char? c) {
+            return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+        }
+
+        public static bool IsIntegerDigit (char? c) {
+            return c >= '0' && c <= '9';
+        }
+
+        public static bool IsHexDigit (char? c) {
+            if (IsIntegerDigit (c))
+                return true;
+
+            return (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+        }
+
+        public static bool IsBinaryDigit (char? c) {
+            return c == '0' || c == '1';
+        }
+
+        public static bool IsFloatSuffix (char? c) {
+            switch (c) {
+                case 'f':
+                case 'F':
+                case 'd':
+                case 'D':
+                    return true;
+
+                default:
+                    return false;
+            }
+        }
+
+
+        public static bool IsHexDigit (Rune? c) {
+            if (c == null)
+                return false;
+
+            return c.Value.IsBmp && IsHexDigit ((char) c.Value.Value);
+        }
+
+        #endregion
+
+        #endregion
+
+        #region Protected methods
+
+        protected int CalcColumn (int columnStart, int textPos) {
+            int charCount = 0;
+
+            var dataSpan = data.Span;
+            int maxPos = Math.Min (data.Length, textPos);
+            for (int i = columnStart; i < maxPos;) {
+                Rune.DecodeFromUtf16 (dataSpan [i..^0], out _, out var offs);
+                i += offs;
+                charCount++;
+            }
+
+            return charCount + 1;
+        }
+
         protected (EchelonScriptToken tk, EchelonScriptToken? doc) InternalNextToken () {
             var docTk = SkipWhitespace ();
             var retToken = new EchelonScriptToken ();
@@ -515,14 +590,6 @@ namespace EchelonScriptCompiler.Parser {
             }
 
             return (retToken, docTk);
-        }
-
-        #endregion
-
-        #region Protected methods
-
-        protected static int CalcColumn (int columnStart, int textPos) {
-            return textPos - columnStart + 1;
         }
 
         #region Character reading
@@ -700,42 +767,6 @@ namespace EchelonScriptCompiler.Parser {
 
         #endregion
 
-        #region Common pattern matching
-
-        protected static bool IsLatinLetter (char? c) {
-            return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
-        }
-
-        protected static bool IsIntegerDigit (char? c) {
-            return c >= '0' && c <= '9';
-        }
-
-        protected static bool IsHexDigit (char? c) {
-            if (IsIntegerDigit (c))
-                return true;
-
-            return (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
-        }
-
-        protected static bool IsBinaryDigit (char? c) {
-            return c == '0' || c == '1';
-        }
-
-        protected static bool IsFloatSuffix (char? c) {
-            switch (c) {
-                case 'f':
-                case 'F':
-                case 'd':
-                case 'D':
-                    return true;
-
-                default:
-                    return false;
-            }
-        }
-
-        #endregion
-
         #region Common pattern reading
 
         protected bool ReadEscapeSequence () {
@@ -743,9 +774,11 @@ namespace EchelonScriptCompiler.Parser {
                 int validCharsCount = 0;
 
                 for (int i = 0; i < count; i++) {
-                    var c = ReadChar ();
-                    if (c != null && IsHexDigit (c.Value))
+                    var c = PeekChar ();
+                    if (c != null && IsHexDigit (c.Value)) {
                         validCharsCount++;
+                        ReadChar ();
+                    }
                 }
 
                 return validCharsCount == count;
@@ -847,6 +880,167 @@ namespace EchelonScriptCompiler.Parser {
         }
 
         #endregion
+
+        protected void DecodeStringToken (ReadOnlySpan<char> input, out string outputUTF16, out int [] outputUTF32,
+            int curLine, int lineStartPos, int curPos,
+            bool verbatim
+        ) {
+            void EmitError (string message, int line, int col, int pos, int len) {
+                Errors.Add (new EchelonScriptErrorMessage (message, pos, len, line, col));
+            }
+
+            using var charList = new StructPooledList<(int Line, int Col, int Pos, Rune Rune)> (ClearMode.Auto);
+            using var newCharList = new StructPooledList<Rune> (ClearMode.Auto);
+
+            (int Line, int Col, int Pos, Rune Rune)? TryGetRune (int pos) {
+                if (pos >= charList.Count)
+                    return null;
+
+                return charList [pos];
+            }
+
+            for (int offs = 0; offs < input.Length;) {
+                Rune.DecodeFromUtf16 (input [offs..^0], out var rune, out var consumed);
+
+                if (rune.Value == '\n') {
+                    curLine++;
+                    curLineStartPos = curPos + offs;
+                }
+
+                charList.Add ((curLine, CalcColumn (lineStartPos, curPos + offs), curPos + offs, rune));
+                offs += consumed;
+            }
+
+            int hexCharLen = 0;
+            for (int i = 0; i < charList.Count;) {
+                var runeData = charList [i++];
+                var rune = runeData.Rune;
+
+                if (rune.Value == '\\') {
+                    var nextRune = TryGetRune (i);
+
+                    if (!verbatim && nextRune != null) {
+                        i++;
+
+                        switch (nextRune.Value.Rune.Value) {
+                            case '\'':
+                                newCharList.Add (new Rune ('\''));
+                                break;
+
+                            case '"':
+                                newCharList.Add (new Rune ('"'));
+                                break;
+
+                            case '\\':
+                                newCharList.Add (new Rune ('\\'));
+                                break;
+
+                            case '0':
+                                newCharList.Add (new Rune ('\0'));
+                                break;
+
+                            case 'a':
+                                newCharList.Add (new Rune ('\u0007'));
+                                break;
+
+                            case 'b':
+                                newCharList.Add (new Rune ('\u0008'));
+                                break;
+
+                            case 'f':
+                                newCharList.Add (new Rune ('\u000C'));
+                                break;
+
+                            case 'n':
+                                newCharList.Add (new Rune ('\u000A'));
+                                break;
+
+                            case 'r':
+                                newCharList.Add (new Rune ('\u000D'));
+                                break;
+
+                            case 't':
+                                newCharList.Add (new Rune ('\u0009'));
+                                break;
+
+                            case 'v':
+                                newCharList.Add (new Rune ('\u000B'));
+                                break;
+
+                            case 'x':
+                                hexCharLen = 2;
+                            ParseHexChar:
+                                {
+                                    int startPos = i - 1;
+                                    Span<char> charBuf = stackalloc char [hexCharLen];
+                                    bool invalid = false;
+                                    int len = 0;
+                                    for (int j = 0; j < hexCharLen; j++) {
+                                        var c = TryGetRune (i++);
+
+                                        if (c != null && IsHexDigit (c.Value.Rune)) {
+                                            var cChar = (char) c.Value.Rune.Value;
+
+                                            charBuf [j] = char.ToLowerInvariant (cChar);
+                                        } else
+                                            invalid = true;
+
+                                        if (c != null)
+                                            len += c.Value.Rune.Utf16SequenceLength;
+                                    }
+                                    i = Math.Min (i, charList.Count);
+
+                                    if (invalid) {
+                                        for (int k = startPos; k < i; k++)
+                                            newCharList.Add (charList [k].Rune);
+                                        EmitError (ES_Errors.UnrecognizedEscape, runeData.Line, runeData.Col, runeData.Pos, rune.Utf16SequenceLength + len);
+                                    } else {
+                                        int charValue = int.Parse (charBuf, System.Globalization.NumberStyles.AllowHexSpecifier, null);
+                                        newCharList.Add (new Rune (charValue));
+                                    }
+                                    break;
+                                }
+
+                            case 'u':
+                                hexCharLen = 4;
+                                goto ParseHexChar;
+
+                            case 'U':
+                                hexCharLen = 8;
+                                goto ParseHexChar;
+
+                            default:
+                                newCharList.Add (rune);
+                                newCharList.Add (nextRune.Value.Rune);
+                                EmitError (ES_Errors.UnrecognizedEscape, runeData.Line, runeData.Col, runeData.Pos, runeData.Rune.Utf16SequenceLength);
+                                break;
+                        }
+                    } else if (verbatim && nextRune != null) {
+                        if (nextRune.Value.Rune.Value == '"') {
+                            i++;
+                            newCharList.Add (new Rune ('"'));
+                        } else
+                            newCharList.Add (new Rune ('\\'));
+                    }
+                } else
+                    newCharList.Add (rune);
+            }
+
+            int strLen = 0;
+            foreach (var rune in newCharList)
+                strLen += rune.Utf16SequenceLength;
+            Span<char> retBufferUTF16 = stackalloc char [strLen];
+            Span<int> retBufferUTF32 = stackalloc int [newCharList.Count];
+            strLen = 0;
+            for (int i = 0; strLen < retBufferUTF16.Length; i++) {
+                retBufferUTF32 [i] = newCharList [i].Value;
+                int offs = newCharList [i].EncodeToUtf16 (retBufferUTF16 [strLen..^0]);
+                strLen += offs;
+            }
+
+            outputUTF16 = retBufferUTF16.ToString ();
+            outputUTF32 = retBufferUTF32.ToArray ();
+        }
 
         #endregion
 
