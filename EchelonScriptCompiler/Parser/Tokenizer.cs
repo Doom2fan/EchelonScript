@@ -466,7 +466,7 @@ namespace EchelonScriptCompiler.Parser {
             int lineStart = 0;
             int maxPos = Math.Min (srcText.Length, curPos);
             for (int i = 0; i < maxPos;) {
-                Rune.DecodeFromUtf16 (srcText [i..^1], out var rune, out var offs);
+                Rune.DecodeFromUtf16 (srcText [i..^0], out var rune, out var offs);
                 i += offs;
 
                 if (rune.Value == '\n') {

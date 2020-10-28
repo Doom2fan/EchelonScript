@@ -650,6 +650,10 @@ namespace TestSuiteWPF.Tests {
                             opText = "Member access";
                             break;
 
+                        case SimpleBinaryExprType.Concatenation:
+                            opText = "Concatenation";
+                            break;
+
                         case SimpleBinaryExprType.Power:
                             opText = "Exponentiation";
                             break;
