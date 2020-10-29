@@ -65,6 +65,7 @@ namespace EchelonScriptCompiler.Parser {
 
         public const string IntLiteralTooBig = "The specified integer literal is larger than 64 bits.";
 
+        public const string IllegalEmbeddedStatement = "Embedded statements cannot be a declaration or labeled statement.";
         public const string IllegalExpressionStatement = "Only assignment, call, increment and decrement expressions can be used as statements.";
 
         #region Generation functions

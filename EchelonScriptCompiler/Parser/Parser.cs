@@ -1896,10 +1896,10 @@ namespace EchelonScriptCompiler.Parser {
                 }
             }
 
-            return ParseEmbeddedStatement ();
+            return ParseEmbeddedStatementInternal ();
         }
 
-        protected ES_AstStatement ParseEmbeddedStatement () {
+        protected ES_AstStatement ParseEmbeddedStatementInternal () {
             var tkPair = tokenizer.PeekNextToken ();
 
             if (tkPair.tk.Type == EchelonScriptTokenType.Semicolon) {
@@ -1953,6 +1953,22 @@ namespace EchelonScriptCompiler.Parser {
                 errorsList.Add (new EchelonScriptErrorMessage (sourceText.Span, retExpr.NodeBounds, ES_Errors.IllegalExpressionStatement));
 
             return retExpr;
+        }
+
+        protected ES_AstStatement ParseActualEmbeddedStatement () {
+            // We use ParseStatement here so we can give better error messages.
+            var statement = ParseStatement ();
+
+            if (
+                statement is ES_AstLocalVarDefinition ||
+                statement is ES_AstImportStatement ||
+                statement is ES_AstTypeAlias ||
+                statement is ES_AstLabeledStatement
+            ) {
+                errorsList.Add (new EchelonScriptErrorMessage (sourceText.Span, statement.NodeBounds, ES_Errors.IllegalEmbeddedStatement));
+            }
+
+            return statement;
         }
 
         protected ES_AstStatement [] ParseStatementsBlock (out EchelonScriptToken endTk) {
@@ -2162,13 +2178,13 @@ namespace EchelonScriptCompiler.Parser {
             else
                 tokenizer.NextToken ();
 
-            var thenStatement = ParseEmbeddedStatement ();
+            var thenStatement = ParseActualEmbeddedStatement ();
             ES_AstStatement elseStatement = null;
 
             if (EnsureTokenPeek (EchelonScriptTokenType.Identifier, ES_Keywords.Else) == EnsureTokenResult.Correct) {
                 tokenizer.NextToken ();
 
-                elseStatement = ParseEmbeddedStatement ();
+                elseStatement = ParseActualEmbeddedStatement ();
             }
 
             return new ES_AstConditionalStatement (
@@ -2367,7 +2383,7 @@ namespace EchelonScriptCompiler.Parser {
             else
                 tokenizer.NextToken ();
 
-            var bodyStatement = ParseEmbeddedStatement ();
+            var bodyStatement = ParseActualEmbeddedStatement ();
 
             return new ES_AstLoopStatement (
                 null, conditionExpr, null,
@@ -2442,7 +2458,7 @@ namespace EchelonScriptCompiler.Parser {
                 tokenizer.NextToken ();
 
             // Loop body statement
-            var bodyStatement = ParseEmbeddedStatement ();
+            var bodyStatement = ParseActualEmbeddedStatement ();
 
             return new ES_AstLoopStatement (
                 initStatement, conditionExpr, iterExpressions,
