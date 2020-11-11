@@ -27,13 +27,13 @@ namespace EchelonScriptCompiler.Utilities {
     }
 
     internal static class PooledUtils {
-        public static bool IsCompatibleObject<T> (object value) {
+        public static bool IsCompatibleObject<T> (object? value) {
             // Non-null values are fine.  Only accept nulls if T is a class or Nullable<U>.
             // Note that default(T) is not equal to null for value types except when T is Nullable<U>.
             return (value is T) || (value == null && default (T) == null);
         }
 
-        public static void EnsureNotNull<T> (object value, string paramName) {
+        public static void EnsureNotNull<T> (object? value, string paramName) {
             // Note that default(T) is not equal to null for value types except when T is Nullable<U>.
             if (!(default (T) == null) && value == null)
                 throw new ArgumentNullException (paramName);
@@ -52,7 +52,7 @@ namespace EchelonScriptCompiler.Utilities {
         #region ================== Instance fields
 
         private ArrayPool<T> pool;
-        private object syncRoot;
+        private object? syncRoot;
 
         private T [] items;
         private int size;
@@ -67,7 +67,7 @@ namespace EchelonScriptCompiler.Utilities {
             : this (clearMode, null) {
         }
 
-        public StructPooledList (ClearMode clearMode, ArrayPool<T> customPool)
+        public StructPooledList (ClearMode clearMode, ArrayPool<T>? customPool)
             : this () {
             clearOnFree = ShouldClear (clearMode);
             pool = customPool ?? ArrayPool<T>.Shared;
@@ -95,16 +95,16 @@ namespace EchelonScriptCompiler.Utilities {
             }
         }
 
-        object IList.this [int index] {
+        object? IList.this [int index] {
             get => this [index];
 
             set {
                 PooledUtils.EnsureNotNull<T> (value, nameof (value));
 
                 try {
-                    this [index] = (T) value;
+                    this [index] = (T) value!;
                 } catch (InvalidCastException) {
-                    throw new ArgumentException ($"Wrong value type. Expected {typeof (T).ToString ()}, got '{value.GetType ().Name}'");
+                    throw new ArgumentException ($"Wrong value type. Expected {typeof (T).ToString ()}, got '{value!.GetType ().Name}'");
                 }
             }
         }
@@ -271,7 +271,7 @@ namespace EchelonScriptCompiler.Utilities {
 
             if (clearOnFree) {
                 // Clear the removed element so that the gc can reclaim the reference.
-                items [size] = default;
+                items [size] = default!;
             }
         }
 
@@ -347,7 +347,7 @@ namespace EchelonScriptCompiler.Utilities {
 
             public T Current => current;
 
-            object IEnumerator.Current {
+            object? IEnumerator.Current {
                 get {
                     if (index == 0 || index == list.size + 1)
                         throw new InvalidOperationException ("Invalid enumerator state: enumeration cannot proceed.");
@@ -364,7 +364,7 @@ namespace EchelonScriptCompiler.Utilities {
                 this.list = list;
                 index = 0;
                 version = list.version;
-                current = default;
+                current = default!;
             }
 
             #endregion
@@ -388,7 +388,7 @@ namespace EchelonScriptCompiler.Utilities {
                     throw new InvalidOperationException ("Collection was modified during enumeration.");
 
                 index = list.size + 1;
-                current = default;
+                current = default!;
                 return false;
             }
 
@@ -397,7 +397,7 @@ namespace EchelonScriptCompiler.Utilities {
                     throw new InvalidOperationException ("Collection was modified during enumeration.");
 
                 index = 0;
-                current = default;
+                current = default!;
             }
 
             public void Dispose () { }
@@ -415,35 +415,35 @@ namespace EchelonScriptCompiler.Utilities {
 
         bool IList.IsReadOnly => false;
 
-        int IList.Add (object item) {
+        int IList.Add (object? item) {
             if (PooledUtils.IsCompatibleObject<T> (item)) {
-                Add ((T) item);
+                Add ((T) item!);
                 return size - 1;
             }
 
             return -1;
         }
 
-        void IList.Insert (int index, object item) {
+        void IList.Insert (int index, object? item) {
             if (PooledUtils.IsCompatibleObject<T> (item))
-                Insert (index, (T) item);
+                Insert (index, (T) item!);
         }
 
-        void IList.Remove (object item) {
+        void IList.Remove (object? item) {
             if (PooledUtils.IsCompatibleObject<T> (item))
-                Remove ((T) item);
+                Remove ((T) item!);
         }
 
-        int IList.IndexOf (object item) {
+        int IList.IndexOf (object? item) {
             if (PooledUtils.IsCompatibleObject<T> (item))
-                return IndexOf ((T) item);
+                return IndexOf ((T) item!);
 
             return -1;
         }
 
-        bool IList.Contains (object item) {
+        bool IList.Contains (object? item) {
             if (PooledUtils.IsCompatibleObject<T> (item))
-                return Contains ((T) item);
+                return Contains ((T) item!);
 
             return false;
         }
@@ -459,20 +459,21 @@ namespace EchelonScriptCompiler.Utilities {
         // Synchronization root for this object.
         object ICollection.SyncRoot {
             get {
-                if (syncRoot == null)
-                    Interlocked.CompareExchange<object> (ref syncRoot, new object (), null);
+                Interlocked.CompareExchange<object?> (ref syncRoot, new object (), null);
 
                 return syncRoot;
             }
         }
 
         void ICollection.CopyTo (Array array, int index) {
+            if (array == null)
+                throw new ArgumentNullException (nameof (array));
             if (array != null && array.Rank != 1)
                 throw new ArgumentException ("Multidimensional arrays not supported.");
 
             try {
                 // Array.Copy will check for NULL.
-                Array.Copy (items, 0, array, index, size);
+                Array.Copy (items, 0, array!, index, size);
             } catch (ArrayTypeMismatchException) {
                 throw new ArgumentException ("Invalid array type.");
             }

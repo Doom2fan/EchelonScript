@@ -7,10 +7,12 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+using EchelonScriptCompiler.Data;
+using EchelonScriptCompiler.Frontend;
 using Microsoft.Toolkit.HighPerformance.Buffers;
 
-namespace EchelonScriptCompiler.Parser {
-    public static class ES_Errors {
+namespace EchelonScriptCompiler {
+    public static class ES_FrontendErrors {
         #region Tokenizer errors
 
         public const string InvalidHexLiteral = "Invalid hex literal.";
@@ -62,6 +64,9 @@ namespace EchelonScriptCompiler.Parser {
         public const string NoVarDefsInThisContext = "Variable definitions are not allowed in this context.";
         public const string NoImportsInThisContext = "Import statements are not allowed in this context.";
         public const string NoAliasesInThisContext = "Type aliases are not allowed in this context.";
+
+        public const string TypeDeclExpected = "Syntax error; Type declaration expected.";
+        public const string ValueExpected = "Syntax error; value expected.";
 
         public const string IntLiteralTooBig = "The specified integer literal is larger than 64 bits.";
 

@@ -13,7 +13,8 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
-using EchelonScriptCompiler.Parser;
+using EchelonScriptCompiler.Data;
+using EchelonScriptCompiler.Frontend.Parser;
 using ICSharpCode.AvalonEdit.Document;
 
 namespace TestSuiteWPF.Tests {

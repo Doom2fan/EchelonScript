@@ -8,8 +8,9 @@
  */
 
 using System;
+using EchelonScriptCompiler.Data;
 
-namespace EchelonScriptCompiler.Parser {
+namespace EchelonScriptCompiler.Frontend {
     public enum ES_ArgumentType {
         /// <summary>Passed normally.</summary>
         Normal,
@@ -63,10 +64,10 @@ namespace EchelonScriptCompiler.Parser {
         protected ES_AstNodeBounds bounds;
 
         public ES_AstDottableIdentifier NamespaceName;
-        public ES_AstNode [] Contents;
+        public ES_AstNode? [] Contents;
 
         public ES_AstNamespace (
-            ES_AstDottableIdentifier name, ES_AstNode [] contents,
+            ES_AstDottableIdentifier name, ES_AstNode? [] contents,
             EchelonScriptToken namespaceTk, EchelonScriptToken closeBraceTk
         ) : base (1) {
             NamespaceName = name;
@@ -183,9 +184,9 @@ namespace EchelonScriptCompiler.Parser {
         protected ES_AstNodeBounds bounds;
 
         public DeclType Type;
-        public ES_AstTypeDeclaration Inner;
+        public ES_AstTypeDeclaration? Inner;
 
-        public ES_AstTypeDeclaration_Basic (DeclType type, ES_AstTypeDeclaration inner, ES_AstNodeBounds bounds) : base (1) {
+        public ES_AstTypeDeclaration_Basic (DeclType type, ES_AstTypeDeclaration? inner, ES_AstNodeBounds bounds) : base (1) {
             Type = type;
             Inner = inner;
 
@@ -214,10 +215,10 @@ namespace EchelonScriptCompiler.Parser {
         protected ES_AstNodeBounds bounds;
 
         public ES_AstTypeDeclaration Inner;
-        public ES_AstExpression [] Dimensions;
+        public ES_AstExpression? [] Dimensions;
 
         public ES_AstTypeDeclaration_Array (
-            ES_AstTypeDeclaration inner, ES_AstExpression [] dims,
+            ES_AstTypeDeclaration inner, ES_AstExpression? [] dims,
             EchelonScriptToken closeBracketToken
         ) : base (1) {
             Inner = inner;
@@ -229,13 +230,13 @@ namespace EchelonScriptCompiler.Parser {
         public override string ToString () {
             var innerStr = Inner.ToString ();
 
-            Span<char> str = stackalloc char [innerStr.Length + 3 + Dimensions.Length];
+            Span<char> str = stackalloc char [innerStr!.Length + 3 + Dimensions.Length];
 
             innerStr.AsSpan ().CopyTo (str.Slice (0, innerStr.Length));
             str [innerStr.Length] = ' ';
             str [innerStr.Length + 1] = '[';
 
-            for (int i = 0; i < Dimensions.Length; i++)
+            for (int i = 1; i < Dimensions.Length; i++)
                 str [innerStr.Length + 1 + i] = ',';
 
             str [innerStr.Length + 2 + Dimensions.Length] = ']';
@@ -250,9 +251,9 @@ namespace EchelonScriptCompiler.Parser {
 
     public abstract class ES_AstAggregateDefinition : ES_AstNode {
         public ES_AccessModifier AccessModifier;
-        public ES_AstNode [] Contents;
+        public ES_AstNode? [] Contents;
 
-        public ES_AstAggregateDefinition (ES_AccessModifier accessMod, ES_AstNode [] contents) : base (1) {
+        public ES_AstAggregateDefinition (ES_AccessModifier accessMod, ES_AstNode? [] contents) : base (1) {
             AccessModifier = accessMod;
             Contents = contents;
         }
@@ -270,7 +271,7 @@ namespace EchelonScriptCompiler.Parser {
 
         public ES_AstClassDefinition (
             EchelonScriptToken? docCom, ES_AccessModifier accessMod, bool staticMod,
-            EchelonScriptToken name, ES_AstDottableIdentifier [] inheritance, ES_AstNode [] contents,
+            EchelonScriptToken name, ES_AstDottableIdentifier [] inheritance, ES_AstNode? [] contents,
             EchelonScriptToken startToken, EchelonScriptToken endToken
         ) : base (accessMod, contents) {
             DocComment = docCom;
@@ -298,7 +299,7 @@ namespace EchelonScriptCompiler.Parser {
 
         public ES_AstStructDefinition (
             EchelonScriptToken? docCom, ES_AccessModifier accessMod, bool staticMod,
-            EchelonScriptToken name, ES_AstDottableIdentifier [] interfaces, ES_AstNode [] contents,
+            EchelonScriptToken name, ES_AstDottableIdentifier [] interfaces, ES_AstNode? [] contents,
             EchelonScriptToken startToken, EchelonScriptToken endToken
         ) : base (accessMod, contents) {
             DocComment = docCom;
@@ -325,11 +326,11 @@ namespace EchelonScriptCompiler.Parser {
 
         public EchelonScriptToken Name;
         public ES_AstTypeDeclaration ValueType;
-        public ES_AstExpression InitializationExpression;
+        public ES_AstExpression? InitializationExpression;
 
         public ES_AstMemberVarDefinition (
             ES_AccessModifier accessMod, EchelonScriptToken? docCom, bool staticMod,
-            EchelonScriptToken name, ES_AstTypeDeclaration valueType, ES_AstExpression initExpr,
+            EchelonScriptToken name, ES_AstTypeDeclaration valueType, ES_AstExpression? initExpr,
             EchelonScriptToken semicolonTk
         ) : base (1) {
             AccessModifier = accessMod;
@@ -357,11 +358,11 @@ namespace EchelonScriptCompiler.Parser {
         public EchelonScriptToken Name;
         public EchelonScriptToken? BaseType;
 
-        public (EchelonScriptToken, ES_AstExpression) [] MembersList;
+        public (EchelonScriptToken, ES_AstExpression?) [] MembersList;
 
         public ES_AstEnumDefinition (
             ES_AccessModifier accessMod, EchelonScriptToken? docCom,
-            EchelonScriptToken name, EchelonScriptToken? baseType, (EchelonScriptToken, ES_AstExpression) [] membersList,
+            EchelonScriptToken name, EchelonScriptToken? baseType, (EchelonScriptToken, ES_AstExpression?) [] membersList,
             EchelonScriptToken startTk, EchelonScriptToken closeBraceTk
         ) : base (1) {
             AccessModifier = accessMod;
@@ -392,12 +393,12 @@ namespace EchelonScriptCompiler.Parser {
         public ES_AstTypeDeclaration ReturnType;
         public ES_AstFunctionArgumentDefinition [] ArgumentsList;
 
-        public ES_AstStatement [] StatementsList;
+        public ES_AstStatement? [] StatementsList;
 
         public ES_AstFunctionDefinition (
             ES_AccessModifier accessMod, EchelonScriptToken? docCom, bool staticMod, bool constMod,
             EchelonScriptToken name, ES_AstTypeDeclaration retType, ES_AstFunctionArgumentDefinition [] argsList,
-            ES_AstStatement [] statements,
+            ES_AstStatement? [] statements,
             EchelonScriptToken closeBraceTk
         ) : base (1) {
             AccessModifier = accessMod;
@@ -412,7 +413,7 @@ namespace EchelonScriptCompiler.Parser {
 
             StatementsList = statements;
 
-            bounds = new ES_AstNodeBounds (retType.NodeBounds.StartPos, closeBraceTk.TextEndPos);
+            bounds = new ES_AstNodeBounds (retType?.NodeBounds.StartPos ?? name.TextStartPos, closeBraceTk.TextEndPos);
         }
     }
 
@@ -421,12 +422,12 @@ namespace EchelonScriptCompiler.Parser {
         protected ES_AstNodeBounds bounds;
 
         public ES_ArgumentType ArgType;
-        public ES_AstTypeDeclaration ValueType;
+        public ES_AstTypeDeclaration? ValueType;
         public EchelonScriptToken Name;
-        public ES_AstExpression DefaultExpression;
+        public ES_AstExpression? DefaultExpression;
 
         public ES_AstFunctionArgumentDefinition (
-            ES_ArgumentType argType, ES_AstTypeDeclaration valueType, EchelonScriptToken name, ES_AstExpression defaultExpr,
+            ES_ArgumentType argType, ES_AstTypeDeclaration? valueType, EchelonScriptToken name, ES_AstExpression? defaultExpr,
             EchelonScriptToken startTk
         ) : base (1) {
             ArgType = argType;
@@ -444,6 +445,12 @@ namespace EchelonScriptCompiler.Parser {
 
     public abstract class ES_AstStatement : ES_AstNode {
         public ES_AstStatement (int nothing) : base (1) { }
+    }
+
+    public class ES_AstEmptyErrorStatement : ES_AstStatement {
+        public override ES_AstNodeBounds NodeBounds => throw new Exception ();
+
+        public ES_AstEmptyErrorStatement () : base (1) { }
     }
 
     public class ES_AstLabeledStatement : ES_AstStatement {
@@ -469,10 +476,10 @@ namespace EchelonScriptCompiler.Parser {
         public override ES_AstNodeBounds NodeBounds => bounds;
         protected ES_AstNodeBounds bounds;
 
-        public ES_AstStatement [] Statements;
+        public ES_AstStatement? [] Statements;
 
         public ES_AstBlockStatement (
-            ES_AstStatement [] statements, EchelonScriptToken openTk, EchelonScriptToken closeTk
+            ES_AstStatement? [] statements, EchelonScriptToken openTk, EchelonScriptToken closeTk
         ) : base (1) {
             Statements = statements;
 
@@ -534,12 +541,12 @@ namespace EchelonScriptCompiler.Parser {
         protected ES_AstNodeBounds bounds;
 
         public bool UsingVar;
-        public ES_AstTypeDeclaration ValueType;
+        public ES_AstTypeDeclaration? ValueType;
 
-        public (EchelonScriptToken Name, ES_AstExpression InitializationExpression) [] Variables;
+        public (EchelonScriptToken Name, ES_AstExpression? InitializationExpression) [] Variables;
 
         public ES_AstLocalVarDefinition (
-            bool usingVar, ES_AstTypeDeclaration valType, (EchelonScriptToken, ES_AstExpression) [] varsList,
+            bool usingVar, ES_AstTypeDeclaration? valType, (EchelonScriptToken, ES_AstExpression?) [] varsList,
             EchelonScriptToken varStartTk, EchelonScriptToken? endTk
         ) : base (1) {
             UsingVar = usingVar;
@@ -571,10 +578,10 @@ namespace EchelonScriptCompiler.Parser {
 
         public ES_AstExpression ConditionExpression;
         public ES_AstStatement ThenStatement;
-        public ES_AstStatement ElseStatement;
+        public ES_AstStatement? ElseStatement;
 
         public ES_AstConditionalStatement (
-            ES_AstExpression condExpr, ES_AstStatement thenStatement, ES_AstStatement elseStatement,
+            ES_AstExpression condExpr, ES_AstStatement thenStatement, ES_AstStatement? elseStatement,
             EchelonScriptToken startTk
         ) : base (1) {
             ConditionExpression = condExpr;
@@ -591,10 +598,10 @@ namespace EchelonScriptCompiler.Parser {
         protected ES_AstNodeBounds bounds;
 
         public ES_AstExpression ValueExpression;
-        public (ES_AstExpression [] Expressions, ES_AstStatement [] StatementsBlock) [] Sections;
+        public (ES_AstExpression? [] Expressions, ES_AstStatement [] StatementsBlock) [] Sections;
 
         public ES_AstSwitchStatement (
-            ES_AstExpression valExpr, (ES_AstExpression [], ES_AstStatement []) [] sectionsList,
+            ES_AstExpression valExpr, (ES_AstExpression? [], ES_AstStatement []) [] sectionsList,
             EchelonScriptToken switchStartTk, EchelonScriptToken closeBraceTk
         ) : base (1) {
             ValueExpression = valExpr;
@@ -653,10 +660,10 @@ namespace EchelonScriptCompiler.Parser {
         public override ES_AstNodeBounds NodeBounds => bounds;
         protected ES_AstNodeBounds bounds;
 
-        public ES_AstExpression CaseExpression;
+        public ES_AstExpression? CaseExpression;
 
         public ES_AstGotoCaseStatement (
-            ES_AstExpression caseExpr, EchelonScriptToken startTk, EchelonScriptToken semicolonTk
+            ES_AstExpression? caseExpr, EchelonScriptToken startTk, EchelonScriptToken semicolonTk
         ) : base (1) {
             CaseExpression = caseExpr;
 
@@ -668,10 +675,10 @@ namespace EchelonScriptCompiler.Parser {
         public override ES_AstNodeBounds NodeBounds => bounds;
         protected ES_AstNodeBounds bounds;
 
-        public ES_AstExpression ReturnExpression;
+        public ES_AstExpression? ReturnExpression;
 
         public ES_AstReturnStatement (
-            ES_AstExpression retExpr, EchelonScriptToken startTk, EchelonScriptToken semicolonTk
+            ES_AstExpression? retExpr, EchelonScriptToken startTk, EchelonScriptToken semicolonTk
         ) : base (1) {
             ReturnExpression = retExpr;
 
@@ -687,24 +694,26 @@ namespace EchelonScriptCompiler.Parser {
         public override ES_AstNodeBounds NodeBounds => bounds;
         protected ES_AstNodeBounds bounds;
 
-        public ES_AstStatement InitializationStatement;
-        public ES_AstExpression ConditionExpression;
-        public ES_AstExpression [] IterationExpressions;
+        public ES_AstStatement? InitializationStatement;
+        public ES_AstExpression? ConditionExpression;
+        public ES_AstExpression? []? IterationExpressions;
+        public bool PostLoop;
 
         public ES_AstStatement LoopBody;
 
         public ES_AstLoopStatement (
-            ES_AstStatement initStatement, ES_AstExpression condExpr, ES_AstExpression [] iterExprList,
-            ES_AstStatement loopBody,
-            EchelonScriptToken startToken
+            ES_AstStatement? initStatement, ES_AstExpression? condExpr, ES_AstExpression? []? iterExprList,
+            ES_AstStatement loopBody, bool postLoop,
+            EchelonScriptToken startToken, EchelonScriptToken? endToken
         ) : base (1) {
             InitializationStatement = initStatement;
             ConditionExpression = condExpr;
             IterationExpressions = iterExprList;
+            PostLoop = postLoop;
 
             LoopBody = loopBody;
 
-            bounds = new ES_AstNodeBounds (startToken.TextStartPos, loopBody.NodeBounds.EndPos);
+            bounds = new ES_AstNodeBounds (startToken.TextStartPos, endToken?.TextEndPos ?? loopBody?.NodeBounds.EndPos ?? startToken.TextEndPos);
         }
     }
 
@@ -719,15 +728,18 @@ namespace EchelonScriptCompiler.Parser {
         public ES_AstExpressionStatement (ES_AstExpression expr, EchelonScriptToken semicolonTk) : base (1) {
             Expression = expr;
 
-            bounds = new ES_AstNodeBounds (expr?.NodeBounds.StartPos ?? semicolonTk.TextStartPos, semicolonTk.TextEndPos);
+            if (!(expr is ES_AstEmptyErrorExpression))
+                bounds = new ES_AstNodeBounds (expr.NodeBounds.StartPos, semicolonTk.TextEndPos);
+            else
+                bounds = new ES_AstNodeBounds (semicolonTk.TextStartPos, semicolonTk.TextEndPos);
         }
     }
 
     public class ES_AstExpressionListStatement : ES_AstStatement {
         public override ES_AstNodeBounds NodeBounds {
             get {
-                ES_AstExpression firstExpr = null;
-                ES_AstExpression lastExpr = null;
+                ES_AstExpression? firstExpr = null;
+                ES_AstExpression? lastExpr = null;
 
                 for (int i = 0; i < Expressions.Length; i++) {
                     if (Expressions [i] != null) {
@@ -836,6 +848,12 @@ namespace EchelonScriptCompiler.Parser {
         public ES_AstExpression (int nothing) : base (1) { }
     }
 
+    public class ES_AstEmptyErrorExpression : ES_AstExpression {
+        public override ES_AstNodeBounds NodeBounds => throw new NotImplementedException ();
+
+        public ES_AstEmptyErrorExpression () : base (1) { }
+    }
+
     public abstract class ES_AstBinaryExpression : ES_AstExpression {
         public override ES_AstNodeBounds NodeBounds {
             get {
@@ -892,6 +910,27 @@ namespace EchelonScriptCompiler.Parser {
         public ES_AstIntegerLiteralExpression (bool isUnsigned, bool isLong, ulong value, EchelonScriptToken tk) : base (1) {
             Unsigned = isUnsigned;
             Long = isLong;
+            Value = value;
+
+            Token = tk;
+        }
+    }
+
+    public class ES_AstBooleanLiteralExpression : ES_AstExpression {
+        public override ES_AstNodeBounds NodeBounds {
+            get {
+                return new ES_AstNodeBounds {
+                    StartPos = Token.TextStartPos,
+                    EndPos = Token.TextEndPos,
+                };
+            }
+        }
+
+        public readonly bool Value;
+
+        public readonly EchelonScriptToken Token;
+
+        public ES_AstBooleanLiteralExpression (bool value, EchelonScriptToken tk) : base (1) {
             Value = value;
 
             Token = tk;
@@ -1032,10 +1071,10 @@ namespace EchelonScriptCompiler.Parser {
         protected ES_AstNodeBounds bounds;
 
         public ES_AstExpression IndexedExpression;
-        public ES_AstExpression [] RankExpressions;
+        public ES_AstExpression? [] RankExpressions;
 
         public ES_AstIndexingExpression (
-            ES_AstExpression indexedExpr, ES_AstExpression [] ranks, EchelonScriptToken closeBracketTk
+            ES_AstExpression indexedExpr, ES_AstExpression? [] ranks, EchelonScriptToken closeBracketTk
         ) : base (1) {
             IndexedExpression = indexedExpr;
             RankExpressions = ranks;
@@ -1048,11 +1087,11 @@ namespace EchelonScriptCompiler.Parser {
         public override ES_AstNodeBounds NodeBounds => bounds;
         protected ES_AstNodeBounds bounds;
 
-        public ES_AstTypeDeclaration TypeDeclaration;
+        public ES_AstTypeDeclaration? TypeDeclaration;
         public ES_AstFunctionCallArgument [] Arguments;
 
         public ES_AstNewExpression (
-            ES_AstTypeDeclaration typeDecl, ES_AstFunctionCallArgument [] args,
+            ES_AstTypeDeclaration? typeDecl, ES_AstFunctionCallArgument [] args,
             EchelonScriptToken newStartTk, EchelonScriptToken closeParenTk
         ) : base (1) {
             TypeDeclaration = typeDecl;
@@ -1129,11 +1168,11 @@ namespace EchelonScriptCompiler.Parser {
         public override ES_AstNodeBounds NodeBounds => bounds;
         protected ES_AstNodeBounds bounds;
 
-        public ES_AstTypeDeclaration DestinationType;
+        public ES_AstTypeDeclaration? DestinationType;
         public ES_AstExpression InnerExpression;
 
         public ES_AstCastExpression (
-            ES_AstTypeDeclaration destType, ES_AstExpression innerExpr,
+            ES_AstTypeDeclaration? destType, ES_AstExpression innerExpr,
             EchelonScriptToken castStartTk, EchelonScriptToken closeParenTk
         ) : base (1) {
             DestinationType = destType;

@@ -8,8 +8,10 @@
  */
 
 using System;
+using EchelonScriptCompiler.Frontend;
+using EchelonScriptCompiler.Frontend.Parser;
 
-namespace EchelonScriptCompiler.Parser {
+namespace EchelonScriptCompiler.Data {
     public enum EchelonScriptTokenType {
         Invalid = -1,
 
@@ -104,7 +106,7 @@ namespace EchelonScriptCompiler.Parser {
     }
 
     public struct EchelonScriptErrorMessage {
-        public string Message { get; }
+        public string? Message { get; }
 
         public int StartPos { get; }
         public int Length { get; }
@@ -112,7 +114,7 @@ namespace EchelonScriptCompiler.Parser {
         public int Line { get; }
         public int Column { get; }
 
-        public EchelonScriptErrorMessage (EchelonScriptToken tk, string message = null) {
+        public EchelonScriptErrorMessage (EchelonScriptToken tk, string? message = null) {
             Message = message;
 
             StartPos = tk.TextStartPos;
@@ -122,7 +124,7 @@ namespace EchelonScriptCompiler.Parser {
             Column = tk.TextColumn;
         }
 
-        public EchelonScriptErrorMessage (ReadOnlySpan<char> srcText, ES_AstNodeBounds bounds, string message = null) {
+        public EchelonScriptErrorMessage (ReadOnlySpan<char> srcText, ES_AstNodeBounds bounds, string? message = null) {
 
             Message = message;
 

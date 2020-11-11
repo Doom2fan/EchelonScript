@@ -10,9 +10,10 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Utilities;
 
-namespace EchelonScriptCompiler.Parser {
+namespace EchelonScriptCompiler.Frontend.Parser {
     public class EchelonScriptTokenizer : IDisposable {
         #region ================== Token parsers
 
@@ -37,7 +38,7 @@ namespace EchelonScriptCompiler.Parser {
                 tokenizer.ReadChars (2);
 
                 if (tokenizer.PeekChar () == NumberSeparator)
-                    tokenizer.Errors.Add (new EchelonScriptErrorMessage (retToken, ES_Errors.InvalidHexLiteral));
+                    tokenizer.Errors.Add (new EchelonScriptErrorMessage (retToken, ES_FrontendErrors.InvalidHexLiteral));
                 else
                     tokenizer.ReadStringWhile (c => IsHexDigit (c) || c == NumberSeparator);
 
@@ -63,7 +64,7 @@ namespace EchelonScriptCompiler.Parser {
                 tokenizer.ReadChars (2);
 
                 if (tokenizer.PeekChar () == NumberSeparator)
-                    tokenizer.Errors.Add (new EchelonScriptErrorMessage (retToken, ES_Errors.InvalidBinaryLiteral));
+                    tokenizer.Errors.Add (new EchelonScriptErrorMessage (retToken, ES_FrontendErrors.InvalidBinaryLiteral));
                 else
                     tokenizer.ReadStringWhile (c => IsBinaryDigit (c) || c == NumberSeparator);
 
@@ -200,13 +201,13 @@ namespace EchelonScriptCompiler.Parser {
                     if (c == '"')
                         break;
                     else if (c == null) {
-                        tokenizer.Errors.Add (new EchelonScriptErrorMessage (ES_Errors.UnclosedStringLiteral, startPos, tokenizer.curPos - startPos, retToken.TextLine, retToken.TextColumn));
+                        tokenizer.Errors.Add (new EchelonScriptErrorMessage (ES_FrontendErrors.UnclosedStringLiteral, startPos, tokenizer.curPos - startPos, retToken.TextLine, retToken.TextColumn));
                         unclosed = true;
                         break;
                     } else if (c == '\\' && tokenizer.PeekChar () == '"')
                         tokenizer.ReadChar ();
                     else if (!verbatim && (c == '\r' || c == '\n')) {
-                        var err = new EchelonScriptErrorMessage (c == '\r' ? ES_Errors.NoCRInRegularStrings : ES_Errors.NoLFInRegularStrings,
+                        var err = new EchelonScriptErrorMessage (c == '\r' ? ES_FrontendErrors.NoCRInRegularStrings : ES_FrontendErrors.NoLFInRegularStrings,
                             tokenizer.curPos, 1, tokenizer.curLine, tokenizer.CalcColumn (tokenizer.curLineStartPos, tokenizer.curPos)
                         );
                         tokenizer.Errors.Add (err);
@@ -248,13 +249,13 @@ namespace EchelonScriptCompiler.Parser {
                     if (c == '\'')
                         break;
                     else if (c == null) {
-                        tokenizer.Errors.Add (new EchelonScriptErrorMessage (ES_Errors.UnclosedCharLiteral, startPos, tokenizer.curPos - startPos, retToken.TextLine, retToken.TextColumn));
+                        tokenizer.Errors.Add (new EchelonScriptErrorMessage (ES_FrontendErrors.UnclosedCharLiteral, startPos, tokenizer.curPos - startPos, retToken.TextLine, retToken.TextColumn));
                         unclosed = true;
                         break;
                     } else if (c == '\\' && tokenizer.PeekChar () == '\'')
                         tokenizer.ReadChar ();
                     else if (c == '\r' || c == '\n') {
-                        var err = new EchelonScriptErrorMessage (c == '\r' ? ES_Errors.NoCRInCharLiterals : ES_Errors.NoLFInCharLiterals,
+                        var err = new EchelonScriptErrorMessage (c == '\r' ? ES_FrontendErrors.NoCRInCharLiterals : ES_FrontendErrors.NoLFInCharLiterals,
                             tokenizer.curPos, 1, tokenizer.curLine, tokenizer.CalcColumn (tokenizer.curLineStartPos, tokenizer.curPos)
                         );
                         tokenizer.Errors.Add (err);
@@ -269,9 +270,9 @@ namespace EchelonScriptCompiler.Parser {
                 }
 
                 if (retToken.DecodedStringUTF32?.Length > 1)
-                    tokenizer.Errors.Add (new EchelonScriptErrorMessage (retToken, ES_Errors.TooLongCharLiteral));
+                    tokenizer.Errors.Add (new EchelonScriptErrorMessage (retToken, ES_FrontendErrors.TooLongCharLiteral));
                 else if (retToken.DecodedStringUTF32?.Length < 1)
-                    tokenizer.Errors.Add (new EchelonScriptErrorMessage (retToken, ES_Errors.EmptyCharLiteral));
+                    tokenizer.Errors.Add (new EchelonScriptErrorMessage (retToken, ES_FrontendErrors.EmptyCharLiteral));
 
                 return true;
             }
@@ -861,7 +862,7 @@ namespace EchelonScriptCompiler.Parser {
                 }
 
                 if (!IsIntegerDigit (PeekChar ())) {
-                    Errors.Add (new EchelonScriptErrorMessage (ES_Errors.InvalidFloatLiteral, startPos, curPos - startPos, line, column));
+                    Errors.Add (new EchelonScriptErrorMessage (ES_FrontendErrors.InvalidFloatLiteral, startPos, curPos - startPos, line, column));
                     curPos -= hasSign ? 2 : 1;
                     return;
                 }
@@ -1007,7 +1008,7 @@ namespace EchelonScriptCompiler.Parser {
                                     if (invalid) {
                                         for (int k = startPos; k < i; k++)
                                             newCharList.Add (charList [k].Rune);
-                                        EmitError (ES_Errors.UnrecognizedEscape, runeData.Line, runeData.Col, runeData.Pos, rune.Utf16SequenceLength + len);
+                                        EmitError (ES_FrontendErrors.UnrecognizedEscape, runeData.Line, runeData.Col, runeData.Pos, rune.Utf16SequenceLength + len);
                                     } else {
                                         int charValue = int.Parse (charBuf, System.Globalization.NumberStyles.AllowHexSpecifier, null);
                                         newCharList.Add (new Rune (charValue));
@@ -1026,7 +1027,7 @@ namespace EchelonScriptCompiler.Parser {
                             default:
                                 newCharList.Add (rune);
                                 newCharList.Add (nextRune.Value.Rune);
-                                EmitError (ES_Errors.UnrecognizedEscape, runeData.Line, runeData.Col, runeData.Pos, runeData.Rune.Utf16SequenceLength);
+                                EmitError (ES_FrontendErrors.UnrecognizedEscape, runeData.Line, runeData.Col, runeData.Pos, runeData.Rune.Utf16SequenceLength);
                                 break;
                         }
                     } else if (verbatim && nextRune != null) {

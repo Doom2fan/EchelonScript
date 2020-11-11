@@ -8,11 +8,14 @@
  */
 
 using System;
+using System.Collections.Generic;
 using System.Text;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using EchelonScriptCompiler.Parser;
+using EchelonScriptCompiler.Data;
+using EchelonScriptCompiler.Frontend;
+using EchelonScriptCompiler.Frontend.Parser;
 using ICSharpCode.AvalonEdit.Document;
 
 namespace TestSuiteWPF.Tests {
@@ -22,6 +25,7 @@ namespace TestSuiteWPF.Tests {
     public partial class ParserTest : UserControl {
         #region ================== Instance fields
 
+        protected List<EchelonScriptErrorMessage> errList;
         protected EchelonScriptParser parser;
         protected TextMarkerService textMarkerService;
 
@@ -32,7 +36,8 @@ namespace TestSuiteWPF.Tests {
         public ParserTest () {
             InitializeComponent ();
 
-            parser = new EchelonScriptParser ();
+            errList = new List<EchelonScriptErrorMessage> ();
+            parser = new EchelonScriptParser (errList);
             textMarkerService = new TextMarkerService (codeText);
         }
 
@@ -69,10 +74,11 @@ namespace TestSuiteWPF.Tests {
             errorsList.Items.Clear ();
             astTreeView.Items.Clear ();
 
+            errList.Clear ();
             parser.Reset ();
             var astTree = parser.ParseCode (code.AsMemory ());
 
-            foreach (var error in parser.Errors) {
+            foreach (var error in errList) {
                 errorsList.Items.Add ($"Line {error.Line}, column {error.Column}: {error.Message}");
 
                 if (error.Length == 0 || (error.StartPos + error.Length > codeText.Text.Length))
@@ -302,6 +308,16 @@ namespace TestSuiteWPF.Tests {
 
                 #region Statements
 
+                case ES_AstEmptyErrorExpression _: {
+                    AddNodeToTree ("Empty (error) statement", parentItem);
+                    break;
+                }
+
+                case ES_AstEmptyErrorStatement _: {
+                    AddNodeToTree ("Empty (error) statement", parentItem);
+                    break;
+                }
+
                 case ES_AstLabeledStatement labeledStatement: {
                     var thisItem = AddNodeToTree ($"{labeledStatement.LabelName}:", parentItem);
                     AddAstNodeToTree (labeledStatement.Statement, parentItem);
@@ -444,10 +460,10 @@ namespace TestSuiteWPF.Tests {
                         string condString = loopStatement.ConditionExpression != null ? " ..." : "";
                         string iterString = loopStatement.IterationExpressions != null ? " ..." : "";
 
-                        itemString = $"for ({initString};{condString};{iterString})";
+                        itemString = $"{(loopStatement.PostLoop ? "do-" : "")}for ({initString};{condString};{iterString})";
                         forLoop = true;
                     } else
-                        itemString = "while (...)";
+                        itemString = $"{(loopStatement.PostLoop ? "do-" : "")}while (...)";
 
                     var thisItem = AddNodeToTree (itemString, parentItem);
 
@@ -501,6 +517,13 @@ namespace TestSuiteWPF.Tests {
                 case ES_AstIntegerLiteralExpression intLiteralExpr: {
                     var thisItem = AddNodeToTree ($"Int literal {intLiteralExpr.Value}{(intLiteralExpr.Unsigned ? "u" : "")}{(intLiteralExpr.Long ? "L" : "")}", parentItem);
                     thisItem.Tag = intLiteralExpr.Token;
+
+                    break;
+                }
+
+                case ES_AstBooleanLiteralExpression boolLiteralExpr: {
+                    var thisItem = AddNodeToTree ($"{boolLiteralExpr.Value}", parentItem);
+                    thisItem.Tag = boolLiteralExpr.Token;
 
                     break;
                 }
@@ -809,10 +832,10 @@ namespace TestSuiteWPF.Tests {
         }
 
         private void errorsList_MouseDoubleClick (object sender, MouseButtonEventArgs e) {
-            if (errorsList.SelectedIndex < 0 || errorsList.SelectedIndex > parser.Errors.Count)
+            if (errorsList.SelectedIndex < 0 || errorsList.SelectedIndex > errList.Count)
                 return;
 
-            var error = parser.Errors [errorsList.SelectedIndex];
+            var error = errList [errorsList.SelectedIndex];
             codeText.Focus ();
             codeText.Select (error.StartPos, error.Length);
         }
