@@ -13,8 +13,8 @@ using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
+using ChronosLib.Pooled;
 using Collections.Pooled;
-using EchelonScriptCompiler.Utilities;
 using Microsoft.Toolkit.HighPerformance.Extensions;
 
 namespace EchelonScriptCompiler.Data {
@@ -142,7 +142,7 @@ namespace EchelonScriptCompiler.Data {
 
         public UnmanagedIdentifierPool () {
             idsList = new PooledList<IdData> ();
-            bytesMemoryAreas = new StructPooledList<MemoryArea<byte>> (Utilities.ClearMode.Auto);
+            bytesMemoryAreas = new StructPooledList<MemoryArea<byte>> (CL_ClearMode.Auto);
         }
 
         #endregion

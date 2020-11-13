@@ -10,6 +10,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using ChronosLib.Pooled;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Utilities;
 
@@ -430,7 +431,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
         public EchelonScriptTokenizer (List<EchelonScriptErrorMessage> errorsList) {
             curPos = 0;
             data = null;
-            tokenBuffer = new StructPooledList<(EchelonScriptToken, EchelonScriptToken?)> (ClearMode.Auto);
+            tokenBuffer = new StructPooledList<(EchelonScriptToken, EchelonScriptToken?)> (CL_ClearMode.Auto);
 
             Errors = errorsList;
         }
@@ -904,8 +905,8 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                 Errors.Add (new EchelonScriptErrorMessage (message, pos, len, line, col));
             }
 
-            using var charList = new StructPooledList<(int Line, int Col, int Pos, Rune Rune)> (ClearMode.Auto);
-            using var newCharList = new StructPooledList<Rune> (ClearMode.Auto);
+            using var charList = new StructPooledList<(int Line, int Col, int Pos, Rune Rune)> (CL_ClearMode.Auto);
+            using var newCharList = new StructPooledList<Rune> (CL_ClearMode.Auto);
 
             (int Line, int Col, int Pos, Rune Rune)? TryGetRune (int pos) {
                 if (pos >= charList.Count)

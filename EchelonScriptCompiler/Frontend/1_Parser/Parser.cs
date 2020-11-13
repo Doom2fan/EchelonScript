@@ -10,8 +10,8 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using ChronosLib.Pooled;
 using EchelonScriptCompiler.Data;
-using EchelonScriptCompiler.Utilities;
 using Microsoft.Toolkit.HighPerformance.Buffers;
 
 namespace EchelonScriptCompiler.Frontend.Parser {
@@ -455,7 +455,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                     return new ES_AstIndexingExpression (left, new ES_AstExpression? [] { null }, tkPair.tk);
                 }
 
-                using var ranksList = new StructPooledList<ES_AstExpression?> (ClearMode.Auto);
+                using var ranksList = new StructPooledList<ES_AstExpression?> (CL_ClearMode.Auto);
 
                 EchelonScriptToken endTk;
                 while (true) {
@@ -664,7 +664,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
 
         static EchelonScriptParser () {
             // Primitive types
-            using var primitiveTypesList = new StructPooledList<string> (ClearMode.Auto);
+            using var primitiveTypesList = new StructPooledList<string> (CL_ClearMode.Auto);
             var primitiveTypesConstants = typeof (ES_PrimitiveTypes).GetFields (BindingFlags.Public | BindingFlags.Static);
 
             foreach (var primitiveConst in primitiveTypesConstants) {
@@ -675,7 +675,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             PrimitiveTypes = primitiveTypesList.ToArray ();
 
             // Keywords
-            using var keywordsList = new StructPooledList<string> (ClearMode.Auto);
+            using var keywordsList = new StructPooledList<string> (CL_ClearMode.Auto);
             var keywordsConstants = typeof (ES_Keywords).GetFields (BindingFlags.Public | BindingFlags.Static);
 
             foreach (var keywordConst in keywordsConstants) {
@@ -960,7 +960,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             if (EnsureTokenPeek (EchelonScriptTokenType.Identifier, null) != EnsureTokenResult.Correct)
                 throw new Exception ("The calling function must check for the correct initial token first.");
 
-            using var partsList = new StructPooledList<EchelonScriptToken> (ClearMode.Auto);
+            using var partsList = new StructPooledList<EchelonScriptToken> (CL_ClearMode.Auto);
 
             var id = ParseIdentifier ();
             if (id != null)
@@ -1061,8 +1061,8 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                         break;
                     }
 
-                    using var rankSeps = new StructPooledList<EchelonScriptToken> (ClearMode.Auto);
-                    using var ranks = new StructPooledList<ES_AstExpression?> (ClearMode.Auto);
+                    using var rankSeps = new StructPooledList<EchelonScriptToken> (CL_ClearMode.Auto);
+                    using var ranks = new StructPooledList<ES_AstExpression?> (CL_ClearMode.Auto);
                     bool anyHasSize = false;
 
                     EchelonScriptToken endTk;
@@ -1115,9 +1115,9 @@ namespace EchelonScriptCompiler.Frontend.Parser {
         #endregion
 
         protected ES_AbstractSyntaxTree ParseCodeUnit () {
-            using var importsList = new StructPooledList<ES_AstImportStatement> (ClearMode.Auto);
-            using var aliasesList = new StructPooledList<ES_AstTypeAlias> (ClearMode.Auto);
-            using var namespacesList = new StructPooledList<ES_AstNamespace> (ClearMode.Auto);
+            using var importsList = new StructPooledList<ES_AstImportStatement> (CL_ClearMode.Auto);
+            using var aliasesList = new StructPooledList<ES_AstTypeAlias> (CL_ClearMode.Auto);
+            using var namespacesList = new StructPooledList<ES_AstNamespace> (CL_ClearMode.Auto);
 
             while (true) {
                 var tkPair = tokenizer.PeekNextToken ();
@@ -1228,7 +1228,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                 return Array.Empty<ES_AstNode?> ();
             }
 
-            using var contents = new StructPooledList<ES_AstNode?> (ClearMode.Auto);
+            using var contents = new StructPooledList<ES_AstNode?> (CL_ClearMode.Auto);
             ES_AggregateModifiers currentModifiers = new ES_AggregateModifiers ();
             currentModifiers.ResetToNull ();
 
@@ -1410,7 +1410,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                 return null;
             tokenizer.NextToken ();
 
-            using var listContents = new StructPooledList<ES_AstDottableIdentifier> (ClearMode.Auto);
+            using var listContents = new StructPooledList<ES_AstDottableIdentifier> (CL_ClearMode.Auto);
 
             while (true) {
                 tkPair = tokenizer.PeekNextToken ();
@@ -1443,7 +1443,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             if (valueType == null)
                 valueType = ParseTypeDeclaration ()!;
 
-            using var varDataList = new StructPooledList<(EchelonScriptToken Name, ES_AstExpression? Expr)> (ClearMode.Auto);
+            using var varDataList = new StructPooledList<(EchelonScriptToken Name, ES_AstExpression? Expr)> (CL_ClearMode.Auto);
 
             while (true) {
                 var tkPair = tokenizer.PeekNextToken ();
@@ -1482,7 +1482,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             else
                 tokenizer.NextToken ();
 
-            using var memberVarsList = new StructPooledList<ES_AstMemberVarDefinition> (ClearMode.Auto);
+            using var memberVarsList = new StructPooledList<ES_AstMemberVarDefinition> (CL_ClearMode.Auto);
             foreach (var memberVar in varDataList) {
                 var memberVarDef = new ES_AstMemberVarDefinition (
                     varModifiers.AccessModifier!.Value,
@@ -1662,7 +1662,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             }
 
             // Parse the enum's members
-            using var membersList = new StructPooledList<(EchelonScriptToken, ES_AstExpression?)> (ClearMode.Auto);
+            using var membersList = new StructPooledList<(EchelonScriptToken, ES_AstExpression?)> (CL_ClearMode.Auto);
 
             EchelonScriptToken endTk;
             bool expectingEnd = false;
@@ -1770,7 +1770,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                 return Array.Empty<ES_AstFunctionArgumentDefinition> ();
             }
 
-            using var argsList = new StructPooledList<ES_AstFunctionArgumentDefinition> (ClearMode.Auto);
+            using var argsList = new StructPooledList<ES_AstFunctionArgumentDefinition> (CL_ClearMode.Auto);
 
             while (true) {
                 tkPair = tokenizer.PeekNextToken ();
@@ -1949,7 +1949,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                 return Array.Empty<ES_AstStatement> ();
             }
 
-            using var contents = new StructPooledList<ES_AstStatement> (ClearMode.Auto);
+            using var contents = new StructPooledList<ES_AstStatement> (CL_ClearMode.Auto);
 
             while (true) {
                 tkPair = tokenizer.PeekNextToken ();
@@ -1984,7 +1984,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             }
 
             var namespaceName = ParseDottableUserIdentifier ();
-            using var importedNamesList = new StructPooledList<EchelonScriptToken> (ClearMode.Auto);
+            using var importedNamesList = new StructPooledList<EchelonScriptToken> (CL_ClearMode.Auto);
             EchelonScriptToken endTk;
 
             tkPair = tokenizer.PeekNextToken ();
@@ -2059,7 +2059,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                 throw new Exception ("The calling function must check for the correct initial token first.");
 
             ES_AstTypeDeclaration? valueType;
-            using var variables = new StructPooledList<(EchelonScriptToken, ES_AstExpression?)> (ClearMode.Auto);
+            using var variables = new StructPooledList<(EchelonScriptToken, ES_AstExpression?)> (CL_ClearMode.Auto);
             bool initRequired;
 
             if (tokenizer.PeekNextToken ().tk.Type == EchelonScriptTokenType.Identifier &&
@@ -2195,8 +2195,8 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                 tokenizer.NextToken ();
 
             EchelonScriptToken endTK;
-            using var sections = new StructPooledList<(ES_AstExpression? [], ES_AstStatement [])> (ClearMode.Auto);
-            using var sectionExpressions = new StructPooledList<ES_AstExpression?> (ClearMode.Auto);
+            using var sections = new StructPooledList<(ES_AstExpression? [], ES_AstStatement [])> (CL_ClearMode.Auto);
+            using var sectionExpressions = new StructPooledList<ES_AstExpression?> (CL_ClearMode.Auto);
             while (true) {
                 tkPair = tokenizer.NextToken ();
                 if (tkPair.tk.Type == EchelonScriptTokenType.EOF) {
@@ -2522,7 +2522,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
         #region Expressions
 
         protected ES_AstExpression [] ParseExpressionList () {
-            using var exprList = new StructPooledList<ES_AstExpression> (ClearMode.Auto);
+            using var exprList = new StructPooledList<ES_AstExpression> (CL_ClearMode.Auto);
 
             while (true) {
                 var tkPair = tokenizer.PeekNextToken ();
@@ -2591,7 +2591,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                 return Array.Empty<ES_AstFunctionCallArgument> ();
             }
 
-            using var argsList = new StructPooledList<ES_AstFunctionCallArgument> (ClearMode.Auto);
+            using var argsList = new StructPooledList<ES_AstFunctionCallArgument> (CL_ClearMode.Auto);
 
             while (true) {
                 tkPair = tokenizer.PeekNextToken ();

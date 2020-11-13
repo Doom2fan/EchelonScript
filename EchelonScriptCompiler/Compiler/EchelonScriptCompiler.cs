@@ -9,10 +9,10 @@
 
 using System;
 using System.Collections.Generic;
+using ChronosLib.Pooled;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Frontend;
 using EchelonScriptCompiler.Frontend.Parser;
-using EchelonScriptCompiler.Utilities;
 
 namespace EchelonScriptCompiler {
     public class EchelonScriptCompiler : IDisposable {
@@ -45,7 +45,7 @@ namespace EchelonScriptCompiler {
         public void CompileTranslationUnit (string unitName, ReadOnlySpan<ReadOnlyMemory<char>> codeTransUnit) {
             CheckDisposed ();
 
-            var astUnitsList = new StructPooledList<ES_AbstractSyntaxTree> (ClearMode.Auto);
+            var astUnitsList = new StructPooledList<ES_AbstractSyntaxTree> (CL_ClearMode.Auto);
             {
                 foreach (var codeUnit in codeTransUnit) {
                     parser.Reset ();
