@@ -9,6 +9,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -170,7 +171,7 @@ namespace EchelonScriptCompiler.Data {
             }
 
             if (selectedAreaIdx == -1) {
-                int size = (int) (Math.Ceiling (length / (float) BaseBlockSize) / BaseBlockSize);
+                int size = (int) (Math.Ceiling (length / (float) BaseBlockSize) * BaseBlockSize);
                 var memPtr = (byte*) Marshal.AllocHGlobal (size);
                 var newMemoryArea = new MemoryArea<byte> (memPtr, size);
 
@@ -179,6 +180,9 @@ namespace EchelonScriptCompiler.Data {
             }
 
             ref var selectedArea = ref bytesMemoryAreas.Span [selectedAreaIdx];
+
+            Debug.Assert ((selectedArea.Size - selectedArea.BytesUsed) >= length);
+
             var ret = new ArrayPointer<byte> {
                 Elements = selectedArea.MemArea + selectedArea.BytesUsed,
                 Length = length,
@@ -222,6 +226,8 @@ namespace EchelonScriptCompiler.Data {
                     var idBytes = GetIdBytes (bytes);
 
                     idData = new IdData (hashCode, idBytes);
+
+                    ret = idBytes;
 
                     break;
                 }
