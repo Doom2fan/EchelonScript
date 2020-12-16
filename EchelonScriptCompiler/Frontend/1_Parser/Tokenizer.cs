@@ -288,6 +288,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                 tokenStrings = new List<(EchelonScriptTokenType, string)> {
                     (EchelonScriptTokenType.Dot, "."),
                     (EchelonScriptTokenType.DotDot, ".."),
+                    (EchelonScriptTokenType.NamespaceOp, "::"),
 
                     (EchelonScriptTokenType.AndAnd, "&&"),
                     (EchelonScriptTokenType.OrOr, "||"),

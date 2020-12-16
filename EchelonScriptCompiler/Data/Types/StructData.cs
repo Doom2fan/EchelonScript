@@ -9,14 +9,13 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
-using System.Text;
-using Microsoft.Toolkit.HighPerformance.Buffers;
+using EchelonScriptCompiler.Utilities;
 
 namespace EchelonScriptCompiler.Data.Types {
     [StructLayout (LayoutKind.Sequential, Pack = 1)]
     [ES_ExportAggregate (new [] { "EchelonScript", "Reflection" }, "StructData", ES_ExportAttributeBase.AggregateType.Struct)]
-    public unsafe struct ES_StructData : ES_TypeData {
-        public unsafe sealed class Builder : ES_TypeData {
+    public unsafe struct ES_StructData {
+        public unsafe sealed class Builder {
             #region ================== Instance fields
 
             private ES_StructData* structData;
@@ -25,23 +24,11 @@ namespace EchelonScriptCompiler.Data.Types {
 
             #region ================== Instance properties
 
-            /// <inheritdoc/>
-            public string TypeName => structData->TypeName;
-
-            /// <inheritdoc/>
-            public bool Valid {
-                get => structData->valid;
-                set => structData->valid = value;
-            }
-
-            /// <inheritdoc/>
-            public int Size {
-                get => structData->sizeInBytes;
-                set => structData->sizeInBytes = value;
-            }
+            /// <summary>The pointer to the struct this builder is for.</summary>
+            public ES_StructData* StructData => structData;
 
             /// <summary>The interfaces list of this struct.</summary>
-            private ArrayPointer<ES_InterfaceData> InterfacesList {
+            public ArrayPointer<Pointer<ES_InterfaceData>> InterfacesList {
                 get => structData->interfacesList;
                 set => structData->interfacesList = value;
             }
@@ -50,9 +37,12 @@ namespace EchelonScriptCompiler.Data.Types {
 
             #region ================== Constructors
 
-            internal Builder ([DisallowNull] ES_StructData* data, ArrayPointer<byte> typeName) {
+            internal Builder ([DisallowNull] ES_StructData* data, ES_AccessModifier accessMod,
+                ArrayPointer<byte> typeName, ArrayPointer<byte> fullyQualifiedName,
+                ArrayPointer<byte> sourceUnit
+            ) {
                 structData = data;
-                data->typeName = typeName;
+                data->TypeInfo = new ES_TypeInfo (ES_TypeTag.Struct, accessMod, sourceUnit, typeName, fullyQualifiedName);
             }
 
             #endregion
@@ -60,30 +50,15 @@ namespace EchelonScriptCompiler.Data.Types {
 
         #region ================== Instance fields
 
-        private ArrayPointer<byte> typeName;
-        private ArrayPointer<ES_InterfaceData> interfacesList;
-        private bool valid;
-        private int sizeInBytes;
+        public ES_TypeInfo TypeInfo;
+        private ArrayPointer<Pointer<ES_InterfaceData>> interfacesList;
 
         #endregion
 
         #region ================== Instance properties
 
-        /// <inheritdoc/>
-        public string TypeName {
-            get {
-                return StringPool.Shared.GetOrAdd (typeName.Span, Encoding.ASCII);
-            }
-        }
-
-        /// <inheritdoc/>
-        public bool Valid { get => valid; }
-
-        /// <inheritdoc/>
-        public int Size { get => sizeInBytes; }
-
         /// <summary>The interfaces list of this struct.</summary>
-        private ArrayPointer<ES_InterfaceData> InterfacesList => interfacesList;
+        private ArrayPointer<Pointer<ES_InterfaceData>> InterfacesList => interfacesList;
 
         #endregion
     }

@@ -1,9 +1,17 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <TargetFramework>net5.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
@@ -11,16 +19,24 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\ChronosLib\ChronosLib\ChronosLib.csproj" />
     <ProjectReference Include="..\EchelonScriptCompiler\EchelonScriptCompiler.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Update="Tests\CompilerTest.xaml.cs">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Update="Tests\ParserTest.xaml.cs">
       <SubType>Code</SubType>
     </Compile>
   </ItemGroup>
 
   <ItemGroup>
+    <Page Update="Tests\CompilerTest.xaml">
+      <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
+      <SubType>Designer</SubType>
+    </Page>
     <Page Update="Tests\ParserTest.xaml">
       <SubType>Designer</SubType>
     </Page>

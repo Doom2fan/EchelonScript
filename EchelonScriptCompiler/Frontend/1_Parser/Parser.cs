@@ -19,6 +19,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
         public ES_AccessModifier? AccessModifier;
         public bool? Static;
         public bool? Const;
+        public ES_VirtualnessModifier? VirtualnessModifier;
 
         public EchelonScriptToken? DocComment;
 
@@ -26,6 +27,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             AccessModifier = null;
             Static = null;
             Const = null;
+            VirtualnessModifier = null;
 
             DocComment = null;
         }
@@ -39,14 +41,17 @@ namespace EchelonScriptCompiler.Frontend.Parser {
 
             if (Const == null)
                 Const = defaults.Const;
+
+            if (VirtualnessModifier == null)
+                VirtualnessModifier = defaults.VirtualnessModifier;
         }
 
         public bool AnyUndefined () {
-            return !AccessModifier.HasValue || !Static.HasValue || !Const.HasValue;
+            return !AccessModifier.HasValue || !Static.HasValue || !Const.HasValue || !VirtualnessModifier.HasValue;
         }
 
         public bool AnySet () {
-            return AccessModifier.HasValue || Static.HasValue || Const.HasValue;
+            return AccessModifier.HasValue || Static.HasValue || Const.HasValue || VirtualnessModifier.HasValue;
         }
     }
 
@@ -862,6 +867,10 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                 errorsList.Add (new EchelonScriptErrorMessage (tk, ES_FrontendErrors.AccessBeforeStorage));
                 return false;
             }
+            if (currentModifiers.VirtualnessModifier != null) {
+                errorsList.Add (new EchelonScriptErrorMessage (tk, ES_FrontendErrors.VirtualnessBeforeStorage));
+                return false;
+            }
             if (currentModifiers.AccessModifier != null) {
                 errorsList.Add (new EchelonScriptErrorMessage (tk, ES_FrontendErrors.MultipleAccessMods));
                 return false;
@@ -1034,7 +1043,18 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                         innerDecl = new ES_AstTypeDeclaration_Basic (declType, innerType, bounds);
                     } else {
                         var dottableId = ParseDottableIdentifier ();
-                        innerDecl = new ES_AstTypeDeclaration_TypeName (dottableId);
+
+                        if (tokenizer.PeekNextToken ().tk.Type == EchelonScriptTokenType.NamespaceOp) {
+                            tokenizer.NextToken ();
+
+                            if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Identifier, null) != EnsureTokenResult.Correct)
+                                errorsList.Add (ES_FrontendErrors.GenExpectedIdentifier (tkPair.tk));
+                            else {
+                                var typeName = ParseDottableIdentifier ();
+                                innerDecl = new ES_AstTypeDeclaration_TypeName (dottableId, typeName);
+                            }
+                        } else
+                            innerDecl = new ES_AstTypeDeclaration_TypeName (dottableId);
                     }
                 } else if (tkPair.tk.Type == EchelonScriptTokenType.Asterisk) {
                     tokenizer.NextToken ();
@@ -1175,6 +1195,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             }
 
             var codeUnit = new ES_AbstractSyntaxTree (
+                sourceText,
                 importsList.ToArray (),
                 aliasesList.ToArray (),
                 namespacesList.ToArray (),
@@ -1200,18 +1221,190 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                 AccessModifier = ES_AccessModifier.Private,
                 Static = false,
                 Const = false,
+                VirtualnessModifier = ES_VirtualnessModifier.None,
             };
 
             var namespaceName = ParseDottableUserIdentifier ();
-            var namespaceContents = ParseAggregateOrNamespace (null, defaultModifiers, true, out var endTk);
+            var namespaceContents = ParseNamespaceContents (defaultModifiers, out var endTk);
 
             return new ES_AstNamespace (namespaceName, namespaceContents, namespaceTk, endTk);
         }
 
+        protected ES_AstNode? [] ParseNamespaceContents (ES_AggregateModifiers defaultModifiers, out EchelonScriptToken endTk) {
+            var tkPair = tokenizer.NextToken ();
+            if (EnsureToken (tkPair.tk, EchelonScriptTokenType.BraceOpen, null) != EnsureTokenResult.Correct) {
+                errorsList.Add (ES_FrontendErrors.GenExpectedXGotY ("'{'", tkPair.tk));
+                endTk = new EchelonScriptToken { TextStartPos = tkPair.tk.TextStartPos, };
+                return Array.Empty<ES_AstNode?> ();
+            }
+
+            using var contents = new StructPooledList<ES_AstNode?> (CL_ClearMode.Auto);
+            ES_AggregateModifiers currentModifiers = new ES_AggregateModifiers ();
+            currentModifiers.ResetToNull ();
+
+            while (true) {
+                tkPair = tokenizer.PeekNextToken ();
+
+                if (tkPair.tk.Type == EchelonScriptTokenType.EOF) {
+                    errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_FrontendErrors.UnexpectedEOF));
+                    endTk = tkPair.tk;
+                    break;
+                }
+
+                if (tkPair.tk.Type == EchelonScriptTokenType.BraceClose) {
+                    endTk = tokenizer.NextToken ().tk;
+                    if (currentModifiers.AnySet ())
+                        errorsList.Add (ES_FrontendErrors.GenExpectedAggregateContent (tkPair.tk));
+
+                    break;
+                } else if (tkPair.tk.Type == EchelonScriptTokenType.Identifier) {
+                    var textSpan = tkPair.tk.Text.Span;
+                    var textString = StringPool.Shared.GetOrAdd (textSpan);
+
+                    switch (textString) {
+                        /* Access modifiers */
+                        case ES_Keywords.Public:
+                            ParseAggregate_SetDocComment (ref currentModifiers, tkPair.doc);
+                            tokenizer.NextToken ();
+
+                            if (CheckNoAccessModifierErrors (tkPair.tk, currentModifiers))
+                                currentModifiers.AccessModifier = ES_AccessModifier.Public;
+                            break;
+                        case ES_Keywords.Internal:
+                            ParseAggregate_SetDocComment (ref currentModifiers, tkPair.doc);
+                            tokenizer.NextToken ();
+
+                            if (CheckNoAccessModifierErrors (tkPair.tk, currentModifiers))
+                                currentModifiers.AccessModifier = ES_AccessModifier.Internal;
+                            break;
+                        case ES_Keywords.Private:
+                            ParseAggregate_SetDocComment (ref currentModifiers, tkPair.doc);
+                            tokenizer.NextToken ();
+
+                            if (CheckNoAccessModifierErrors (tkPair.tk, currentModifiers))
+                                currentModifiers.AccessModifier = ES_AccessModifier.Private;
+                            break;
+                        case ES_Keywords.Protected:
+                            ParseAggregate_SetDocComment (ref currentModifiers, tkPair.doc);
+                            tokenizer.NextToken ();
+
+                            errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_FrontendErrors.InvalidAccessModForNamespaceContent));
+                            break;
+
+                        /* Virtualness modifiers */
+                        case ES_Keywords.Abstract:
+                            ParseAggregate_SetDocComment (ref currentModifiers, tkPair.doc);
+                            tokenizer.NextToken ();
+
+                            if (currentModifiers.Static == true)
+                                errorsList.Add (ES_FrontendErrors.GenInvalidModifier ("abstract", tkPair.tk));
+
+                            currentModifiers.VirtualnessModifier = ES_VirtualnessModifier.Abstract;
+                            break;
+                        case ES_Keywords.Virtual:
+                            ParseAggregate_SetDocComment (ref currentModifiers, tkPair.doc);
+                            tokenizer.NextToken ();
+
+                            errorsList.Add (ES_FrontendErrors.GenInvalidModifierForContext ("virtual", tkPair.tk));
+                            break;
+                        case ES_Keywords.Override:
+                            ParseAggregate_SetDocComment (ref currentModifiers, tkPair.doc);
+                            tokenizer.NextToken ();
+
+                            errorsList.Add (ES_FrontendErrors.GenInvalidModifierForContext ("override", tkPair.tk));
+                            break;
+
+                        /* Other modifiers */
+                        case ES_Keywords.Static:
+                            ParseAggregate_SetDocComment (ref currentModifiers, tkPair.doc);
+                            tokenizer.NextToken ();
+
+                            if (currentModifiers.Static == true)
+                                errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_FrontendErrors.ElementAlreadyStatic));
+
+                            currentModifiers.Static = true;
+                            break;
+                        case ES_Keywords.Const:
+                            if (tokenizer.PeekNextToken (1).tk.Type != EchelonScriptTokenType.ParenOpen) {
+                                ParseAggregate_SetDocComment (ref currentModifiers, tkPair.doc);
+                                tokenizer.NextToken ();
+
+                                if (currentModifiers.Const == true)
+                                    errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_FrontendErrors.ElementAlreadyConst));
+
+                                currentModifiers.Const = true;
+                                break;
+                            } else
+                                goto default;
+
+                        case ES_Keywords.Namespace:
+                            endTk = new EchelonScriptToken { TextStartPos = tkPair.tk.TextStartPos, };
+                            errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_FrontendErrors.NamespaceMissingBrace));
+                            return contents.ToArray ();
+
+                        case ES_Keywords.Class:
+                            ParseAggregate_SetDocComment (ref currentModifiers, tkPair.doc);
+
+                            currentModifiers.CopyDefaultsToUndefined (defaultModifiers);
+                            contents.Add (ParseClass (currentModifiers));
+
+                            currentModifiers.ResetToNull ();
+                            break;
+
+                        case ES_Keywords.Struct:
+                            ParseAggregate_SetDocComment (ref currentModifiers, tkPair.doc);
+
+                            currentModifiers.CopyDefaultsToUndefined (defaultModifiers);
+                            contents.Add (ParseStruct (currentModifiers));
+
+                            currentModifiers.ResetToNull ();
+                            break;
+
+                        case ES_Keywords.Enum:
+                            ParseAggregate_SetDocComment (ref currentModifiers, tkPair.doc);
+
+                            currentModifiers.CopyDefaultsToUndefined (defaultModifiers);
+                            contents.Add (ParseEnum (currentModifiers));
+
+                            currentModifiers.ResetToNull ();
+                            break;
+
+                        case ES_Keywords.Immutable:
+                            goto default;
+
+                        default:
+                            ParseAggregate_SetDocComment (ref currentModifiers, tkPair.doc);
+
+                            currentModifiers.CopyDefaultsToUndefined (defaultModifiers);
+                            contents.Add (ParseFunction (currentModifiers, null, false));
+
+                            currentModifiers.ResetToNull ();
+                            break;
+                    }
+                } else {
+                    if (tkPair.tk.Type == EchelonScriptTokenType.ParenOpen) {
+                        ParseAggregate_SetDocComment (ref currentModifiers, tkPair.doc);
+
+                        currentModifiers.CopyDefaultsToUndefined (defaultModifiers);
+                        contents.Add (ParseFunction (currentModifiers, null, false));
+
+                        currentModifiers.ResetToNull ();
+                    } else {
+                        tokenizer.NextToken ();
+
+                        errorsList.Add (ES_FrontendErrors.GenExpectedXGotY ("a keyword, function definition or '}'", tkPair.tk));
+                    }
+                }
+            }
+
+            return contents.ToArray ();
+        }
+
         #region Aggregates
 
-        protected ES_AstNode? [] ParseAggregateOrNamespace (
-            ES_AggregateModifiers? baseModifiersArg, ES_AggregateModifiers defaultModifiers, bool isNamespace,
+        protected ES_AstNode? [] ParseAggregate (
+            ES_AggregateModifiers? baseModifiersArg, ES_AggregateModifiers defaultModifiers,
+            bool abstractsAllowed, bool virtualsAllowed, bool overridesAllowed,
             out EchelonScriptToken endTk
         ) {
             ES_AggregateModifiers baseModifiers;
@@ -1263,10 +1456,6 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                         case ES_Keywords.Protected:
                             ParseAggregate_SetDocComment (ref currentModifiers, tkPair.doc);
                             tokenizer.NextToken ();
-                            if (isNamespace) {
-                                errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_FrontendErrors.InvalidAccessModForNamespaceContent));
-                                break;
-                            }
 
                             if (EnsureTokenPeek (EchelonScriptTokenType.Identifier, ES_Keywords.Internal) == EnsureTokenResult.Correct) {
                                 tokenizer.NextToken ();
@@ -1288,11 +1477,53 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                         case ES_Keywords.Private:
                             ParseAggregate_SetDocComment (ref currentModifiers, tkPair.doc);
                             tokenizer.NextToken ();
-                            if (isNamespace) {
-                                errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_FrontendErrors.InvalidAccessModForNamespaceContent));
-                                break;
-                            } else if (CheckNoAccessModifierErrors (tkPair.tk, currentModifiers) && CheckNoAccessModifierErrors (tkPair.tk, baseModifiers))
+
+                            if (CheckNoAccessModifierErrors (tkPair.tk, currentModifiers) && CheckNoAccessModifierErrors (tkPair.tk, baseModifiers))
                                 currentModifiers.AccessModifier = ES_AccessModifier.Private;
+                            break;
+
+                        /* Virtualness modifiers */
+                        case ES_Keywords.Abstract:
+                            ParseAggregate_SetDocComment (ref currentModifiers, tkPair.doc);
+                            tokenizer.NextToken ();
+
+                            if (currentModifiers.Static == true)
+                                errorsList.Add (ES_FrontendErrors.GenInvalidModifier (ES_Keywords.Abstract, tkPair.tk));
+                            if (currentModifiers.VirtualnessModifier != null)
+                                errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_FrontendErrors.MultipleVirtualnessMods));
+
+                            if (abstractsAllowed)
+                                currentModifiers.VirtualnessModifier = ES_VirtualnessModifier.Abstract;
+                            else
+                                errorsList.Add (ES_FrontendErrors.GenInvalidModifierForContext (ES_Keywords.Abstract, tkPair.tk));
+                            break;
+                        case ES_Keywords.Virtual:
+                            ParseAggregate_SetDocComment (ref currentModifiers, tkPair.doc);
+                            tokenizer.NextToken ();
+
+                            if (currentModifiers.Static == true)
+                                errorsList.Add (ES_FrontendErrors.GenInvalidModifier (ES_Keywords.Virtual, tkPair.tk));
+                            if (currentModifiers.VirtualnessModifier != null)
+                                errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_FrontendErrors.MultipleVirtualnessMods));
+
+                            if (virtualsAllowed)
+                                currentModifiers.VirtualnessModifier = ES_VirtualnessModifier.Virtual;
+                            else
+                                errorsList.Add (ES_FrontendErrors.GenInvalidModifierForContext (ES_Keywords.Virtual, tkPair.tk));
+                            break;
+                        case ES_Keywords.Override:
+                            ParseAggregate_SetDocComment (ref currentModifiers, tkPair.doc);
+                            tokenizer.NextToken ();
+
+                            if (currentModifiers.Static == true)
+                                errorsList.Add (ES_FrontendErrors.GenInvalidModifier (ES_Keywords.Override, tkPair.tk));
+                            if (currentModifiers.VirtualnessModifier != null)
+                                errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_FrontendErrors.MultipleVirtualnessMods));
+
+                            if (overridesAllowed)
+                                currentModifiers.VirtualnessModifier = ES_VirtualnessModifier.Override;
+                            else
+                                errorsList.Add (ES_FrontendErrors.GenInvalidModifierForContext (ES_Keywords.Override, tkPair.tk));
                             break;
 
                         /* Other modifiers */
@@ -1318,38 +1549,6 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                             } else
                                 goto ParseFunctionOrVariable;
 
-                        case ES_Keywords.Namespace:
-                            endTk = new EchelonScriptToken { TextStartPos = tkPair.tk.TextStartPos, };
-                            errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_FrontendErrors.NamespaceMissingBrace));
-                            return contents.ToArray ();
-
-                        case ES_Keywords.Class:
-                            ParseAggregate_SetDocComment (ref currentModifiers, tkPair.doc);
-
-                            currentModifiers.CopyDefaultsToUndefined (defaultModifiers);
-                            contents.Add (ParseClass (currentModifiers));
-
-                            currentModifiers.ResetToNull ();
-                            break;
-
-                        case ES_Keywords.Struct:
-                            ParseAggregate_SetDocComment (ref currentModifiers, tkPair.doc);
-
-                            currentModifiers.CopyDefaultsToUndefined (defaultModifiers);
-                            contents.Add (ParseStruct (currentModifiers));
-
-                            currentModifiers.ResetToNull ();
-                            break;
-
-                        case ES_Keywords.Enum:
-                            ParseAggregate_SetDocComment (ref currentModifiers, tkPair.doc);
-
-                            currentModifiers.CopyDefaultsToUndefined (defaultModifiers);
-                            contents.Add (ParseEnum (currentModifiers));
-
-                            currentModifiers.ResetToNull ();
-                            break;
-
                         case ES_Keywords.Immutable:
                             goto ParseFunctionOrVariable;
 
@@ -1361,10 +1560,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
 
                             currentModifiers.CopyDefaultsToUndefined (baseModifiers);
                             currentModifiers.CopyDefaultsToUndefined (defaultModifiers);
-                            if (!isNamespace)
-                                contents.AddRange (ParseFunctionOrVariable (currentModifiers));
-                            else
-                                contents.Add (ParseFunction (currentModifiers, null));
+                            contents.AddRange (ParseFunctionOrVariable (currentModifiers));
 
                             currentModifiers.ResetToNull ();
                             break;
@@ -1374,27 +1570,25 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                         ParseAggregate_SetDocComment (ref currentModifiers, tkPair.doc);
 
                         currentModifiers.CopyDefaultsToUndefined (defaultModifiers);
-                        if (!isNamespace)
-                            contents.AddRange (ParseFunctionOrVariable (currentModifiers));
-                        else
-                            contents.Add (ParseFunction (currentModifiers, null));
+                        contents.AddRange (ParseFunctionOrVariable (currentModifiers));
 
                         currentModifiers.ResetToNull ();
                     } else {
-                        if (!isNamespace && tkPair.tk.Type == EchelonScriptTokenType.BraceOpen && currentModifiers.AnySet ()) {
+                        if (tkPair.tk.Type == EchelonScriptTokenType.BraceOpen && currentModifiers.AnySet ()) {
                             currentModifiers.CopyDefaultsToUndefined (baseModifiers);
 
-                            var newContents = ParseAggregateOrNamespace (currentModifiers, defaultModifiers, false, out var _);
+                            var newContents = ParseAggregate (
+                                currentModifiers, defaultModifiers,
+                                abstractsAllowed, virtualsAllowed, overridesAllowed,
+                                out var _
+                            );
                             contents.AddRange (newContents);
 
                             currentModifiers.ResetToNull ();
                         } else {
                             tokenizer.NextToken ();
 
-                            if (!isNamespace)
-                                errorsList.Add (ES_FrontendErrors.GenExpectedXGotY ("a keyword, function definition, variable definition or '}'", tkPair.tk));
-                            else
-                                errorsList.Add (ES_FrontendErrors.GenExpectedXGotY ("a keyword, function definition or '}'", tkPair.tk));
+                            errorsList.Add (ES_FrontendErrors.GenExpectedXGotY ("a keyword, function definition, variable definition or '}'", tkPair.tk));
                         }
                     }
                 }
@@ -1403,14 +1597,14 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             return contents.ToArray ();
         }
 
-        protected ES_AstDottableIdentifier []? ParseInheritanceList () {
+        protected ES_AstTypeDeclaration_TypeName []? ParseInheritanceList () {
             var tkPair = tokenizer.PeekNextToken ();
 
             if (tkPair.tk.Type != EchelonScriptTokenType.Colon)
                 return null;
             tokenizer.NextToken ();
 
-            using var listContents = new StructPooledList<ES_AstDottableIdentifier> (CL_ClearMode.Auto);
+            using var listContents = new StructPooledList<ES_AstTypeDeclaration_TypeName> (CL_ClearMode.Auto);
 
             while (true) {
                 tkPair = tokenizer.PeekNextToken ();
@@ -1422,8 +1616,21 @@ namespace EchelonScriptCompiler.Frontend.Parser {
 
                 if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Identifier, null) != EnsureTokenResult.Correct)
                     errorsList.Add (ES_FrontendErrors.GenExpectedIdentifier (tkPair.tk));
-                else
-                    listContents.Add (ParseDottableUserIdentifier ());
+                else {
+                    var id = ParseDottableIdentifier ();
+
+                    if (tokenizer.PeekNextToken ().tk.Type == EchelonScriptTokenType.NamespaceOp) {
+                        tokenizer.NextToken ();
+
+                        if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Identifier, null) != EnsureTokenResult.Correct)
+                            errorsList.Add (ES_FrontendErrors.GenExpectedIdentifier (tkPair.tk));
+                        else {
+                            var typeName = ParseDottableIdentifier ();
+                            listContents.Add (new ES_AstTypeDeclaration_TypeName (id, typeName));
+                        }
+                    } else
+                        listContents.Add (new ES_AstTypeDeclaration_TypeName (id));
+                }
 
                 tkPair = tokenizer.PeekNextToken ();
                 if (tkPair.tk.Type == EchelonScriptTokenType.Comma)
@@ -1458,7 +1665,16 @@ namespace EchelonScriptCompiler.Frontend.Parser {
 
                 if (varModifiers.Const == true)
                     errorsList.Add (new EchelonScriptErrorMessage (functionName, ES_FrontendErrors.ConstOnlyOnFunctions));
+
+                if (varModifiers.VirtualnessModifier == ES_VirtualnessModifier.Abstract)
+                    errorsList.Add (ES_FrontendErrors.GenInvalidModifier ("abstract", functionName));
+                else if (varModifiers.VirtualnessModifier == ES_VirtualnessModifier.Virtual)
+                    errorsList.Add (ES_FrontendErrors.GenInvalidModifier ("virtual", functionName));
+                else if (varModifiers.VirtualnessModifier == ES_VirtualnessModifier.Override)
+                    errorsList.Add (ES_FrontendErrors.GenInvalidModifier ("override", functionName));
+
                 varModifiers.Const = false;
+                varModifiers.VirtualnessModifier = ES_VirtualnessModifier.None;
 
                 tkPair = tokenizer.PeekNextToken ();
                 if (tkPair.tk.Type == EchelonScriptTokenType.Equals) {
@@ -1505,7 +1721,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
 
             var nextTkPair = tokenizer.PeekNextToken (1);
             if (nextTkPair.tk.Type == EchelonScriptTokenType.ParenOpen)
-                return new ES_AstNode? [] { ParseFunction (modifiers, typeDecl) };
+                return new ES_AstNode? [] { ParseFunction (modifiers, typeDecl, true) };
             else
                 return ParseMemberVar (modifiers, typeDecl);
         }
@@ -1519,6 +1735,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                 AccessModifier = ES_AccessModifier.Private,
                 Static = false,
                 Const = false,
+                VirtualnessModifier = ES_VirtualnessModifier.None,
             };
 
             // Parse the 'class' keyword.
@@ -1533,9 +1750,19 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             else
                 tokenizer.NextToken ();
 
+            if (classModifiers.Static == true)
+                errorsList.Add (ES_FrontendErrors.GenInvalidModifier ("static", nameTkPair.tk));
             if (classModifiers.Const == true)
-                errorsList.Add (new EchelonScriptErrorMessage (nameTkPair.tk, ES_FrontendErrors.ConstOnlyOnFunctions));
+                errorsList.Add (ES_FrontendErrors.GenInvalidModifier ("const", nameTkPair.tk));
+
+            if (classModifiers.VirtualnessModifier == ES_VirtualnessModifier.Virtual)
+                errorsList.Add (ES_FrontendErrors.GenInvalidModifier ("virtual", nameTkPair.tk));
+            else if (classModifiers.VirtualnessModifier == ES_VirtualnessModifier.Override)
+                errorsList.Add (ES_FrontendErrors.GenInvalidModifier ("override", nameTkPair.tk));
+
+            classModifiers.Static = false;
             classModifiers.Const = false;
+            classModifiers.VirtualnessModifier = ES_VirtualnessModifier.None;
 
             // Error out if this is a static class and it has an inheritance list.
             var colonTkPair = tokenizer.PeekNextToken ();
@@ -1545,10 +1772,10 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             // Parse the inheritance list.
             var inheritanceList = ParseInheritanceList ();
             if (inheritanceList == null)
-                inheritanceList = Array.Empty<ES_AstDottableIdentifier> ();
+                inheritanceList = Array.Empty<ES_AstTypeDeclaration_TypeName> ();
 
             // Parse the class' contents.
-            var contents = ParseAggregateOrNamespace (null, defaultModifiers, false, out var endTk);
+            var contents = ParseAggregate (null, defaultModifiers, true, true, true, out var endTk);
 
             // Create the class AST node.
             var classDef = new ES_AstClassDefinition (
@@ -1556,6 +1783,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
 
                 classModifiers.AccessModifier!.Value,
                 classModifiers.Static!.Value,
+                classModifiers.VirtualnessModifier == ES_VirtualnessModifier.Abstract,
 
                 nameTkPair.tk,
                 inheritanceList,
@@ -1578,6 +1806,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                 AccessModifier = ES_AccessModifier.Private,
                 Static = false,
                 Const = false,
+                VirtualnessModifier = ES_VirtualnessModifier.None,
             };
 
             // Parse the 'struct' keyword.
@@ -1592,9 +1821,21 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             else
                 tokenizer.NextToken ();
 
+            if (structModifiers.Static == true)
+                errorsList.Add (ES_FrontendErrors.GenInvalidModifier ("static", nameTkPair.tk));
             if (structModifiers.Const == true)
-                errorsList.Add (new EchelonScriptErrorMessage (nameTkPair.tk, ES_FrontendErrors.ConstOnlyOnFunctions));
+                errorsList.Add (ES_FrontendErrors.GenInvalidModifier ("const", nameTkPair.tk));
+
+            if (structModifiers.VirtualnessModifier == ES_VirtualnessModifier.Abstract)
+                errorsList.Add (ES_FrontendErrors.GenInvalidModifier ("abstract", nameTkPair.tk));
+            else if (structModifiers.VirtualnessModifier == ES_VirtualnessModifier.Virtual)
+                errorsList.Add (ES_FrontendErrors.GenInvalidModifier ("virtual", nameTkPair.tk));
+            else if (structModifiers.VirtualnessModifier == ES_VirtualnessModifier.Override)
+                errorsList.Add (ES_FrontendErrors.GenInvalidModifier ("override", nameTkPair.tk));
+
+            structModifiers.Static = false;
             structModifiers.Const = false;
+            structModifiers.VirtualnessModifier = ES_VirtualnessModifier.None;
 
             // Error out if this is a static struct and it has an inheritance list.
             var colonTkPair = tokenizer.PeekNextToken ();
@@ -1604,10 +1845,10 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             // Parse the inheritance list.
             var interfacesList = ParseInheritanceList ();
             if (interfacesList == null)
-                interfacesList = Array.Empty<ES_AstDottableIdentifier> ();
+                interfacesList = Array.Empty<ES_AstTypeDeclaration_TypeName> ();
 
             // Parse the struct's contents
-            var contents = ParseAggregateOrNamespace (null, defaultModifiers, false, out var endTk);
+            var contents = ParseAggregate (null, defaultModifiers, false, false, false, out var endTk);
 
             // Create the struct AST node.
             var structDef = new ES_AstStructDefinition (
@@ -1642,9 +1883,21 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             // Parse the enum's name.
             ParseUserIdentifier (out var nameToken);
 
+            if (enumModifiers.Static == true)
+                errorsList.Add (ES_FrontendErrors.GenInvalidModifier ("static", nameToken));
             if (enumModifiers.Const == true)
-                errorsList.Add (new EchelonScriptErrorMessage (nameToken, ES_FrontendErrors.ConstOnlyOnFunctions));
+                errorsList.Add (ES_FrontendErrors.GenInvalidModifier ("const", nameToken));
+
+            if (enumModifiers.VirtualnessModifier == ES_VirtualnessModifier.Abstract)
+                errorsList.Add (ES_FrontendErrors.GenInvalidModifier ("abstract", nameToken));
+            else if (enumModifiers.VirtualnessModifier == ES_VirtualnessModifier.Virtual)
+                errorsList.Add (ES_FrontendErrors.GenInvalidModifier ("virtual", nameToken));
+            else if (enumModifiers.VirtualnessModifier == ES_VirtualnessModifier.Override)
+                errorsList.Add (ES_FrontendErrors.GenInvalidModifier ("override", nameToken));
+
+            enumModifiers.Static = false;
             enumModifiers.Const = false;
+            enumModifiers.VirtualnessModifier = ES_VirtualnessModifier.None;
 
             // Parse the enum's type, if any.
             EchelonScriptToken? baseType = null;
@@ -1724,7 +1977,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             return enumDef;
         }
 
-        protected ES_AstFunctionDefinition? ParseFunction (ES_AggregateModifiers funcModifiers, ES_AstTypeDeclaration? returnType) {
+        protected ES_AstFunctionDefinition? ParseFunction (ES_AggregateModifiers funcModifiers, ES_AstTypeDeclaration? returnType, bool virtualsValid) {
             // Check if all the modifiers are defined/set. (If not, someone forgot to fill them with the defaults.)
             if (funcModifiers.AnyUndefined ())
                 throw new ArgumentException ("Modifiers set contains undefined values.", nameof (funcModifiers));
@@ -1740,7 +1993,39 @@ namespace EchelonScriptCompiler.Frontend.Parser {
 
             var argumentsList = ParseArgumentsDefinitionList ();
 
-            var statements = ParseStatementsBlock (out var endTk);
+            if (!virtualsValid) {
+                if (funcModifiers.VirtualnessModifier == ES_VirtualnessModifier.Abstract)
+                    errorsList.Add (ES_FrontendErrors.GenInvalidModifier ("abstract", functionName));
+                else if (funcModifiers.VirtualnessModifier == ES_VirtualnessModifier.Virtual)
+                    errorsList.Add (ES_FrontendErrors.GenInvalidModifierForContext ("virtual", functionName));
+                else if (funcModifiers.VirtualnessModifier == ES_VirtualnessModifier.Override)
+                    errorsList.Add (ES_FrontendErrors.GenInvalidModifierForContext ("override", functionName));
+
+                funcModifiers.VirtualnessModifier = ES_VirtualnessModifier.None;
+            }
+
+            bool exprBody;
+            ES_AstStatement? [] statements;
+            EchelonScriptToken endTk;
+            if (tokenizer.PeekNextToken ().tk.Type == EchelonScriptTokenType.LambdaArrow) {
+                tokenizer.NextToken ();
+
+                var expr = ParseExpression ();
+
+                endTk = tokenizer.PeekNextToken ().tk;
+
+                if (EnsureToken (endTk, EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)
+                    errorsList.Add (ES_FrontendErrors.GenExpectedXGotY ("';'", endTk));
+                else
+                    tokenizer.NextToken ();
+
+                statements = new [] { new ES_AstExpressionStatement (expr, endTk) };
+
+                exprBody = true;
+            } else {
+                statements = ParseStatementsBlock (out endTk);
+                exprBody = false;
+            }
 
             var functionDef = new ES_AstFunctionDefinition (
                 funcModifiers.AccessModifier!.Value,
@@ -1748,11 +2033,13 @@ namespace EchelonScriptCompiler.Frontend.Parser {
 
                 funcModifiers.Static!.Value,
                 funcModifiers.Const!.Value,
+                funcModifiers.VirtualnessModifier!.Value,
 
                 functionName,
                 returnType,
                 argumentsList,
 
+                exprBody,
                 statements,
                 endTk
             );
@@ -2044,7 +2331,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                 errorsList.Add (ES_FrontendErrors.GenExpectedIdentifier (tkPair.tk));
                 return null;
             }
-            var originalName = ParseDottableUserIdentifier ();
+            var originalName = ParseTypeDeclaration ();
 
             var endTk = tokenizer.NextToken ().tk;
             if (EnsureToken (endTk, EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)

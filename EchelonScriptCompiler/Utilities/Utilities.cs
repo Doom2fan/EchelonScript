@@ -7,7 +7,12 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+using System;
+using System.Runtime.InteropServices;
+using Microsoft.Toolkit.HighPerformance.Buffers;
+
 namespace EchelonScriptCompiler.Utilities {
+    [StructLayout(LayoutKind.Sequential)]
     public unsafe struct Pointer<T>
         where T : unmanaged {
         public T* Address;
@@ -22,6 +27,28 @@ namespace EchelonScriptCompiler.Utilities {
 
         public static implicit operator Pointer<T> (T* pointer) {
             return new Pointer<T> (pointer);
+        }
+
+        public static implicit operator IntPtr (Pointer<T> pointer) {
+            return (IntPtr) pointer.Address;
+        }
+    }
+
+    public static class ES_Utils {
+        public static string GetPooledString (this Span<char> chars) {
+            return StringPool.Shared.GetOrAdd (chars);
+        }
+
+        public static string GetPooledString (this ReadOnlySpan<char> chars) {
+            return StringPool.Shared.GetOrAdd (chars);
+        }
+
+        public static string GetPooledString (this Memory<char> chars) {
+            return StringPool.Shared.GetOrAdd (chars.Span);
+        }
+
+        public static string GetPooledString (this ReadOnlyMemory<char> chars) {
+            return StringPool.Shared.GetOrAdd (chars.Span);
         }
     }
 }

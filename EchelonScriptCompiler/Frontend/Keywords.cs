@@ -49,6 +49,10 @@ namespace EchelonScriptCompiler.Frontend {
 
         public const string Static = "static";
 
+        public const string Virtual = "virtual";
+        public const string Abstract = "abstract";
+        public const string Override = "override";
+
         public const string Class = "class";
         public const string Struct = "struct";
         public const string Enum = "enum";

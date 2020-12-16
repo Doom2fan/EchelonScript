@@ -13,6 +13,6 @@ using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Toolkit.HighPerformance.Buffers;
 
-namespace EchelonScriptCompiler.Data {
+namespace EchelonScriptCompiler.Data.Types {
 
 }

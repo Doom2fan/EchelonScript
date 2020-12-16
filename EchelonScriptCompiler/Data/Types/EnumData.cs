@@ -8,31 +8,39 @@
  */
 
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.InteropServices;
 
 namespace EchelonScriptCompiler.Data.Types {
-    public unsafe struct ES_InterfaceData {
+    [StructLayout (LayoutKind.Sequential, Pack = 1)]
+    [ES_ExportAggregate (new [] { "EchelonScript", "Reflection" }, "EnumData", ES_ExportAttributeBase.AggregateType.Struct)]
+    public unsafe struct ES_EnumData {
         public unsafe sealed class Builder {
             #region ================== Instance fields
 
-            private ES_InterfaceData* interfaceData;
+            private ES_EnumData* enumData;
 
             #endregion
 
             #region ================== Instance properties
 
-            /// <summary>The pointer to the interface this builder is for.</summary>
-            public ES_InterfaceData* InterfaceData => interfaceData;
+            /// <summary>The pointer to the enum this builder is for.</summary>
+            public ES_EnumData* EnumData => enumData;
+
+            public ES_TypeInfo* BaseType {
+                get => enumData->baseType;
+                set => enumData->baseType = value;
+            }
 
             #endregion
 
             #region ================== Constructors
 
-            internal Builder ([DisallowNull] ES_InterfaceData* data, ES_AccessModifier accessMod,
+            internal Builder ([DisallowNull] ES_EnumData* data, ES_AccessModifier accessMod,
                 ArrayPointer<byte> typeName, ArrayPointer<byte> fullyQualifiedName,
                 ArrayPointer<byte> sourceUnit
             ) {
-                interfaceData = data;
-                data->TypeInfo = new ES_TypeInfo (ES_TypeTag.Interface, accessMod, sourceUnit, typeName, fullyQualifiedName);
+                enumData = data;
+                data->TypeInfo = new ES_TypeInfo (ES_TypeTag.Enum, accessMod, sourceUnit, typeName, fullyQualifiedName);
             }
 
             #endregion
@@ -41,10 +49,13 @@ namespace EchelonScriptCompiler.Data.Types {
         #region ================== Instance fields
 
         public ES_TypeInfo TypeInfo;
+        private ES_TypeInfo* baseType;
 
         #endregion
 
         #region ================== Instance properties
+
+        public ES_TypeInfo* BaseType => baseType;
 
         #endregion
     }

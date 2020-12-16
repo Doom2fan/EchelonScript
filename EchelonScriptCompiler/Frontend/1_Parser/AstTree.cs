@@ -8,7 +8,9 @@
  */
 
 using System;
+using ChronosLib.Pooled;
 using EchelonScriptCompiler.Data;
+using EchelonScriptCompiler.Utilities;
 
 namespace EchelonScriptCompiler.Frontend {
     public enum ES_ArgumentType {
@@ -39,6 +41,8 @@ namespace EchelonScriptCompiler.Frontend {
     }
 
     public class ES_AbstractSyntaxTree : ES_AstNode {
+        public readonly ReadOnlyMemory<char> Source;
+
         public override ES_AstNodeBounds NodeBounds => bounds;
         protected ES_AstNodeBounds bounds;
 
@@ -48,9 +52,12 @@ namespace EchelonScriptCompiler.Frontend {
         public ES_AstNamespace [] Namespaces;
 
         public ES_AbstractSyntaxTree (
+            ReadOnlyMemory<char> source,
             ES_AstImportStatement [] imports, ES_AstTypeAlias [] aliases, ES_AstNamespace [] namespaces,
             ES_AstNodeBounds bounds
         ) : base (1) {
+            Source = source;
+
             ImportStatements = imports;
             TypeAliases = aliases;
             Namespaces = namespaces;
@@ -104,30 +111,33 @@ namespace EchelonScriptCompiler.Frontend {
         public int GetStringLength () {
             int strLen = 0;
 
-            for (int i = 0; i < Parts.Length; i++) {
-                if (i > 0) // Account for the period
-                    strLen++;
-
-                strLen += Parts [i].Text.Length;
-            }
+            foreach (var part in Parts)
+                strLen += part.Text.Length;
+            strLen += Math.Max (Parts.Length - 1, 0);
 
             return strLen;
+        }
+
+        public PooledArray<char> ToPooledChars () {
+            var str = PooledArray<char>.GetArray (GetStringLength ());
+
+            ToString (str);
+
+            return str;
+        }
+
+        public string ToPooledString () {
+            using var str = PooledArray<char>.GetArray (GetStringLength ());
+
+            ToString (str);
+
+            return str.Span.GetPooledString ();
         }
 
         public override string ToString () {
             Span<char> idText = stackalloc char [GetStringLength ()];
 
-            int strLen = 0;
-            for (int i = 0; i < Parts.Length; i++) {
-                if (i > 0) { // Account for the period
-                    idText [strLen] = '.';
-                    strLen++;
-                }
-
-                var partSpan = Parts [i].Text.Span;
-                partSpan.CopyTo (idText.Slice (strLen, partSpan.Length));
-                strLen += partSpan.Length;
-            }
+            ToString (idText);
 
             return new string (idText);
         }
@@ -155,24 +165,69 @@ namespace EchelonScriptCompiler.Frontend {
     #region Type declaration
 
     public abstract class ES_AstTypeDeclaration : ES_AstNode {
+        public const string NullInnerName = "INVALID";
+
         public ES_AstTypeDeclaration (int nothing) : base (1) { }
+
+        public abstract int GetStringLength ();
+
+        public abstract void ToString (Span<char> chars);
+
+        public override string ToString () {
+            using var chars = PooledArray<char>.GetArray (GetStringLength ());
+            ToString (chars);
+
+            return new string (chars.Span);
+        }
     }
 
     public class ES_AstTypeDeclaration_TypeName : ES_AstTypeDeclaration {
         public override ES_AstNodeBounds NodeBounds => TypeName.NodeBounds;
 
+        public ES_AstDottableIdentifier? Namespace;
         public ES_AstDottableIdentifier TypeName;
 
         public ES_AstTypeDeclaration_TypeName (ES_AstDottableIdentifier name) : base (1) {
+            Namespace = null;
             TypeName = name;
         }
 
-        public override string ToString () {
-            return TypeName.ToString ();
+        public ES_AstTypeDeclaration_TypeName (ES_AstDottableIdentifier nm, ES_AstDottableIdentifier name) : base (1) {
+            Namespace = nm;
+            TypeName = name;
+        }
+
+        public override int GetStringLength () {
+            if (Namespace == null)
+                return TypeName.GetStringLength ();
+            else
+                return Namespace.GetStringLength () + TypeName.GetStringLength () + 2;
+        }
+
+        public override void ToString (Span<char> chars) {
+            if (chars.Length < GetStringLength ())
+                throw new ArgumentException ("The chars span is too small.", nameof (chars));
+
+            if (Namespace == null)
+                TypeName.ToString (chars);
+            else {
+                int len = 0;
+
+                Namespace.ToString (chars.Slice (len));
+                len += Namespace.GetStringLength ();
+
+                chars [len++] = ':';
+                chars [len++] = ':';
+
+                TypeName.ToString (chars.Slice (len));
+            }
         }
     }
 
     public class ES_AstTypeDeclaration_Basic : ES_AstTypeDeclaration {
+        private const string constStartStr = "const (";
+        private const string immutableStartStr = "immutable (";
+
         public enum DeclType {
             Nullable,
             Pointer,
@@ -193,16 +248,74 @@ namespace EchelonScriptCompiler.Frontend {
             this.bounds = bounds;
         }
 
-        public override string ToString () {
+        public override int GetStringLength () {
+            int innerLen = (Inner?.GetStringLength () ?? NullInnerName.Length);
             switch (Type) {
                 case DeclType.Const:
-                    return $"const ({Inner})";
+                    return constStartStr.Length + innerLen + 1;
+
                 case DeclType.Immutable:
-                    return $"immutable ({Inner})";
+                    return immutableStartStr.Length + innerLen + 1;
+
                 case DeclType.Pointer:
-                    return $"{Inner}*";
                 case DeclType.Nullable:
-                    return $"{Inner}?";
+                    return innerLen + 1;
+
+                default:
+                    throw new NotImplementedException ();
+            }
+        }
+
+        public override void ToString (Span<char> chars) {
+            if (chars.Length < GetStringLength ())
+                throw new ArgumentException ("The chars array is too small.", nameof (chars));
+
+            int innerLen = Inner?.GetStringLength () ?? NullInnerName.Length;
+
+            switch (Type) {
+                case DeclType.Const: {
+                    int len = 0;
+                    constStartStr.AsSpan ().CopyTo (chars);
+                    len += constStartStr.Length;
+
+                    if (Inner != null)
+                        Inner!.ToString (chars.Slice (len));
+                    else
+                        NullInnerName.AsSpan ().CopyTo (chars.Slice (len));
+                    len += innerLen;
+
+                    chars [len] = ')';
+
+                    break;
+                }
+                case DeclType.Immutable: {
+                    int len = 0;
+                    immutableStartStr.AsSpan ().CopyTo (chars);
+                    len += immutableStartStr.Length;
+
+                    if (Inner != null)
+                        Inner!.ToString (chars.Slice (len));
+                    else
+                        NullInnerName.AsSpan ().CopyTo (chars.Slice (len));
+                    len += innerLen;
+
+                    chars [len] = ')';
+
+                    break;
+                }
+
+                case DeclType.Pointer: {
+                    Inner?.ToString (chars);
+                    chars [^0] = '*';
+
+                    break;
+                }
+                case DeclType.Nullable: {
+                    Inner?.ToString (chars);
+                    chars [^0] = '?';
+
+                    break;
+                }
 
                 default:
                     throw new NotImplementedException ();
@@ -227,21 +340,38 @@ namespace EchelonScriptCompiler.Frontend {
             bounds = new ES_AstNodeBounds (inner.NodeBounds.StartPos, closeBracketToken.TextEndPos);
         }
 
-        public override string ToString () {
-            var innerStr = Inner.ToString ();
-
-            Span<char> str = stackalloc char [innerStr!.Length + 3 + Dimensions.Length];
-
-            innerStr.AsSpan ().CopyTo (str.Slice (0, innerStr.Length));
-            str [innerStr.Length] = ' ';
-            str [innerStr.Length + 1] = '[';
+        public override int GetStringLength () {
+            int len = Inner?.GetStringLength () ?? NullInnerName.Length;
+            len++; // Space
+            len++; // Opening bracket
 
             for (int i = 1; i < Dimensions.Length; i++)
-                str [innerStr.Length + 1 + i] = ',';
+                len++;
 
-            str [innerStr.Length + 2 + Dimensions.Length] = ']';
+            len++; // Closing bracket
 
-            return new string (str);
+            return len;
+        }
+
+        public override void ToString (Span<char> chars) {
+            if (chars.Length < GetStringLength ())
+                throw new ArgumentException ("The chars array is too small.", nameof (chars));
+
+            int len = 0;
+
+            if (Inner != null)
+                Inner.ToString (chars);
+            else
+                NullInnerName.AsSpan ().CopyTo (chars);
+            len += Inner?.GetStringLength () ?? NullInnerName.Length;
+
+            chars [len++] = ' ';
+            chars [len++] = '[';
+
+            for (int i = 1; i < Dimensions.Length; i++)
+                chars [len++] = ',';
+
+            chars [len] = ']';
         }
     }
 
@@ -252,6 +382,8 @@ namespace EchelonScriptCompiler.Frontend {
     public abstract class ES_AstAggregateDefinition : ES_AstNode {
         public ES_AccessModifier AccessModifier;
         public ES_AstNode? [] Contents;
+
+        public EchelonScriptToken Name;
 
         public ES_AstAggregateDefinition (ES_AccessModifier accessMod, ES_AstNode? [] contents) : base (1) {
             AccessModifier = accessMod;
@@ -265,17 +397,18 @@ namespace EchelonScriptCompiler.Frontend {
 
         public EchelonScriptToken? DocComment;
         public bool Static;
+        public bool Abstract;
 
-        public EchelonScriptToken Name;
-        public ES_AstDottableIdentifier [] InheritanceList;
+        public ES_AstTypeDeclaration_TypeName [] InheritanceList;
 
         public ES_AstClassDefinition (
-            EchelonScriptToken? docCom, ES_AccessModifier accessMod, bool staticMod,
-            EchelonScriptToken name, ES_AstDottableIdentifier [] inheritance, ES_AstNode? [] contents,
+            EchelonScriptToken? docCom, ES_AccessModifier accessMod, bool staticMod, bool abstractMod,
+            EchelonScriptToken name, ES_AstTypeDeclaration_TypeName [] inheritance, ES_AstNode? [] contents,
             EchelonScriptToken startToken, EchelonScriptToken endToken
         ) : base (accessMod, contents) {
             DocComment = docCom;
             Static = staticMod;
+            Abstract = abstractMod;
 
             Name = name;
             InheritanceList = inheritance;
@@ -294,12 +427,11 @@ namespace EchelonScriptCompiler.Frontend {
         public EchelonScriptToken? DocComment;
         public bool Static;
 
-        public EchelonScriptToken Name;
-        public ES_AstDottableIdentifier [] InterfacesList;
+        public ES_AstTypeDeclaration_TypeName [] InterfacesList;
 
         public ES_AstStructDefinition (
             EchelonScriptToken? docCom, ES_AccessModifier accessMod, bool staticMod,
-            EchelonScriptToken name, ES_AstDottableIdentifier [] interfaces, ES_AstNode? [] contents,
+            EchelonScriptToken name, ES_AstTypeDeclaration_TypeName [] interfaces, ES_AstNode? [] contents,
             EchelonScriptToken startToken, EchelonScriptToken endToken
         ) : base (accessMod, contents) {
             DocComment = docCom;
@@ -388,17 +520,20 @@ namespace EchelonScriptCompiler.Frontend {
 
         public bool Static;
         public bool Const;
+        public ES_VirtualnessModifier VirtualMod;
 
         public EchelonScriptToken Name;
         public ES_AstTypeDeclaration ReturnType;
         public ES_AstFunctionArgumentDefinition [] ArgumentsList;
 
+        public bool ExpressionBody;
         public ES_AstStatement? [] StatementsList;
 
         public ES_AstFunctionDefinition (
             ES_AccessModifier accessMod, EchelonScriptToken? docCom, bool staticMod, bool constMod,
-            EchelonScriptToken name, ES_AstTypeDeclaration retType, ES_AstFunctionArgumentDefinition [] argsList,
-            ES_AstStatement? [] statements,
+            ES_VirtualnessModifier virtualMod, EchelonScriptToken name, ES_AstTypeDeclaration retType,
+            ES_AstFunctionArgumentDefinition [] argsList,
+            bool exprBody, ES_AstStatement? [] statements,
             EchelonScriptToken closeBraceTk
         ) : base (1) {
             AccessModifier = accessMod;
@@ -406,11 +541,13 @@ namespace EchelonScriptCompiler.Frontend {
 
             Static = staticMod;
             Const = constMod;
+            VirtualMod = virtualMod;
 
             Name = name;
             ReturnType = retType;
             ArgumentsList = argsList;
 
+            ExpressionBody = exprBody;
             StatementsList = statements;
 
             bounds = new ES_AstNodeBounds (retType?.NodeBounds.StartPos ?? name.TextStartPos, closeBraceTk.TextEndPos);
@@ -523,10 +660,10 @@ namespace EchelonScriptCompiler.Frontend {
         protected ES_AstNodeBounds bounds;
 
         public EchelonScriptToken AliasName;
-        public ES_AstDottableIdentifier OriginalName;
+        public ES_AstTypeDeclaration? OriginalName;
 
         public ES_AstTypeAlias (
-            EchelonScriptToken aliasName, ES_AstDottableIdentifier origName,
+            EchelonScriptToken aliasName, ES_AstTypeDeclaration? origName,
             EchelonScriptToken startTk, EchelonScriptToken endTk
         ) : base (1) {
             AliasName = aliasName;

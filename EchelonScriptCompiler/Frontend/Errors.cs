@@ -7,6 +7,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+using System;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Frontend;
 using Microsoft.Toolkit.HighPerformance.Buffers;
@@ -46,8 +47,13 @@ namespace EchelonScriptCompiler {
 
         public const string InvalidUserIdentifier = "User identifiers cannot be the same as a keyword or primitive type.";
 
+        public const string InvalidModifier = "The modifier \"{0}\" is not valid for this item.";
+        public const string InvalidModifierForContext = "The modifier \"{0}\" is not valid in this context.";
+
         public const string AccessBeforeStorage = "Access modifiers must come before storage modifiers.";
+        public const string VirtualnessBeforeStorage = "Access modifiers must come before virtualness modifiers.";
         public const string MultipleAccessMods = "Cannot use more than one access modifier.";
+        public const string MultipleVirtualnessMods = "Element already has a virtualness modifier.";
         public const string ElementAlreadyConst = "Element already declared as const.";
         public const string ElementAlreadyStatic = "Element already declared as static.";
         public const string ConstOnlyOnFunctions = "The const keyword can only be applied to functions.";
@@ -113,7 +119,72 @@ namespace EchelonScriptCompiler {
             return GenExpectedXGotY ($"{ES_Keywords.Class}, {ES_Keywords.Struct} or {ES_Keywords.Enum}", token);
         }
 
+        public static EchelonScriptErrorMessage GenInvalidModifier (string modName, EchelonScriptToken token) {
+            var errorMessage = InvalidModifier.Replace ("{0}", modName);
+            return new EchelonScriptErrorMessage (token, errorMessage);
+        }
+
+        public static EchelonScriptErrorMessage GenInvalidModifierForContext (string modName, EchelonScriptToken token) {
+            var errorMessage = InvalidModifierForContext.Replace ("{0}", modName);
+            return new EchelonScriptErrorMessage (token, errorMessage);
+        }
+
         #endregion
+
+        #endregion
+
+        #region Compilation errors
+
+        public const string TypeAlreadyDefined = "The namespace \"{0}\" already contains a definition for \"{1}\".";
+        public const string NamespaceDoesntExist = "The namespace \"{0}\" does not exist.";
+
+        public const string CantFindSymbol = "The symbol \"{0}\" could not be found.";
+
+        public const string InvalidInheritance = "Cannot inherit from type \"{0}\".";
+
+        public const string MultipleBaseClasses = "Classes cannot have multiple base classes.";
+
+        public const string RepeatedInterfaceInList = "Interface \"{0}\" is already in the interfaces list.";
+
+        #region Generation functions
+
+        public static EchelonScriptErrorMessage GenTypeAlreadyDefined (string nmName, string typeName, EchelonScriptToken errorToken) {
+            var errorMessage = TypeAlreadyDefined.Replace ("{0}", nmName).Replace ("{1}", typeName);
+            return new EchelonScriptErrorMessage (errorToken, errorMessage);
+        }
+
+        public static EchelonScriptErrorMessage GenNamespaceDoesntExist (string nmName, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
+            var errorMessage = NamespaceDoesntExist.Replace ("{0}", nmName);
+            return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
+        }
+
+        public static EchelonScriptErrorMessage GenCantFindSymbol (string symbolName, EchelonScriptToken errorToken) {
+            var errorMessage = CantFindSymbol.Replace ("{0}", symbolName);
+            return new EchelonScriptErrorMessage (errorToken, errorMessage);
+        }
+
+        public static EchelonScriptErrorMessage GenCantFindSymbol (string symbolName, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
+            var errorMessage = CantFindSymbol.Replace ("{0}", symbolName);
+            return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
+        }
+
+        public static EchelonScriptErrorMessage GenInvalidInheritance (string symbolName, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
+            var errorMessage = InvalidInheritance.Replace ("{0}", symbolName);
+            return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
+        }
+
+        public static EchelonScriptErrorMessage GenRepeatedInterfaceInList (string interfaceFqn, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
+            var errorMessage = RepeatedInterfaceInList.Replace ("{0}", interfaceFqn);
+            return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
+        }
+
+        #endregion
+
+        #endregion
+
+        #region Exceptions
+
+        public const string ClashingTypeExists = "A clashing type exists. The caller must check for this before calling this function.";
 
         #endregion
     }

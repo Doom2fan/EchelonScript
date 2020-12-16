@@ -20,6 +20,7 @@ namespace EchelonScriptCompiler.Data {
 
         Dot,
         DotDot,
+        NamespaceOp,
 
         AndAnd,
         OrOr,
@@ -125,7 +126,6 @@ namespace EchelonScriptCompiler.Data {
         }
 
         public EchelonScriptErrorMessage (ReadOnlySpan<char> srcText, ES_AstNodeBounds bounds, string? message = null) {
-
             Message = message;
 
             StartPos = bounds.StartPos;
@@ -133,7 +133,7 @@ namespace EchelonScriptCompiler.Data {
 
             EchelonScriptTokenizer.CalcLine (srcText, StartPos, out var curLine, out var curLineStart);
             Line = curLine;
-            Column = EchelonScriptTokenizer.CalcColumn (srcText, curLineStart, Length);
+            Column = EchelonScriptTokenizer.CalcColumn (srcText, curLineStart, StartPos);
         }
 
         public EchelonScriptErrorMessage (string message, int startPos, int length, int line, int column) {
@@ -160,5 +160,13 @@ namespace EchelonScriptCompiler.Data {
         Internal,
         /// <summary>The symbol is accessible from any context.</summary>
         Public,
+    }
+
+
+    public enum ES_VirtualnessModifier {
+        None,
+        Virtual,
+        Abstract,
+        Override,
     }
 }

@@ -15,12 +15,15 @@ using EchelonScriptCompiler.Frontend;
 using EchelonScriptCompiler.Frontend.Parser;
 
 namespace EchelonScriptCompiler {
-    public class EchelonScriptCompiler : IDisposable {
+    public class EchelonScript_Compiler : IDisposable {
         #region ================== Instance fields
 
         protected List<EchelonScriptErrorMessage> errorsList;
         protected EchelonScriptParser parser;
         protected CompilerFrontend frontend;
+
+        protected EchelonScriptEnvironment? environment;
+        protected EchelonScriptEnvironment.Builder? environmentBuilder;
 
         #endregion
 
@@ -32,7 +35,7 @@ namespace EchelonScriptCompiler {
 
         #region ================== Constructors
 
-        public EchelonScriptCompiler () {
+        public EchelonScript_Compiler () {
             errorsList = new List<EchelonScriptErrorMessage> ();
             parser = new EchelonScriptParser (errorsList);
             frontend = new CompilerFrontend (errorsList);
@@ -42,35 +45,69 @@ namespace EchelonScriptCompiler {
 
         #region ================== Instance methods
 
-        public void CompileTranslationUnit (string unitName, ReadOnlySpan<ReadOnlyMemory<char>> codeTransUnit) {
+        public void Setup (out EchelonScriptEnvironment env) {
+            if (environment != null)
+                throw new CompilationException ("The compiler has already been set up!");
+
+            environment = EchelonScriptEnvironment.CreateEnvironment (out environmentBuilder);
+            frontend.Setup (environment, environmentBuilder);
+
+            env = environment;
+        }
+
+        public void AddTranslationUnit (string unitName, ReadOnlySpan<ReadOnlyMemory<char>> codeTransUnit) {
             CheckDisposed ();
+
+            bool foundErrors = false;
 
             var astUnitsList = new StructPooledList<ES_AbstractSyntaxTree> (CL_ClearMode.Auto);
             {
                 foreach (var codeUnit in codeTransUnit) {
                     parser.Reset ();
-                    astUnitsList.Add (parser.ParseCode (codeUnit));
+
+                    var astUnit = parser.ParseCode (codeUnit);
+                    astUnitsList.Add (astUnit);
+
+                    foundErrors |= !astUnit.Valid;
                 }
             }
 
-            if (errorsList.Count > 0)
+            foundErrors |= errorsList.Count > 0;
+
+            if (foundErrors)
                 return;
 
-            frontend.CompileCode (unitName, astUnitsList.Span);
+            frontend.AddUnit (unitName, astUnitsList.Span);
+        }
 
-            return;
+        public void Compile () {
+            frontend.CompileCode ();
+
+            if (errorsList.Count > 0)
+                return;
         }
 
         public void Reset () {
             CheckDisposed ();
 
             errorsList.Clear ();
-            frontend.Clear ();
+            frontend.Reset ();
+
+            environmentBuilder?.Dispose ();
+            environment?.Dispose ();
+
+            environmentBuilder = null;
+            environment = null;
         }
 
         protected void CheckDisposed () {
             if (disposedValue)
-                throw new ObjectDisposedException (nameof (EchelonScriptCompiler));
+                throw new ObjectDisposedException (nameof (EchelonScript_Compiler));
+        }
+
+        protected void CheckSetUp () {
+            if (environment == null | environmentBuilder == null)
+                throw new CompilationException ("The compiler is not set up.");
         }
 
         #endregion
@@ -79,7 +116,7 @@ namespace EchelonScriptCompiler {
 
         private bool disposedValue = false;
 
-        ~EchelonScriptCompiler () {
+        ~EchelonScript_Compiler () {
             if (!disposedValue)
                 DoDispose ();
         }
@@ -88,6 +125,8 @@ namespace EchelonScriptCompiler {
             if (!disposedValue) {
                 parser?.Dispose ();
                 frontend?.Dispose ();
+
+                environmentBuilder?.Dispose ();
 
                 disposedValue = true;
             }
