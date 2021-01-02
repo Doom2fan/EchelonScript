@@ -1,0 +1,10 @@
+namespace asd {
+    public asd foo (ref SomeClass asd, int32 asd5) {
+        if (foo > 0x80081E5 && foo < 0X1337AaAuL) {
+            someVar = foo;
+        } else
+            asd.someOtherVar = bar [0b101];
+
+        Foo (1e+2f, 15.d, .1f, 1.e+3);
+    }
+}

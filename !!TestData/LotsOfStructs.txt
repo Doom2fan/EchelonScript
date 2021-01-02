@@ -1,0 +1,1801 @@
+namespace Asd {
+    public struct Baz0 {
+    }
+
+    public struct Baz1 {
+    }
+
+    public struct Baz2 {
+    }
+
+    public struct Baz3 {
+    }
+
+    public struct Baz4 {
+    }
+
+    public struct Baz5 {
+    }
+
+    public struct Baz6 {
+    }
+
+    public struct Baz7 {
+    }
+
+    public struct Baz8 {
+    }
+
+    public struct Baz9 {
+    }
+
+    public struct Baz10 {
+    }
+
+    public struct Baz11 {
+    }
+
+    public struct Baz12 {
+    }
+
+    public struct Baz13 {
+    }
+
+    public struct Baz14 {
+    }
+
+    public struct Baz15 {
+    }
+
+    public struct Baz16 {
+    }
+
+    public struct Baz17 {
+    }
+
+    public struct Baz18 {
+    }
+
+    public struct Baz19 {
+    }
+
+    public struct Baz20 {
+    }
+
+    public struct Baz21 {
+    }
+
+    public struct Baz22 {
+    }
+
+    public struct Baz23 {
+    }
+
+    public struct Baz24 {
+    }
+
+    public struct Baz25 {
+    }
+
+    public struct Baz26 {
+    }
+
+    public struct Baz27 {
+    }
+
+    public struct Baz28 {
+    }
+
+    public struct Baz29 {
+    }
+
+    public struct Baz30 {
+    }
+
+    public struct Baz31 {
+    }
+
+    public struct Baz32 {
+    }
+
+    public struct Baz33 {
+    }
+
+    public struct Baz34 {
+    }
+
+    public struct Baz35 {
+    }
+
+    public struct Baz36 {
+    }
+
+    public struct Baz37 {
+    }
+
+    public struct Baz38 {
+    }
+
+    public struct Baz39 {
+    }
+
+    public struct Baz40 {
+    }
+
+    public struct Baz41 {
+    }
+
+    public struct Baz42 {
+    }
+
+    public struct Baz43 {
+    }
+
+    public struct Baz44 {
+    }
+
+    public struct Baz45 {
+    }
+
+    public struct Baz46 {
+    }
+
+    public struct Baz47 {
+    }
+
+    public struct Baz48 {
+    }
+
+    public struct Baz49 {
+    }
+
+    public struct Baz50 {
+    }
+
+    public struct Baz51 {
+    }
+
+    public struct Baz52 {
+    }
+
+    public struct Baz53 {
+    }
+
+    public struct Baz54 {
+    }
+
+    public struct Baz55 {
+    }
+
+    public struct Baz56 {
+    }
+
+    public struct Baz57 {
+    }
+
+    public struct Baz58 {
+    }
+
+    public struct Baz59 {
+    }
+
+    public struct Baz60 {
+    }
+
+    public struct Baz61 {
+    }
+
+    public struct Baz62 {
+    }
+
+    public struct Baz63 {
+    }
+
+    public struct Baz64 {
+    }
+
+    public struct Baz65 {
+    }
+
+    public struct Baz66 {
+    }
+
+    public struct Baz67 {
+    }
+
+    public struct Baz68 {
+    }
+
+    public struct Baz69 {
+    }
+
+    public struct Baz70 {
+    }
+
+    public struct Baz71 {
+    }
+
+    public struct Baz72 {
+    }
+
+    public struct Baz73 {
+    }
+
+    public struct Baz74 {
+    }
+
+    public struct Baz75 {
+    }
+
+    public struct Baz76 {
+    }
+
+    public struct Baz77 {
+    }
+
+    public struct Baz78 {
+    }
+
+    public struct Baz79 {
+    }
+
+    public struct Baz80 {
+    }
+
+    public struct Baz81 {
+    }
+
+    public struct Baz82 {
+    }
+
+    public struct Baz83 {
+    }
+
+    public struct Baz84 {
+    }
+
+    public struct Baz85 {
+    }
+
+    public struct Baz86 {
+    }
+
+    public struct Baz87 {
+    }
+
+    public struct Baz88 {
+    }
+
+    public struct Baz89 {
+    }
+
+    public struct Baz90 {
+    }
+
+    public struct Baz91 {
+    }
+
+    public struct Baz92 {
+    }
+
+    public struct Baz93 {
+    }
+
+    public struct Baz94 {
+    }
+
+    public struct Baz95 {
+    }
+
+    public struct Baz96 {
+    }
+
+    public struct Baz97 {
+    }
+
+    public struct Baz98 {
+    }
+
+    public struct Baz99 {
+    }
+
+    public struct Baz100 {
+    }
+
+    public struct Baz101 {
+    }
+
+    public struct Baz102 {
+    }
+
+    public struct Baz103 {
+    }
+
+    public struct Baz104 {
+    }
+
+    public struct Baz105 {
+    }
+
+    public struct Baz106 {
+    }
+
+    public struct Baz107 {
+    }
+
+    public struct Baz108 {
+    }
+
+    public struct Baz109 {
+    }
+
+    public struct Baz110 {
+    }
+
+    public struct Baz111 {
+    }
+
+    public struct Baz112 {
+    }
+
+    public struct Baz113 {
+    }
+
+    public struct Baz114 {
+    }
+
+    public struct Baz115 {
+    }
+
+    public struct Baz116 {
+    }
+
+    public struct Baz117 {
+    }
+
+    public struct Baz118 {
+    }
+
+    public struct Baz119 {
+    }
+
+    public struct Baz120 {
+    }
+
+    public struct Baz121 {
+    }
+
+    public struct Baz122 {
+    }
+
+    public struct Baz123 {
+    }
+
+    public struct Baz124 {
+    }
+
+    public struct Baz125 {
+    }
+
+    public struct Baz126 {
+    }
+
+    public struct Baz127 {
+    }
+
+    public struct Baz128 {
+    }
+
+    public struct Baz129 {
+    }
+
+    public struct Baz130 {
+    }
+
+    public struct Baz131 {
+    }
+
+    public struct Baz132 {
+    }
+
+    public struct Baz133 {
+    }
+
+    public struct Baz134 {
+    }
+
+    public struct Baz135 {
+    }
+
+    public struct Baz136 {
+    }
+
+    public struct Baz137 {
+    }
+
+    public struct Baz138 {
+    }
+
+    public struct Baz139 {
+    }
+
+    public struct Baz140 {
+    }
+
+    public struct Baz141 {
+    }
+
+    public struct Baz142 {
+    }
+
+    public struct Baz143 {
+    }
+
+    public struct Baz144 {
+    }
+
+    public struct Baz145 {
+    }
+
+    public struct Baz146 {
+    }
+
+    public struct Baz147 {
+    }
+
+    public struct Baz148 {
+    }
+
+    public struct Baz149 {
+    }
+
+    public struct Baz150 {
+    }
+
+    public struct Baz151 {
+    }
+
+    public struct Baz152 {
+    }
+
+    public struct Baz153 {
+    }
+
+    public struct Baz154 {
+    }
+
+    public struct Baz155 {
+    }
+
+    public struct Baz156 {
+    }
+
+    public struct Baz157 {
+    }
+
+    public struct Baz158 {
+    }
+
+    public struct Baz159 {
+    }
+
+    public struct Baz160 {
+    }
+
+    public struct Baz161 {
+    }
+
+    public struct Baz162 {
+    }
+
+    public struct Baz163 {
+    }
+
+    public struct Baz164 {
+    }
+
+    public struct Baz165 {
+    }
+
+    public struct Baz166 {
+    }
+
+    public struct Baz167 {
+    }
+
+    public struct Baz168 {
+    }
+
+    public struct Baz169 {
+    }
+
+    public struct Baz170 {
+    }
+
+    public struct Baz171 {
+    }
+
+    public struct Baz172 {
+    }
+
+    public struct Baz173 {
+    }
+
+    public struct Baz174 {
+    }
+
+    public struct Baz175 {
+    }
+
+    public struct Baz176 {
+    }
+
+    public struct Baz177 {
+    }
+
+    public struct Baz178 {
+    }
+
+    public struct Baz179 {
+    }
+
+    public struct Baz180 {
+    }
+
+    public struct Baz181 {
+    }
+
+    public struct Baz182 {
+    }
+
+    public struct Baz183 {
+    }
+
+    public struct Baz184 {
+    }
+
+    public struct Baz185 {
+    }
+
+    public struct Baz186 {
+    }
+
+    public struct Baz187 {
+    }
+
+    public struct Baz188 {
+    }
+
+    public struct Baz189 {
+    }
+
+    public struct Baz190 {
+    }
+
+    public struct Baz191 {
+    }
+
+    public struct Baz192 {
+    }
+
+    public struct Baz193 {
+    }
+
+    public struct Baz194 {
+    }
+
+    public struct Baz195 {
+    }
+
+    public struct Baz196 {
+    }
+
+    public struct Baz197 {
+    }
+
+    public struct Baz198 {
+    }
+
+    public struct Baz199 {
+    }
+
+    public struct Baz200 {
+    }
+
+    public struct Baz201 {
+    }
+
+    public struct Baz202 {
+    }
+
+    public struct Baz203 {
+    }
+
+    public struct Baz204 {
+    }
+
+    public struct Baz205 {
+    }
+
+    public struct Baz206 {
+    }
+
+    public struct Baz207 {
+    }
+
+    public struct Baz208 {
+    }
+
+    public struct Baz209 {
+    }
+
+    public struct Baz210 {
+    }
+
+    public struct Baz211 {
+    }
+
+    public struct Baz212 {
+    }
+
+    public struct Baz213 {
+    }
+
+    public struct Baz214 {
+    }
+
+    public struct Baz215 {
+    }
+
+    public struct Baz216 {
+    }
+
+    public struct Baz217 {
+    }
+
+    public struct Baz218 {
+    }
+
+    public struct Baz219 {
+    }
+
+    public struct Baz220 {
+    }
+
+    public struct Baz221 {
+    }
+
+    public struct Baz222 {
+    }
+
+    public struct Baz223 {
+    }
+
+    public struct Baz224 {
+    }
+
+    public struct Baz225 {
+    }
+
+    public struct Baz226 {
+    }
+
+    public struct Baz227 {
+    }
+
+    public struct Baz228 {
+    }
+
+    public struct Baz229 {
+    }
+
+    public struct Baz230 {
+    }
+
+    public struct Baz231 {
+    }
+
+    public struct Baz232 {
+    }
+
+    public struct Baz233 {
+    }
+
+    public struct Baz234 {
+    }
+
+    public struct Baz235 {
+    }
+
+    public struct Baz236 {
+    }
+
+    public struct Baz237 {
+    }
+
+    public struct Baz238 {
+    }
+
+    public struct Baz239 {
+    }
+
+    public struct Baz240 {
+    }
+
+    public struct Baz241 {
+    }
+
+    public struct Baz242 {
+    }
+
+    public struct Baz243 {
+    }
+
+    public struct Baz244 {
+    }
+
+    public struct Baz245 {
+    }
+
+    public struct Baz246 {
+    }
+
+    public struct Baz247 {
+    }
+
+    public struct Baz248 {
+    }
+
+    public struct Baz249 {
+    }
+
+    public struct Baz250 {
+    }
+
+    public struct Baz251 {
+    }
+
+    public struct Baz252 {
+    }
+
+    public struct Baz253 {
+    }
+
+    public struct Baz254 {
+    }
+
+    public struct Baz255 {
+    }
+
+    public struct Baz256 {
+    }
+
+    public struct Baz257 {
+    }
+
+    public struct Baz258 {
+    }
+
+    public struct Baz259 {
+    }
+
+    public struct Baz260 {
+    }
+
+    public struct Baz261 {
+    }
+
+    public struct Baz262 {
+    }
+
+    public struct Baz263 {
+    }
+
+    public struct Baz264 {
+    }
+
+    public struct Baz265 {
+    }
+
+    public struct Baz266 {
+    }
+
+    public struct Baz267 {
+    }
+
+    public struct Baz268 {
+    }
+
+    public struct Baz269 {
+    }
+
+    public struct Baz270 {
+    }
+
+    public struct Baz271 {
+    }
+
+    public struct Baz272 {
+    }
+
+    public struct Baz273 {
+    }
+
+    public struct Baz274 {
+    }
+
+    public struct Baz275 {
+    }
+
+    public struct Baz276 {
+    }
+
+    public struct Baz277 {
+    }
+
+    public struct Baz278 {
+    }
+
+    public struct Baz279 {
+    }
+
+    public struct Baz280 {
+    }
+
+    public struct Baz281 {
+    }
+
+    public struct Baz282 {
+    }
+
+    public struct Baz283 {
+    }
+
+    public struct Baz284 {
+    }
+
+    public struct Baz285 {
+    }
+
+    public struct Baz286 {
+    }
+
+    public struct Baz287 {
+    }
+
+    public struct Baz288 {
+    }
+
+    public struct Baz289 {
+    }
+
+    public struct Baz290 {
+    }
+
+    public struct Baz291 {
+    }
+
+    public struct Baz292 {
+    }
+
+    public struct Baz293 {
+    }
+
+    public struct Baz294 {
+    }
+
+    public struct Baz295 {
+    }
+
+    public struct Baz296 {
+    }
+
+    public struct Baz297 {
+    }
+
+    public struct Baz298 {
+    }
+
+    public struct Baz299 {
+    }
+
+    public struct Baz300 {
+    }
+
+    public struct Baz301 {
+    }
+
+    public struct Baz302 {
+    }
+
+    public struct Baz303 {
+    }
+
+    public struct Baz304 {
+    }
+
+    public struct Baz305 {
+    }
+
+    public struct Baz306 {
+    }
+
+    public struct Baz307 {
+    }
+
+    public struct Baz308 {
+    }
+
+    public struct Baz309 {
+    }
+
+    public struct Baz310 {
+    }
+
+    public struct Baz311 {
+    }
+
+    public struct Baz312 {
+    }
+
+    public struct Baz313 {
+    }
+
+    public struct Baz314 {
+    }
+
+    public struct Baz315 {
+    }
+
+    public struct Baz316 {
+    }
+
+    public struct Baz317 {
+    }
+
+    public struct Baz318 {
+    }
+
+    public struct Baz319 {
+    }
+
+    public struct Baz320 {
+    }
+
+    public struct Baz321 {
+    }
+
+    public struct Baz322 {
+    }
+
+    public struct Baz323 {
+    }
+
+    public struct Baz324 {
+    }
+
+    public struct Baz325 {
+    }
+
+    public struct Baz326 {
+    }
+
+    public struct Baz327 {
+    }
+
+    public struct Baz328 {
+    }
+
+    public struct Baz329 {
+    }
+
+    public struct Baz330 {
+    }
+
+    public struct Baz331 {
+    }
+
+    public struct Baz332 {
+    }
+
+    public struct Baz333 {
+    }
+
+    public struct Baz334 {
+    }
+
+    public struct Baz335 {
+    }
+
+    public struct Baz336 {
+    }
+
+    public struct Baz337 {
+    }
+
+    public struct Baz338 {
+    }
+
+    public struct Baz339 {
+    }
+
+    public struct Baz340 {
+    }
+
+    public struct Baz341 {
+    }
+
+    public struct Baz342 {
+    }
+
+    public struct Baz343 {
+    }
+
+    public struct Baz344 {
+    }
+
+    public struct Baz345 {
+    }
+
+    public struct Baz346 {
+    }
+
+    public struct Baz347 {
+    }
+
+    public struct Baz348 {
+    }
+
+    public struct Baz349 {
+    }
+
+    public struct Baz350 {
+    }
+
+    public struct Baz351 {
+    }
+
+    public struct Baz352 {
+    }
+
+    public struct Baz353 {
+    }
+
+    public struct Baz354 {
+    }
+
+    public struct Baz355 {
+    }
+
+    public struct Baz356 {
+    }
+
+    public struct Baz357 {
+    }
+
+    public struct Baz358 {
+    }
+
+    public struct Baz359 {
+    }
+
+    public struct Baz360 {
+    }
+
+    public struct Baz361 {
+    }
+
+    public struct Baz362 {
+    }
+
+    public struct Baz363 {
+    }
+
+    public struct Baz364 {
+    }
+
+    public struct Baz365 {
+    }
+
+    public struct Baz366 {
+    }
+
+    public struct Baz367 {
+    }
+
+    public struct Baz368 {
+    }
+
+    public struct Baz369 {
+    }
+
+    public struct Baz370 {
+    }
+
+    public struct Baz371 {
+    }
+
+    public struct Baz372 {
+    }
+
+    public struct Baz373 {
+    }
+
+    public struct Baz374 {
+    }
+
+    public struct Baz375 {
+    }
+
+    public struct Baz376 {
+    }
+
+    public struct Baz377 {
+    }
+
+    public struct Baz378 {
+    }
+
+    public struct Baz379 {
+    }
+
+    public struct Baz380 {
+    }
+
+    public struct Baz381 {
+    }
+
+    public struct Baz382 {
+    }
+
+    public struct Baz383 {
+    }
+
+    public struct Baz384 {
+    }
+
+    public struct Baz385 {
+    }
+
+    public struct Baz386 {
+    }
+
+    public struct Baz387 {
+    }
+
+    public struct Baz388 {
+    }
+
+    public struct Baz389 {
+    }
+
+    public struct Baz390 {
+    }
+
+    public struct Baz391 {
+    }
+
+    public struct Baz392 {
+    }
+
+    public struct Baz393 {
+    }
+
+    public struct Baz394 {
+    }
+
+    public struct Baz395 {
+    }
+
+    public struct Baz396 {
+    }
+
+    public struct Baz397 {
+    }
+
+    public struct Baz398 {
+    }
+
+    public struct Baz399 {
+    }
+
+    public struct Baz400 {
+    }
+
+    public struct Baz401 {
+    }
+
+    public struct Baz402 {
+    }
+
+    public struct Baz403 {
+    }
+
+    public struct Baz404 {
+    }
+
+    public struct Baz405 {
+    }
+
+    public struct Baz406 {
+    }
+
+    public struct Baz407 {
+    }
+
+    public struct Baz408 {
+    }
+
+    public struct Baz409 {
+    }
+
+    public struct Baz410 {
+    }
+
+    public struct Baz411 {
+    }
+
+    public struct Baz412 {
+    }
+
+    public struct Baz413 {
+    }
+
+    public struct Baz414 {
+    }
+
+    public struct Baz415 {
+    }
+
+    public struct Baz416 {
+    }
+
+    public struct Baz417 {
+    }
+
+    public struct Baz418 {
+    }
+
+    public struct Baz419 {
+    }
+
+    public struct Baz420 {
+    }
+
+    public struct Baz421 {
+    }
+
+    public struct Baz422 {
+    }
+
+    public struct Baz423 {
+    }
+
+    public struct Baz424 {
+    }
+
+    public struct Baz425 {
+    }
+
+    public struct Baz426 {
+    }
+
+    public struct Baz427 {
+    }
+
+    public struct Baz428 {
+    }
+
+    public struct Baz429 {
+    }
+
+    public struct Baz430 {
+    }
+
+    public struct Baz431 {
+    }
+
+    public struct Baz432 {
+    }
+
+    public struct Baz433 {
+    }
+
+    public struct Baz434 {
+    }
+
+    public struct Baz435 {
+    }
+
+    public struct Baz436 {
+    }
+
+    public struct Baz437 {
+    }
+
+    public struct Baz438 {
+    }
+
+    public struct Baz439 {
+    }
+
+    public struct Baz440 {
+    }
+
+    public struct Baz441 {
+    }
+
+    public struct Baz442 {
+    }
+
+    public struct Baz443 {
+    }
+
+    public struct Baz444 {
+    }
+
+    public struct Baz445 {
+    }
+
+    public struct Baz446 {
+    }
+
+    public struct Baz447 {
+    }
+
+    public struct Baz448 {
+    }
+
+    public struct Baz449 {
+    }
+
+    public struct Baz450 {
+    }
+
+    public struct Baz451 {
+    }
+
+    public struct Baz452 {
+    }
+
+    public struct Baz453 {
+    }
+
+    public struct Baz454 {
+    }
+
+    public struct Baz455 {
+    }
+
+    public struct Baz456 {
+    }
+
+    public struct Baz457 {
+    }
+
+    public struct Baz458 {
+    }
+
+    public struct Baz459 {
+    }
+
+    public struct Baz460 {
+    }
+
+    public struct Baz461 {
+    }
+
+    public struct Baz462 {
+    }
+
+    public struct Baz463 {
+    }
+
+    public struct Baz464 {
+    }
+
+    public struct Baz465 {
+    }
+
+    public struct Baz466 {
+    }
+
+    public struct Baz467 {
+    }
+
+    public struct Baz468 {
+    }
+
+    public struct Baz469 {
+    }
+
+    public struct Baz470 {
+    }
+
+    public struct Baz471 {
+    }
+
+    public struct Baz472 {
+    }
+
+    public struct Baz473 {
+    }
+
+    public struct Baz474 {
+    }
+
+    public struct Baz475 {
+    }
+
+    public struct Baz476 {
+    }
+
+    public struct Baz477 {
+    }
+
+    public struct Baz478 {
+    }
+
+    public struct Baz479 {
+    }
+
+    public struct Baz480 {
+    }
+
+    public struct Baz481 {
+    }
+
+    public struct Baz482 {
+    }
+
+    public struct Baz483 {
+    }
+
+    public struct Baz484 {
+    }
+
+    public struct Baz485 {
+    }
+
+    public struct Baz486 {
+    }
+
+    public struct Baz487 {
+    }
+
+    public struct Baz488 {
+    }
+
+    public struct Baz489 {
+    }
+
+    public struct Baz490 {
+    }
+
+    public struct Baz491 {
+    }
+
+    public struct Baz492 {
+    }
+
+    public struct Baz493 {
+    }
+
+    public struct Baz494 {
+    }
+
+    public struct Baz495 {
+    }
+
+    public struct Baz496 {
+    }
+
+    public struct Baz497 {
+    }
+
+    public struct Baz498 {
+    }
+
+    public struct Baz499 {
+    }
+
+    public struct Baz500 {
+    }
+
+    public struct Baz501 {
+    }
+
+    public struct Baz502 {
+    }
+
+    public struct Baz503 {
+    }
+
+    public struct Baz504 {
+    }
+
+    public struct Baz505 {
+    }
+
+    public struct Baz506 {
+    }
+
+    public struct Baz507 {
+    }
+
+    public struct Baz508 {
+    }
+
+    public struct Baz509 {
+    }
+
+    public struct Baz510 {
+    }
+
+    public struct Baz511 {
+    }
+
+    public struct Baz512 {
+    }
+
+    public struct Baz513 {
+    }
+
+    public struct Baz514 {
+    }
+
+    public struct Baz515 {
+    }
+
+    public struct Baz516 {
+    }
+
+    public struct Baz517 {
+    }
+
+    public struct Baz518 {
+    }
+
+    public struct Baz519 {
+    }
+
+    public struct Baz520 {
+    }
+
+    public struct Baz521 {
+    }
+
+    public struct Baz522 {
+    }
+
+    public struct Baz523 {
+    }
+
+    public struct Baz524 {
+    }
+
+    public struct Baz525 {
+    }
+
+    public struct Baz526 {
+    }
+
+    public struct Baz527 {
+    }
+
+    public struct Baz528 {
+    }
+
+    public struct Baz529 {
+    }
+
+    public struct Baz530 {
+    }
+
+    public struct Baz531 {
+    }
+
+    public struct Baz532 {
+    }
+
+    public struct Baz533 {
+    }
+
+    public struct Baz534 {
+    }
+
+    public struct Baz535 {
+    }
+
+    public struct Baz536 {
+    }
+
+    public struct Baz537 {
+    }
+
+    public struct Baz538 {
+    }
+
+    public struct Baz539 {
+    }
+
+    public struct Baz540 {
+    }
+
+    public struct Baz541 {
+    }
+
+    public struct Baz542 {
+    }
+
+    public struct Baz543 {
+    }
+
+    public struct Baz544 {
+    }
+
+    public struct Baz545 {
+    }
+
+    public struct Baz546 {
+    }
+
+    public struct Baz547 {
+    }
+
+    public struct Baz548 {
+    }
+
+    public struct Baz549 {
+    }
+
+    public struct Baz550 {
+    }
+
+    public struct Baz551 {
+    }
+
+    public struct Baz552 {
+    }
+
+    public struct Baz553 {
+    }
+
+    public struct Baz554 {
+    }
+
+    public struct Baz555 {
+    }
+
+    public struct Baz556 {
+    }
+
+    public struct Baz557 {
+    }
+
+    public struct Baz558 {
+    }
+
+    public struct Baz559 {
+    }
+
+    public struct Baz560 {
+    }
+
+    public struct Baz561 {
+    }
+
+    public struct Baz562 {
+    }
+
+    public struct Baz563 {
+    }
+
+    public struct Baz564 {
+    }
+
+    public struct Baz565 {
+    }
+
+    public struct Baz566 {
+    }
+
+    public struct Baz567 {
+    }
+
+    public struct Baz568 {
+    }
+
+    public struct Baz569 {
+    }
+
+    public struct Baz570 {
+    }
+
+    public struct Baz571 {
+    }
+
+    public struct Baz572 {
+    }
+
+    public struct Baz573 {
+    }
+
+    public struct Baz574 {
+    }
+
+    public struct Baz575 {
+    }
+
+    public struct Baz576 {
+    }
+
+    public struct Baz577 {
+    }
+
+    public struct Baz578 {
+    }
+
+    public struct Baz579 {
+    }
+
+    public struct Baz580 {
+    }
+
+    public struct Baz581 {
+    }
+
+    public struct Baz582 {
+    }
+
+    public struct Baz583 {
+    }
+
+    public struct Baz584 {
+    }
+
+    public struct Baz585 {
+    }
+
+    public struct Baz586 {
+    }
+
+    public struct Baz587 {
+    }
+
+    public struct Baz588 {
+    }
+
+    public struct Baz589 {
+    }
+
+    public struct Baz590 {
+    }
+
+    public struct Baz591 {
+    }
+
+    public struct Baz592 {
+    }
+
+    public struct Baz593 {
+    }
+
+    public struct Baz594 {
+    }
+
+    public struct Baz595 {
+    }
+
+    public struct Baz596 {
+    }
+
+    public struct Baz597 {
+    }
+
+    public struct Baz598 {
+    }
+
+    public struct Baz599 {
+    }
+}
