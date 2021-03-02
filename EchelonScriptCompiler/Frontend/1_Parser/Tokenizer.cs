@@ -91,31 +91,14 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             }
 
             public override bool ParseToken (EchelonScriptTokenizer tokenizer, ReadOnlySpan<char> peekedChars, ref EchelonScriptToken retToken) {
-                if (peekedChars [0] == '0') {
-                    int startPos = tokenizer.curPos;
-
-                    tokenizer.ReadChar ();
-                    if (tokenizer.PeekChar () == '.') {
-                        tokenizer.TryReadFloatFractional ();
-                        tokenizer.TryReadFloatExponent (retToken.TextLine, retToken.TextColumn, startPos);
-                        tokenizer.TryReadFloatSuffix ();
-
-                        retToken.Type = EchelonScriptTokenType.FloatLiteral;
-                    } else {
-                        tokenizer.TryReadIntSuffix ();
-                        retToken.Type = EchelonScriptTokenType.DecIntegerLiteral;
-                    }
-
-                    retToken.Text = tokenizer.data.Slice (startPos, tokenizer.curPos - startPos);
-                } else if (IsIntegerDigit (peekedChars [0])) {
+                if (IsIntegerDigit (peekedChars [0])) {
                     int startPos = tokenizer.curPos;
 
                     tokenizer.ReadStringWhile ((c) => c == '\'' || IsIntegerDigit (c));
 
                     var c = tokenizer.PeekChar ();
                     if (c != null) {
-                        if (c == '.') {
-                            tokenizer.TryReadFloatFractional ();
+                        if (tokenizer.TryReadFloatFractional ()) {
                             tokenizer.TryReadFloatExponent (retToken.TextLine, retToken.TextColumn, startPos);
                             tokenizer.TryReadFloatSuffix ();
 
@@ -133,7 +116,8 @@ namespace EchelonScriptCompiler.Frontend.Parser {
 
                             retToken.Type = EchelonScriptTokenType.DecIntegerLiteral;
                         }
-                    }
+                    } else
+                        retToken.Type = EchelonScriptTokenType.DecIntegerLiteral;
 
                     retToken.Text = tokenizer.data.Slice (startPos, tokenizer.curPos - startPos);
                 } else if (peekedChars [0] == '.' && peekedChars.Length >= 2 && IsIntegerDigit (peekedChars [1])) {
@@ -884,7 +868,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
         }
 
         protected bool TryReadFloatFractional () {
-            if (PeekChar () == '.') {
+            if (PeekChar () == '.' && IsIntegerDigit (PeekChar (1))) {
                 ReadChar ();
 
                 if (PeekChar () != NumberSeparator)
