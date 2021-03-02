@@ -16,7 +16,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using ChronosLib.Pooled;
 using Collections.Pooled;
-using Microsoft.Toolkit.HighPerformance.Extensions;
+using Microsoft.Toolkit.HighPerformance;
 
 namespace EchelonScriptCompiler.Data {
     public unsafe class UnmanagedIdentifierPool : IDisposable {

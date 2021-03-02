@@ -8,8 +8,6 @@
  */
 
 using System;
-using System.Diagnostics.CodeAnalysis;
-using Microsoft.Toolkit.HighPerformance.Extensions;
 
 namespace EchelonScriptCompiler.Data {
     public unsafe struct ArrayPointer<T>
