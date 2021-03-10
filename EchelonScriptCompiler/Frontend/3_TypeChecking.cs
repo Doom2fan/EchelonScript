@@ -44,7 +44,12 @@ namespace EchelonScriptCompiler.Frontend {
                     return null;
                 }
 
-                var namespaceName = type->FullyQualifiedName;
+                Span<byte> namespaceSep = stackalloc byte [2];
+                namespaceSep.Fill ((byte) ':');
+
+                var namespaceLen = type->FullyQualifiedName.Span.IndexOf (namespaceSep);
+                Debug.Assert (namespaceLen >= 0);
+                var namespaceName = new ArrayPointer<byte> (type->FullyQualifiedName.Elements, namespaceLen);
                 using var partsArr = PooledArray<ArrayPointer<byte>>.GetArray (typeParts.Length);
                 for (int i = 0; i < typeParts.Length; i++) {
                     var part = typeParts [i];
@@ -59,19 +64,26 @@ namespace EchelonScriptCompiler.Frontend {
                 type = Environment!.GetFullyQualifiedType (fqnId);
 
                 if (type == null) {
-                    for (int i = 1; i < typeParts.Length; i++) {
-                        fqnId = GetFullyQualifiedName (namespaceName, partsArr.Span.Slice (0, i));
+                    int minBounds = int.MaxValue;
+                    int maxBounds = int.MinValue;
+                    var partsSpan = partsArr.Span;
+                    for (int i = 0; i < typeParts.Length; i++) {
+                        fqnId = GetFullyQualifiedName (namespaceName, partsSpan.Slice (0, i + 1));
                         type = Environment!.GetFullyQualifiedType (fqnId);
 
+                        minBounds = Math.Min (minBounds, typeParts [i].TextStartPos);
+                        maxBounds = Math.Max (maxBounds, typeParts [i].TextEndPos);
+
                         if (type == null) {
-                            var err = ES_FrontendErrors.GenCantFindSymbol (typeParts [0].Text.Span.GetPooledString (), typeParts [0]);
+                            var err = ES_FrontendErrors.GenCantFindSymbol (Encoding.ASCII.GetString (fqnId.Span), src,
+                                new ES_AstNodeBounds (minBounds, maxBounds)
+                            );
                             errorList.Add (err);
 
                             return null;
                         }
                     }
 
-                    Debug.Fail ("This should never be reached.");
                     return null;
                 }
 
@@ -141,7 +153,7 @@ namespace EchelonScriptCompiler.Frontend {
         ) {
             baseClass = null;
 
-            var srcCode = astUnit.Ast.Source; ;
+            var srcCode = astUnit.Ast.Source;
             var idPool = Environment!.IdPool;
             ref var symbols = ref astUnit.Symbols;
 
