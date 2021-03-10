@@ -64,9 +64,11 @@ namespace EchelonScriptCompiler.Frontend {
                 type = Environment!.GetFullyQualifiedType (fqnId);
 
                 if (type == null) {
+                    // We need to track the correct bounds for the error reporting here.
                     int minBounds = int.MaxValue;
                     int maxBounds = int.MinValue;
                     var partsSpan = partsArr.Span;
+                    // For nested types, check from the first to the last for better error reporting.
                     for (int i = 0; i < typeParts.Length; i++) {
                         fqnId = GetFullyQualifiedName (namespaceName, partsSpan.Slice (0, i + 1));
                         type = Environment!.GetFullyQualifiedType (fqnId);
