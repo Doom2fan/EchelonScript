@@ -1386,7 +1386,12 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                         ParseAggregate_SetDocComment (ref currentModifiers, tkPair.doc);
 
                         currentModifiers.CopyDefaultsToUndefined (defaultModifiers);
-                        contents.Add (ParseFunction (currentModifiers, null, false));
+                        var funcDef = ParseFunction (currentModifiers, null, false);
+
+                        if (funcDef is not null)
+                            contents.Add (funcDef);
+                        else
+                            tokenizer.NextToken ();
 
                         currentModifiers.ResetToNull ();
                     } else {
