@@ -1716,6 +1716,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                     memberVar.Expr,
                     semicolonTkPair.tk
                 );
+                memberVarsList.Add (memberVarDef);
             }
 
             return memberVarsList.ToArray ();
