@@ -120,20 +120,22 @@ namespace EchelonScriptCompiler.Frontend {
 
             bool alwaysReturns = false;
             bool reportedUnreachable = false;
-            foreach (var stmt in funcDef.StatementsList) {
-                Debug.Assert (stmt is not null);
 
+            ES_AstStatement? curStatement = funcDef.Statement;
+            while (curStatement is not null) {
                 if (alwaysReturns && !reportedUnreachable) {
                     warningList.Add (new EchelonScriptErrorMessage (
-                        unitSrc, stmt.NodeBounds, ES_FrontendWarnings.UnreachableCode
+                        unitSrc, curStatement.NodeBounds, ES_FrontendWarnings.UnreachableCode
                     ));
 
                     reportedUnreachable = true;
                 }
 
-                var stmtData = CheckTypes_Statement (ref transUnit, symbols, unitSrc, retType, stmt!);
+                var stmtData = CheckTypes_Statement (ref transUnit, symbols, unitSrc, retType, curStatement);
 
                 alwaysReturns |= stmtData.AlwaysReturns;
+
+                curStatement = curStatement.Endpoint;
             }
 
             if (!alwaysReturns && retType != Environment.TypeVoid)
@@ -232,15 +234,16 @@ namespace EchelonScriptCompiler.Frontend {
                     return new StatementData { AlwaysReturns = false };
 
                 case ES_AstLabeledStatement labelStmt:
-                    return CheckTypes_Statement (ref transUnit, symbols, src, retType, labelStmt.Statement);
+                    throw new NotImplementedException ();
 
                 case ES_AstBlockStatement blockStmt: {
-                    Debug.Assert (blockStmt.Statements is not null);
                     symbols.Push ();
 
                     bool alwaysReturns = false;
                     bool reportedUnreachable = false;
-                    foreach (var subStmt in blockStmt.Statements) {
+
+                    ES_AstStatement? subStmt = blockStmt.Statement;
+                    while (subStmt is not null) {
                         Debug.Assert (subStmt is not null);
 
                         if (alwaysReturns && !reportedUnreachable) {
@@ -254,6 +257,8 @@ namespace EchelonScriptCompiler.Frontend {
                         var subStmtData = CheckTypes_Statement (ref transUnit, symbols, src, retType, subStmt);
 
                         alwaysReturns |= subStmtData.AlwaysReturns;
+
+                        subStmt = subStmt.Endpoint;
                     }
 
                     symbols.Pop ();
@@ -355,8 +360,12 @@ namespace EchelonScriptCompiler.Frontend {
                             }
                         }
 
-                        foreach (var subStmt in section.StatementsBlock)
+                        ES_AstStatement? subStmt = section.StatementsBlock;
+                        while (subStmt is not null) {
                             CheckTypes_Statement (ref transUnit, symbols, src, retType, subStmt);
+
+                            subStmt = subStmt.Endpoint;
+                        }
                     }
 
                     // TODO: Change Switch statements to check if they always return.

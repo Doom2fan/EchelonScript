@@ -20,6 +20,12 @@ using Microsoft.Toolkit.HighPerformance.Buffers;
 
 namespace EchelonScriptCompiler.Backends.LLVMBackend {
     public unsafe sealed partial class LLVMCompilerBackend {
+        public struct FunctionData {
+            public LLVMValueRef FunctionDef;
+            public LLVMValueRef ReturnValue;
+            public LLVMBasicBlockRef ReturnBlock;
+        }
+
         public struct StatementData {
             public bool AlwaysReturns;
         }
@@ -181,16 +187,15 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 param.Name = StringPool.Shared.GetOrAdd (argData.Name.Span, Encoding.ASCII);
             }
 
-            bool alwaysReturns = false;
-            foreach (var stmt in funcDef.StatementsList) {
-                Debug.Assert (stmt is not null);
+            if (funcDef.ExpressionBody)
+                throw new NotImplementedException ();
 
-                var stmtData = GenerateCode_Statement (ref transUnit, symbols, src, def, retType, stmt!);
+            Debug.Assert (funcDef.Statement is not null);
+            Debug.Assert (funcDef.Statement.Endpoint is null);
 
-                alwaysReturns |= stmtData.AlwaysReturns;
-            }
+            var stmtData = GenerateCode_Statement (ref transUnit, symbols, src, def, retType, funcDef.Statement);
 
-            if (!alwaysReturns) {
+            if (!stmtData.AlwaysReturns) {
                 if (retType == env.TypeVoid) {
                     builderRef.PositionAtEnd (entryBlock);
                     builderRef.BuildRetVoid ();
@@ -219,21 +224,24 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 }
 
                 case ES_AstBlockStatement blockStmt: {
-                    throw new NotImplementedException ();
-                    /*Debug.Assert (blockStmt.Statements is not null);
                     symbols.Push ();
 
                     bool alwaysReturns = false;
-                    foreach (var subStmt in blockStmt.Statements) {
-                        Debug.Assert (subStmt is not null);
 
-                        var subStmtData = GenerateCode_Statement (ref transUnit, symbols, src, retType, subStmt);
+                    ES_AstStatement? subStmt = blockStmt.Statement;
+                    while (subStmt is not null) {
+                        var subStmtData = GenerateCode_Statement (ref transUnit, symbols, src, funcLLVM, retType, subStmt);
 
-                        alwaysReturns |= subStmtData.AlwaysReturns;
+                        if (subStmtData.AlwaysReturns) {
+                            alwaysReturns = true;
+                            break;
+                        }
+
+                        subStmt = subStmt.Endpoint;
                     }
 
                     symbols.Pop ();
-                    return new StatementData { AlwaysReturns = alwaysReturns };*/
+                    return new StatementData { AlwaysReturns = alwaysReturns };
                 }
 
                 #region Symbol definition

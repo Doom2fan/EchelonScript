@@ -300,9 +300,11 @@ namespace TestSuiteWPF.Tests {
                             AddAstNodeToTree (arg.DefaultExpression, argItem);
                     }
 
-                    if (funcDef.StatementsList != null) {
-                        foreach (var statement in funcDef.StatementsList)
-                            AddAstNodeToTree (statement, statements);
+                    var curStatement = funcDef.Statement;
+                    while (curStatement is not null) {
+                        AddAstNodeToTree (curStatement, statements);
+
+                        curStatement = curStatement.Endpoint;
                     }
 
                     break;
@@ -310,19 +312,18 @@ namespace TestSuiteWPF.Tests {
 
                 #region Statements
 
-                case ES_AstEmptyErrorExpression _: {
+                case ES_AstEmptyErrorExpression: {
                     AddNodeToTree ("Empty (error) statement", parentItem);
                     break;
                 }
 
-                case ES_AstEmptyErrorStatement _: {
+                case ES_AstEmptyErrorStatement: {
                     AddNodeToTree ("Empty (error) statement", parentItem);
                     break;
                 }
 
                 case ES_AstLabeledStatement labeledStatement: {
-                    var thisItem = AddNodeToTree ($"{labeledStatement.LabelName}:", parentItem);
-                    AddAstNodeToTree (labeledStatement.Statement, parentItem);
+                    var thisItem = AddNodeToTree ($"Label \"{labeledStatement.LabelName.Text}\":", parentItem);
                     thisItem.Tag = labeledStatement.LabelName;
                     break;
                 }
@@ -330,9 +331,10 @@ namespace TestSuiteWPF.Tests {
                 case ES_AstBlockStatement blockStatement: {
                     var thisItem = AddNodeToTree ("Statement block", parentItem);
 
-                    if (blockStatement.Statements != null) {
-                        foreach (var statement in blockStatement.Statements)
-                            AddAstNodeToTree (statement, thisItem);
+                    var curStatement = blockStatement.Statement;
+                    while (curStatement != null) {
+                        AddAstNodeToTree (curStatement, thisItem);
+                        curStatement = curStatement.Endpoint;
                     }
                     break;
                 }

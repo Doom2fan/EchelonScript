@@ -462,14 +462,20 @@ namespace EchelonScriptCompiler.Frontend {
             Debug.Assert (funcDef.ReturnType is ES_AstTypeDeclaration_TypeReference);
             Debug.Assert (funcDef.ArgumentsList is not null);
 
-            Debug.Assert (funcDef.StatementsList is not null);
+            Debug.Assert (funcDef.Statement is not null);
             // Expression-body functions must contain exactly a single expression statement.
-            Debug.Assert ((funcDef.ExpressionBody && funcDef.StatementsList.Length == 1) || !funcDef.ExpressionBody);
+            Debug.Assert (
+                (funcDef.ExpressionBody && funcDef.Statement is ES_AstExpressionStatement && funcDef.Statement.Endpoint is null) ||
+                !funcDef.ExpressionBody
+            );
 
             symbols.Push ();
 
-            foreach (var stmt in funcDef.StatementsList)
-                GatherTypes_Statement (ref transUnit, symbols, unitSrc, stmt!);
+            ES_AstStatement? curStatement = funcDef.Statement;
+            while (curStatement is not null) {
+                GatherTypes_Statement (ref transUnit, symbols, unitSrc, curStatement);
+                curStatement = curStatement.Endpoint;
+            }
 
             symbols.Pop ();
         }
@@ -479,19 +485,17 @@ namespace EchelonScriptCompiler.Frontend {
 
             switch (stmt) {
                 case ES_AstEmptyStatement:
-                    break;
-
-                case ES_AstLabeledStatement labelStmt:
-                    GatherTypes_Statement (ref transUnit, symbols, src, labelStmt.Statement);
+                case ES_AstLabeledStatement:
                     break;
 
                 case ES_AstBlockStatement blockStmt: {
-                    Debug.Assert (blockStmt.Statements is not null);
+                    Debug.Assert (blockStmt.Statement is not null);
                     symbols.Push ();
 
-                    foreach (var subStmt in blockStmt.Statements) {
-                        Debug.Assert (subStmt is not null);
-                        GatherTypes_Statement (ref transUnit, symbols, src, subStmt);
+                    ES_AstStatement? curStatement = blockStmt.Statement;
+                    while (curStatement is not null) {
+                        GatherTypes_Statement (ref transUnit, symbols, src, curStatement);
+                        curStatement = curStatement.Endpoint;
                     }
 
                     symbols.Pop ();
@@ -542,8 +546,11 @@ namespace EchelonScriptCompiler.Frontend {
                                 GatherTypes_Expression (ref transUnit, symbols, src, expr);
                         }
 
-                        foreach (var subStmt in section.StatementsBlock)
-                            GatherTypes_Statement (ref transUnit, symbols, src, subStmt);
+                        ES_AstStatement? curStatement = section.StatementsBlock;
+                        while (curStatement is not null) {
+                            GatherTypes_Statement (ref transUnit, symbols, src, curStatement);
+                            curStatement = curStatement.Endpoint;
+                        }
                     }
 
                     break;

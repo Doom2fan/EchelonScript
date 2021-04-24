@@ -535,13 +535,13 @@ namespace EchelonScriptCompiler.Frontend {
         public ES_AstFunctionArgumentDefinition [] ArgumentsList;
 
         public bool ExpressionBody;
-        public ES_AstStatement? [] StatementsList;
+        public ES_AstStatement? Statement;
 
         public ES_AstFunctionDefinition (
             ES_AccessModifier accessMod, EchelonScriptToken? docCom, bool staticMod, bool constMod,
             ES_VirtualnessModifier virtualMod, EchelonScriptToken name, ES_AstTypeDeclaration retType,
             ES_AstFunctionArgumentDefinition [] argsList,
-            bool exprBody, ES_AstStatement? [] statements,
+            bool exprBody, ES_AstStatement? statements,
             EchelonScriptToken closeBraceTk
         ) : base (1) {
             AccessModifier = accessMod;
@@ -556,7 +556,7 @@ namespace EchelonScriptCompiler.Frontend {
             ArgumentsList = argsList;
 
             ExpressionBody = exprBody;
-            StatementsList = statements;
+            Statement = statements;
 
             bounds = new ES_AstNodeBounds (retType?.NodeBounds.StartPos ?? name.TextStartPos, closeBraceTk.TextEndPos);
         }
@@ -589,13 +589,18 @@ namespace EchelonScriptCompiler.Frontend {
     #region Statements
 
     public abstract class ES_AstStatement : ES_AstNode {
+        public ES_AstStatement? Endpoint { get; set; }
+
         public ES_AstStatement (int nothing) : base (1) { }
     }
 
     public class ES_AstEmptyErrorStatement : ES_AstStatement {
-        public override ES_AstNodeBounds NodeBounds => throw new Exception ();
+        public override ES_AstNodeBounds NodeBounds => bounds;
+        public ES_AstNodeBounds bounds;
 
-        public ES_AstEmptyErrorStatement () : base (1) { }
+        public ES_AstEmptyErrorStatement (EchelonScriptToken tk) : base (1) {
+            bounds = new ES_AstNodeBounds (tk.TextStartPos, tk.TextStartPos);
+        }
     }
 
     public class ES_AstLabeledStatement : ES_AstStatement {
@@ -603,17 +608,15 @@ namespace EchelonScriptCompiler.Frontend {
             get {
                 return new ES_AstNodeBounds {
                     StartPos = LabelName.TextStartPos,
-                    EndPos = Statement?.NodeBounds.EndPos ?? LabelName.TextEndPos,
+                    EndPos = LabelName.TextEndPos,
                 };
             }
         }
 
         public EchelonScriptToken LabelName;
-        public ES_AstStatement Statement;
 
-        public ES_AstLabeledStatement (EchelonScriptToken label, ES_AstStatement statement) : base (1) {
+        public ES_AstLabeledStatement (EchelonScriptToken label) : base (1) {
             LabelName = label;
-            Statement = statement;
         }
     }
 
@@ -621,12 +624,12 @@ namespace EchelonScriptCompiler.Frontend {
         public override ES_AstNodeBounds NodeBounds => bounds;
         protected ES_AstNodeBounds bounds;
 
-        public ES_AstStatement? [] Statements;
+        public ES_AstStatement? Statement;
 
         public ES_AstBlockStatement (
-            ES_AstStatement? [] statements, EchelonScriptToken openTk, EchelonScriptToken closeTk
+            ES_AstStatement? statement, EchelonScriptToken openTk, EchelonScriptToken closeTk
         ) : base (1) {
-            Statements = statements;
+            Statement = statement;
 
             bounds = new ES_AstNodeBounds (openTk.TextStartPos, closeTk.TextEndPos);
         }
@@ -743,10 +746,10 @@ namespace EchelonScriptCompiler.Frontend {
         protected ES_AstNodeBounds bounds;
 
         public ES_AstExpression ValueExpression;
-        public (ES_AstExpression? [] Expressions, ES_AstStatement [] StatementsBlock) [] Sections;
+        public (ES_AstExpression? [] Expressions, ES_AstStatement StatementsBlock) [] Sections;
 
         public ES_AstSwitchStatement (
-            ES_AstExpression valExpr, (ES_AstExpression? [], ES_AstStatement []) [] sectionsList,
+            ES_AstExpression valExpr, (ES_AstExpression? [], ES_AstStatement) [] sectionsList,
             EchelonScriptToken switchStartTk, EchelonScriptToken closeBraceTk
         ) : base (1) {
             ValueExpression = valExpr;
