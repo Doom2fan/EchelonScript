@@ -852,9 +852,9 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
             var ownerFunc = builderRef.InsertBlock.Parent;
 
-            var thenBlock = ownerFunc.AppendBasicBlock ("if_then");
-            var elseBlock = ownerFunc.AppendBasicBlock ("if_else");
-            var endBlock = ownerFunc.AppendBasicBlock ("if_end");
+            var thenBlock = ownerFunc.AppendBasicBlock ("ternaryCond_then");
+            var elseBlock = ownerFunc.AppendBasicBlock ("ternaryCond_else");
+            var endBlock = ownerFunc.AppendBasicBlock ("ternaryCond_end");
 
             builderRef.BuildCondBr (condExpr.Value, thenBlock, elseBlock);
 
@@ -881,7 +881,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
             // End
             builderRef.PositionAtEnd (endBlock);
-            var phi = builderRef.BuildPhi (GetLLVMType (expectedType), "ifTmp");
+            var phi = builderRef.BuildPhi (GetLLVMType (expectedType), "ternaryCondTmp");
             phi.AddIncoming (leftExpr.Value, thenBlock);
             phi.AddIncoming (rightExpr.Value, elseBlock);
 
