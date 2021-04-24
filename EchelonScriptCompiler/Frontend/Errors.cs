@@ -12,7 +12,7 @@ using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Frontend;
 using Microsoft.Toolkit.HighPerformance.Buffers;
 
-namespace EchelonScriptCompiler {
+namespace EchelonScriptCompiler.Frontend {
     public static class ES_FrontendErrors {
         #region Tokenizer errors
 
@@ -73,6 +73,8 @@ namespace EchelonScriptCompiler {
 
         public const string TypeDeclExpected = "Syntax error; Type declaration expected.";
         public const string ValueExpected = "Syntax error; value expected.";
+
+        public const string EmptyArgument = "Argument missing; Arguments cannot be empty.";
 
         public const string IntLiteralTooBig = "The specified integer literal is larger than 64 bits.";
 
@@ -135,10 +137,26 @@ namespace EchelonScriptCompiler {
 
         #region Compilation errors
 
-        public const string TypeAlreadyDefined = "The namespace \"{0}\" already contains a definition for \"{1}\".";
-        public const string NamespaceDoesntExist = "The namespace \"{0}\" does not exist.";
+        public const string TypeAlreadyDefined = "The namespace \"{namespace}\" already contains a definition for \"{typeName}\".";
+        public const string NamespaceDoesntExist = "The namespace \"{namespace}\" does not exist.";
+        public const string InaccessibleProtectionLevel = "\"{symbolName}\" is inaccessible due to its protection level.";
 
-        public const string CantFindSymbol = "The symbol \"{0}\" could not be found.";
+        public const string CantFindSymbol = "The symbol \"{symbolName}\" could not be found.";
+        public const string VarUsedAsType = "Variable \"{symbolName}\" cannot be used as a type.";
+        public const string FuncUsedAsType = "Function \"{symbolName}\" cannot be used as a type.";
+        public const string DuplicateSymbolDefinition = "Attempted to redefine the symbol \"{symbolName}\".";
+
+        public const string CantInvokeExpr = "Expression cannot be invoked like a function.";
+        public const string CantInvokeType = "Type \"{typeName}\" cannot be invoked like a function.";
+
+        public const string TooManyFuncArgs = "Too many arguments in call to function \"{funcName}\".";
+        public const string NotEnoughFuncArgs = "Missing required arguments in call to function \"{funcName}\".";
+        public const string MissingFuncArg = "There is no argument given that corresponds to required argument \"{argName}\" in call to function \"{funcName}\".";
+
+        public const string WrongArgType = "Argument {arg} may not be passed with the \"{argType}\" keyword.";
+        public const string ArgNeedsType = "Argument {arg} must be passed with the \"{argType}\" keyword.";
+
+        public const string ArgAlreadyDefined = "Tried to redefine argument \"{argName}\".";
 
         public const string InvalidInheritance = "Cannot inherit from type \"{0}\".";
 
@@ -146,26 +164,105 @@ namespace EchelonScriptCompiler {
 
         public const string RepeatedInterfaceInList = "Interface \"{0}\" is already in the interfaces list.";
 
+        public const string ConstantExprExpected = "A constant value is expected.";
+
+        public const string TempValueInIncDecOp = "The operand of an increment or decrement operator cannot be a temporary value.";
+
+        public const string InvalidExprTerm = "Invalid expression term \"{exprTerm}\".";
+
+        public const string NoCast = "Cannot convert type \"{givenType}\" to \"{destType}\".";
+        public const string NoImplicitCast = "Cannot implicitly convert type \"{givenType}\" to \"{destType}\".";
+        public const string NoExplicitCast = "Cannot type \"{givenType}\" to \"{destType}\".";
+        public const string CantApplyBinaryOp = "\"{op}\" cannot be applied to operands of type \"{lhs}\" and \"{rhs}\".";
+        public const string CantApplyUnaryOp = "\"{op}\" cannot be applied to operand of type \"{expr}\".";
+        public const string CannotAssignExpr = "The expression is not assignable.";
+
+        public const string UnexpectedReturnValue = "Unexpected return value.";
+        public const string MissingReturnValue = "A return value of or convertible to type \"{retType}\" is required.";
+        public const string MissingReturnStatement = "Not all code paths return a value.";
+
         #region Generation functions
 
         public static EchelonScriptErrorMessage GenTypeAlreadyDefined (string nmName, string typeName, EchelonScriptToken errorToken) {
-            var errorMessage = TypeAlreadyDefined.Replace ("{0}", nmName).Replace ("{1}", typeName);
+            var errorMessage = TypeAlreadyDefined.Replace ("{namespace}", nmName).Replace ("{typeName}", typeName);
             return new EchelonScriptErrorMessage (errorToken, errorMessage);
         }
-
         public static EchelonScriptErrorMessage GenNamespaceDoesntExist (string nmName, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
-            var errorMessage = NamespaceDoesntExist.Replace ("{0}", nmName);
+            var errorMessage = NamespaceDoesntExist.Replace ("{namespace}", nmName);
+            return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
+        }
+        public static EchelonScriptErrorMessage GenInaccessibleProtectionLevel (string symbolName, EchelonScriptToken errorToken) {
+            var errorMessage = InaccessibleProtectionLevel.Replace ("{symbolName}", symbolName);
+            return new EchelonScriptErrorMessage (errorToken, errorMessage);
+        }
+        public static EchelonScriptErrorMessage GenInaccessibleProtectionLevel (string symbolName, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
+            var errorMessage = InaccessibleProtectionLevel.Replace ("{symbolName}", symbolName);
             return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
         }
 
         public static EchelonScriptErrorMessage GenCantFindSymbol (string symbolName, EchelonScriptToken errorToken) {
-            var errorMessage = CantFindSymbol.Replace ("{0}", symbolName);
+            var errorMessage = CantFindSymbol.Replace ("{symbolName}", symbolName);
             return new EchelonScriptErrorMessage (errorToken, errorMessage);
         }
-
         public static EchelonScriptErrorMessage GenCantFindSymbol (string symbolName, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
-            var errorMessage = CantFindSymbol.Replace ("{0}", symbolName);
+            var errorMessage = CantFindSymbol.Replace ("{symbolName}", symbolName);
             return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
+        }
+        public static EchelonScriptErrorMessage GenVarUsedAsType (string symbolName, EchelonScriptToken errorToken) {
+            var errorMessage = VarUsedAsType.Replace ("{symbolName}", symbolName);
+            return new EchelonScriptErrorMessage (errorToken, errorMessage);
+        }
+        public static EchelonScriptErrorMessage GenFuncUsedAsType (string symbolName, EchelonScriptToken errorToken) {
+            var errorMessage = FuncUsedAsType.Replace ("{symbolName}", symbolName);
+            return new EchelonScriptErrorMessage (errorToken, errorMessage);
+        }
+        public static EchelonScriptErrorMessage GenDuplicateSymbolDef (string symbolName, EchelonScriptToken errorToken) {
+            var errorMessage = DuplicateSymbolDefinition.Replace ("{symbolName}", symbolName);
+            return new EchelonScriptErrorMessage (errorToken, errorMessage);
+        }
+        public static EchelonScriptErrorMessage GenDuplicateSymbolDef (string symbolName, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
+            var errorMessage = DuplicateSymbolDefinition.Replace ("{symbolName}", symbolName);
+            return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
+        }
+
+        public static EchelonScriptErrorMessage GenCantInvokeType (string typeName, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
+            var errorMessage = CantInvokeType.Replace ("{typeName}", typeName);
+            return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
+        }
+
+        public static EchelonScriptErrorMessage GenTooManyFuncArgs (string funcName, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
+            var errorMessage = TooManyFuncArgs.Replace ("{funcName}", funcName);
+            return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
+        }
+        public static EchelonScriptErrorMessage GenNotEnoughFuncArgs (string funcName, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
+            var errorMessage = NotEnoughFuncArgs.Replace ("{funcName}", funcName);
+            return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
+        }
+        public static EchelonScriptErrorMessage GenMissingFuncArg (string argName, string funcName, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
+            var errorMessage = MissingFuncArg.Replace ("{argName}", argName).Replace ("{funcName}", funcName);
+            return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
+        }
+
+        public static EchelonScriptErrorMessage GenWrongArgType (string argName, string argType, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
+            var errorMessage = WrongArgType.Replace ("{arg}", "\"{argName}\"").Replace ("{argName}", argName).Replace ("{argType}", argType);
+            return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
+        }
+        public static EchelonScriptErrorMessage GenWrongArgType (int argNum, string argType, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
+            var errorMessage = WrongArgType.Replace ("{arg}", argNum.ToString ()).Replace ("{argType}", argType);
+            return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
+        }
+        public static EchelonScriptErrorMessage GenArgNeedsType (string argName, string argType, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
+            var errorMessage = ArgNeedsType.Replace ("{arg}", "\"{argName}\"").Replace ("{argName}", argName).Replace ("{argType}", argType);
+            return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
+        }
+        public static EchelonScriptErrorMessage GenArgNeedsType (int argNum, string argType, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
+            var errorMessage = ArgNeedsType.Replace ("{arg}", argNum.ToString ()).Replace ("{argType}", argType);
+            return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
+        }
+
+        public static EchelonScriptErrorMessage GenArgAlreadyDefined (string argName, EchelonScriptToken errorToken) {
+            var errorMessage = ArgAlreadyDefined.Replace ("{argName}", argName);
+            return new EchelonScriptErrorMessage (errorToken, errorMessage);
         }
 
         public static EchelonScriptErrorMessage GenInvalidInheritance (string symbolName, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
@@ -178,6 +275,41 @@ namespace EchelonScriptCompiler {
             return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
         }
 
+        public static EchelonScriptErrorMessage GenInvalidExprTerm (string exprTerm, EchelonScriptToken errorToken) {
+            var errorMessage = InvalidExprTerm.Replace ("{exprTerm}", exprTerm);
+            return new EchelonScriptErrorMessage (errorToken, errorMessage);
+        }
+        public static EchelonScriptErrorMessage GenInvalidExprTerm (string exprTerm, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
+            var errorMessage = InvalidExprTerm.Replace ("{exprTerm}", exprTerm);
+            return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
+        }
+
+        public static EchelonScriptErrorMessage GenNoCast (string destType, string givenType, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
+            var errorMessage = NoCast.Replace ("{givenType}", givenType).Replace ("{destType}", destType);
+            return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
+        }
+        public static EchelonScriptErrorMessage GenNoImplicitCast (string destType, string givenType, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
+            var errorMessage = NoImplicitCast.Replace ("{givenType}", givenType).Replace ("{destType}", destType);
+            return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
+        }
+        public static EchelonScriptErrorMessage GenNoExplicitCast (string destType, string givenType, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
+            var errorMessage = NoExplicitCast.Replace ("{givenType}", givenType).Replace ("{destType}", destType);
+            return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
+        }
+        public static EchelonScriptErrorMessage GenCantApplyBinaryOp (string op, string lhs, string rhs, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
+            var errorMessage = CantApplyBinaryOp.Replace ("{op}", op).Replace ("{lhs}", lhs).Replace ("{rhs}", rhs);
+            return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
+        }
+        public static EchelonScriptErrorMessage GenCantApplyUnaryOp (string op, string expr, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
+            var errorMessage = CantApplyBinaryOp.Replace ("{op}", op).Replace ("{expr}", expr);
+            return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
+        }
+
+        public static EchelonScriptErrorMessage GenMissingReturnValue (string retType, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
+            var errorMessage = MissingReturnValue.Replace ("{retType}", retType);
+            return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
+        }
+
         #endregion
 
         #endregion
@@ -185,6 +317,22 @@ namespace EchelonScriptCompiler {
         #region Exceptions
 
         public const string ClashingTypeExists = "A clashing type exists. The caller must check for this before calling this function.";
+
+        #endregion
+    }
+
+    public static class ES_FrontendWarnings {
+        #region Compilation warnings
+
+        public const string UnreachableCode = "Unreachable code detected.";
+
+        #endregion
+    }
+
+    public static class ES_FrontendInfoMsg {
+        #region Compilation info
+
+        public const string RedundantCast = "Cast is redundant.";
 
         #endregion
     }

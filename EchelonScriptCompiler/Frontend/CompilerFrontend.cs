@@ -8,12 +8,12 @@
  */
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using ChronosLib.Pooled;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Data.Types;
-using EchelonScriptCompiler.Utilities;
 
 namespace EchelonScriptCompiler.Frontend {
     public struct TranslationUnitData : IDisposable {
@@ -46,17 +46,16 @@ namespace EchelonScriptCompiler.Frontend {
         #region ================== Instance fields
 
         public ES_AbstractSyntaxTree Ast;
-        public SymbolsStack Symbols;
+        public SymbolStack<FrontendSymbol> Symbols;
 
         #endregion
 
         #region ================== Instance methods
 
-        public void Initialize (ES_AbstractSyntaxTree ast) {
+        public unsafe void Initialize (ES_AbstractSyntaxTree ast) {
             Ast = ast;
 
-            Symbols = new SymbolsStack ();
-            Symbols.Initialize ();
+            Symbols = new SymbolStack<FrontendSymbol> (new FrontendSymbol (FrontendSymbolType.None, null, 0));
         }
 
         #endregion
@@ -76,72 +75,244 @@ namespace EchelonScriptCompiler.Frontend {
         #endregion
     }
 
-    public unsafe struct SymbolsStack : IDisposable {
+    public enum FrontendSymbolType {
+        None,
+        Type,
+        Variable,
+        Function,
+    }
+
+    public enum FrontendSymbolFlags {
+        UsingVar,
+    }
+
+    public unsafe struct FrontendSymbol {
         #region ================== Instance fields
 
-        private StructPooledList<Pointer<ES_TypeInfo>> importedTypes;
-        private StructPooledList<int> stacks;
+        private readonly void* value;
+
+        public readonly FrontendSymbolType Tag;
+        public readonly FrontendSymbolFlags Flags;
+
+        #endregion
+
+        #region ================== Constructors
+
+        internal FrontendSymbol (FrontendSymbolType tag, void* value, FrontendSymbolFlags flags) {
+            Tag = tag;
+            this.value = value;
+            Flags = flags;
+        }
 
         #endregion
 
         #region ================== Instance methods
 
-        public void Initialize () {
-            importedTypes = new StructPooledList<Pointer<ES_TypeInfo>> (CL_ClearMode.Auto);
-            stacks = new StructPooledList<int> (CL_ClearMode.Auto);
+        public ES_TypeInfo* MatchType () {
+            if (Tag != FrontendSymbolType.Type)
+                throw new CompilationException ();
+
+            return (ES_TypeInfo*) value;
+        }
+
+        public ES_TypeInfo* MatchVar () {
+            if (Tag != FrontendSymbolType.Variable)
+                throw new CompilationException ();
+
+            return (ES_TypeInfo*) value;
+        }
+
+        public ES_FunctionData* MatchFunction () {
+            if (Tag != FrontendSymbolType.Function)
+                throw new CompilationException ();
+
+            return (ES_FunctionData*) value;
+        }
+
+        #endregion
+    }
+
+    public unsafe struct Scope<TSymbolType> {
+        public Dictionary<ArrayPointer<byte>, TSymbolType> Symbols;
+
+        public Scope (Dictionary<ArrayPointer<byte>, TSymbolType> symbols) {
+            Symbols = symbols;
+        }
+    }
+
+    public unsafe class SymbolStack<TSymbolType> : IDisposable {
+        #region ================== Instance fields
+
+        private CL_PooledList<Scope<TSymbolType>> scopes;
+        private CL_PooledList<Dictionary<ArrayPointer<byte>, TSymbolType>> pooledDicts;
+        private int version;
+
+        private TSymbolType notFoundValue;
+
+        #endregion
+
+        #region ================== Constructors
+
+        public SymbolStack (TSymbolType notFoundVal) {
+            scopes = new CL_PooledList<Scope<TSymbolType>> ();
+            pooledDicts = new CL_PooledList<Dictionary<ArrayPointer<byte>, TSymbolType>> ();
+            version = 0;
+
+            notFoundValue = notFoundVal;
+
+            IsDisposed = false;
+        }
+
+        #endregion
+
+        #region ================== Instance methods
+
+        private Dictionary<ArrayPointer<byte>, TSymbolType> GetDict () {
+            if (pooledDicts.Count > 0) {
+                int idx = pooledDicts.Count - 1;
+
+                var ret = pooledDicts [idx];
+                pooledDicts.RemoveAt (idx);
+
+                return ret;
+            }
+
+            return new Dictionary<ArrayPointer<byte>, TSymbolType> ();
         }
 
         public void Push () {
-            stacks.Add (0);
+            version++;
+
+            scopes.Add (new Scope<TSymbolType> (GetDict ()));
         }
 
         public void Pop () {
-            Debug.Assert (stacks.Count > 0);
+            version++;
 
-            int lastStack = stacks.Count - 1;
+            Debug.Assert (scopes.Count > 0);
 
-            importedTypes.RemoveEnd (stacks [lastStack]);
-            stacks.RemoveAt (lastStack);
+            var idx = scopes.Count - 1;
+            var dict = scopes [idx].Symbols;
+
+            scopes.RemoveAt (idx);
+
+            dict.Clear ();
+            pooledDicts.Add (dict);
         }
 
-        public void AddType (ES_TypeInfo* type) {
-            Debug.Assert (stacks.Count > 0);
+        public TSymbolType? GetSymbol (ArrayPointer<byte> name) {
+            for (int i = scopes.Count - 1; i >= 0; i--) {
+                var scope = scopes [i];
 
-            importedTypes.Add (type);
-            stacks [stacks.Count - 1]++;
-        }
-
-        public void AddTypes (ReadOnlySpan<Pointer<ES_TypeInfo>> types) {
-            Debug.Assert (stacks.Count > 0);
-
-            foreach (var type in types)
-                importedTypes.Add (type);
-
-            stacks [stacks.Count - 1] += importedTypes.Count;
-        }
-
-        public ES_TypeInfo* GetType (ArrayPointer<byte> name) {
-            for (int i = importedTypes.Count - 1; i >= 0; i--) {
-                var type = importedTypes [i];
-                if (type.Address->TypeName.Equals (name))
-                    return type;
+                if (scope.Symbols.TryGetValue (name, out var symbol))
+                    return symbol;
             }
 
-            return null;
+            return notFoundValue;
+        }
+
+        public bool AddSymbol (ArrayPointer<byte> name, TSymbolType symbol) {
+            version++;
+
+            var scope = scopes [^1];
+
+            return scope.Symbols.TryAdd (name, symbol);
         }
 
         #endregion
 
         #region ================== IDisposable support
 
-        private bool disposedValue;
+        public bool IsDisposed;
+
+        private void CheckDisposed () {
+            if (IsDisposed)
+                throw new ObjectDisposedException (GetType ().Name);
+        }
+
+        ~SymbolStack () {
+            if (!IsDisposed)
+                DoDispose ();
+        }
+
+        protected virtual void DoDispose () {
+            if (!IsDisposed) {
+                scopes.Dispose ();
+                pooledDicts.Dispose ();
+
+                IsDisposed = true;
+            }
+        }
 
         public void Dispose () {
-            if (!disposedValue) {
-                importedTypes.Dispose ();
+            DoDispose ();
+            GC.SuppressFinalize (this);
+        }
 
-                disposedValue = true;
+        #endregion
+
+        #region ================== Enumerator support
+
+        public Enumerator GetEnumerator () {
+            return new Enumerator (this);
+        }
+
+        public struct Enumerator : IEnumerator<IReadOnlyDictionary<ArrayPointer<byte>, TSymbolType>> {
+            #region ================== Instance fields
+
+            private int version;
+
+            private SymbolStack<TSymbolType> stack;
+            private CL_PooledList<Scope<TSymbolType>>.Enumerator enumerator;
+
+            #endregion
+
+            #region ================== Instance properties
+
+            public IReadOnlyDictionary<ArrayPointer<byte>, TSymbolType> Current {
+                get {
+                    CheckValid ();
+                    return enumerator.Current.Symbols;
+                }
             }
+
+            object IEnumerator.Current => Current;
+
+            #endregion
+
+            #region ================== Constructors
+
+            public Enumerator (SymbolStack<TSymbolType> newStack) {
+                stack = newStack;
+
+                version = stack.version;
+                enumerator = stack.scopes.GetEnumerator ();
+            }
+
+            #endregion
+
+            #region ================== Instance methods
+
+            private void CheckValid () {
+                if (version != stack.version)
+                    throw new InvalidOperationException ("The stack was modified after the enumerator was created.");
+            }
+
+            public bool MoveNext () {
+                CheckValid ();
+
+                return enumerator.MoveNext ();
+            }
+
+            public void Reset () {
+                CheckValid ();
+
+                enumerator = stack.scopes.GetEnumerator ();
+            }
+
+            public void Dispose () { }
+
+            #endregion
         }
 
         #endregion
@@ -151,6 +322,8 @@ namespace EchelonScriptCompiler.Frontend {
         #region ================== Instance fields
 
         protected List<EchelonScriptErrorMessage> errorList;
+        protected List<EchelonScriptErrorMessage> warningList;
+        protected List<EchelonScriptErrorMessage> infoList;
         protected StructPooledList<TranslationUnitData> translationUnits;
         protected int unitIdx;
 
@@ -165,8 +338,14 @@ namespace EchelonScriptCompiler.Frontend {
 
         #region ================== Constructors
 
-        public CompilerFrontend (List<EchelonScriptErrorMessage> errList) {
+        public CompilerFrontend (
+            List<EchelonScriptErrorMessage> errList,
+            List<EchelonScriptErrorMessage> warnList,
+            List<EchelonScriptErrorMessage> informList
+        ) {
             errorList = errList;
+            warningList = warnList;
+            infoList = informList;
 
             translationUnits = new StructPooledList<TranslationUnitData> (CL_ClearMode.Auto);
 
@@ -180,56 +359,16 @@ namespace EchelonScriptCompiler.Frontend {
 
         #region ================== Instance methods
 
-        protected ArrayPointer<byte> GetFullyQualifiedName (ArrayPointer<byte> namespaceName, ArrayPointer<byte> typeName) {
-            using var fqnArr = PooledArray<byte>.GetArray (namespaceName.Length + typeName.Length + 2);
-            var fqnSpan = fqnArr.Span;
-
-            int len = 0;
-
-            namespaceName.Span.CopyTo (fqnSpan.Slice (len, namespaceName.Length));
-            len += namespaceName.Length;
-
-            fqnSpan [len++] = (byte) ':';
-            fqnSpan [len++] = (byte) ':';
-
-            typeName.Span.CopyTo (fqnSpan.Slice (len, typeName.Length));
-
-            return Environment!.IdPool.GetIdentifier (fqnSpan);
+        protected FrontendSymbol NewSymbolVariable (ES_TypeInfo* type, FrontendSymbolFlags flags = 0) {
+            return new FrontendSymbol (FrontendSymbolType.Variable, type, flags);
         }
 
-        protected ArrayPointer<byte> GetFullyQualifiedName (ArrayPointer<byte> namespaceName, ReadOnlySpan<ArrayPointer<byte>> typeName) {
-            Debug.Assert (typeName.Length > 0);
+        protected FrontendSymbol NewSymbolType (ES_TypeInfo* type) {
+            return new FrontendSymbol (FrontendSymbolType.Type, type, 0);
+        }
 
-            int len = namespaceName.Length + 2 + (typeName.Length - 1); // Namespace name + "::" + "."s (if any)
-            for (int i = 0; i < typeName.Length; i++)
-                len += typeName [i].Length;
-
-            using var fqnArr = PooledArray<byte>.GetArray (len);
-            var fqnSpan = fqnArr.Span;
-
-            len = 0;
-
-            // Namespace
-            namespaceName.Span.CopyTo (fqnSpan.Slice (len, namespaceName.Length));
-            len += namespaceName.Length;
-
-            // Namespace separator
-            fqnSpan [len++] = (byte) ':';
-            fqnSpan [len++] = (byte) ':';
-
-            // First type name
-            typeName [0].Span.CopyTo (fqnSpan.Slice (len, typeName [0].Length));
-            len += typeName [0].Length;
-
-            // Nested type names
-            for (int i = 1; i < typeName.Length; i++) {
-                fqnSpan [len++] = (byte) '.';
-
-                typeName [i].Span.CopyTo (fqnSpan.Slice (len, typeName [i].Length));
-                len += typeName [i].Length;
-            }
-
-            return Environment!.IdPool.GetIdentifier (fqnSpan);
+        protected FrontendSymbol NewSymbolFunction (ES_FunctionData* data) {
+            return new FrontendSymbol (FrontendSymbolType.Function, data, 0);
         }
 
         public void Setup (EchelonScriptEnvironment env, EchelonScriptEnvironment.Builder envBuilder) {
@@ -241,7 +380,7 @@ namespace EchelonScriptCompiler.Frontend {
 
         public void Reset () {
             foreach (var codeUnit in translationUnits)
-                codeUnit.AstUnits.Dispose ();
+                codeUnit.Dispose ();
 
             translationUnits.Clear ();
 
@@ -279,32 +418,56 @@ namespace EchelonScriptCompiler.Frontend {
             translationUnits.Add (translationUnit);
         }
 
-        public void CompileCode () {
+        public PooledArray<TranslationUnitData> CompileCode () {
+            var nullArr = PooledArray<TranslationUnitData>.Empty ();
+
             CheckDisposed ();
             CheckSetUp ();
 
-            foreach (ref var transUnit in translationUnits.Span)
-                GatherTypes (ref transUnit);
+            if (errorList.Count > 0)
+                return nullArr;
+
+            GenerateBuiltinTypes ();
 
             if (errorList.Count > 0)
-                return;
+                return nullArr;
+
+            foreach (ref var transUnit in translationUnits.Span)
+                CreateTypes (ref transUnit);
+
+            if (errorList.Count > 0)
+                return nullArr;
 
             GenerateTypesList ();
 
             if (errorList.Count > 0)
-                return;
+                return nullArr;
 
             foreach (ref var transUnit in translationUnits.Span)
                 GatherGlobalImports (ref transUnit);
 
             if (errorList.Count > 0)
-                return;
+                return nullArr;
+
+            foreach (ref var transUnit in translationUnits.Span)
+                CreateFunctions (ref transUnit);
+
+            if (errorList.Count > 0)
+                return nullArr;
+
+            foreach (ref var transUnit in translationUnits.Span)
+                GatherTypes (ref transUnit);
+
+            if (errorList.Count > 0)
+                return nullArr;
 
             foreach (ref var transUnit in translationUnits.Span)
                 CheckTypes (ref transUnit);
 
             if (errorList.Count > 0)
-                return;
+                return nullArr;
+
+            return translationUnits.ToPooledArray ();
         }
 
         protected void CheckDisposed () {

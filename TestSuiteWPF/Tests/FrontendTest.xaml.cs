@@ -8,24 +8,24 @@
  */
 
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Diagnostics;
+using System.Text;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using ChronosLib.Pooled;
 using EchelonScriptCompiler;
-using EchelonScriptCompiler.Backends.LLVMBackend;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Data.Types;
-using EchelonScriptCompiler.Frontend;
 using ICSharpCode.AvalonEdit.Document;
+using Microsoft.Toolkit.HighPerformance.Buffers;
 
 namespace TestSuiteWPF.Tests {
     /// <summary>
     /// Interaction logic for CompilerTest.xaml
     /// </summary>
-    public partial class CompilerTest : UserControl {
+    public partial class FrontendTest : UserControl {
         protected enum MessageType {
             Error,
             Warning,
@@ -65,12 +65,12 @@ namespace TestSuiteWPF.Tests {
 
         #region ================== Constructors
 
-        public CompilerTest () {
+        public FrontendTest () {
             InitializeComponent ();
 
             textMarkerService = new TextMarkerService (codeText);
 
-            compiler = EchelonScript_Compiler.Create<LLVMCompilerBackend> ();
+            compiler = new EchelonScript_Compiler ();
             errList = new ObservableCollection<CompilerMessage> ();
 
             errorsList.ItemsSource = errList;
@@ -102,7 +102,6 @@ namespace TestSuiteWPF.Tests {
 
         #region ================== Event handlers
 
-        Random rand = new Random ();
         private unsafe void codeText_TextChanged (object sender, EventArgs e) {
             string code = codeText.Text;
 
@@ -150,53 +149,12 @@ namespace TestSuiteWPF.Tests {
             rootItem.IsExpanded = true;
             symbolsTreeView.Items.Add (rootItem);
 
-            if (errList.Count > 0)
-                return;
-
-            var idMain = env.IdPool.GetIdentifier ("main");
-            var idTest = env.IdPool.GetIdentifier ("test");
-            var idInt32 = env.IdPool.GetIdentifier (ES_PrimitiveTypes.GetIntName (ES_IntSize.Int32, false));
-            var typeInt32 = env.GetFullyQualifiedType (env.GetFullyQualifiedName (ArrayPointer<byte>.Null, idInt32));
-            Debug.Assert (typeInt32 is not null);
-            foreach (var namespaceKVP in env.Namespaces) {
-                var namespaceData = namespaceKVP.Value;
-                var namespaceNode = AddNodeToTree (namespaceData.NamespaceNameString, rootItem);
+            foreach (var nm in env.Namespaces) {
+                var namespaceNode = AddNodeToTree (nm.Value.NamespaceNameString, rootItem);
                 namespaceNode.IsExpanded = true;
 
-                foreach (var typeDataPtr in namespaceData.TypeSpan)
+                foreach (var typeDataPtr in nm.Value.TypeSpan)
                     AddTypeToTree (typeDataPtr.Address, namespaceNode);
-
-                if (namespaceData.Functions.TryGetValue (idMain, out var func)) {
-                    var funcType = func.Address->FunctionType;
-
-                    if (funcType->ReturnType == env.TypeVoid && funcType->ArgumentsList.Length == 0) {
-                        // TODO: Add stuff here
-                    }
-                }
-
-                if (namespaceData.Functions.TryGetValue (idTest, out func)) {
-                    var funcType = func.Address->FunctionType;
-
-                    bool matchSig = false;
-                    delegate* unmanaged[Cdecl]<int, int, int> fp = null;
-                    if (funcType->ReturnType == typeInt32 && funcType->ArgumentsList.Length == 2 &&
-                        funcType->ArgumentsList.Span [0].ValueType == typeInt32 && funcType->ArgumentsList.Span [0].ArgType == ES_ArgumentType.Normal &&
-                        funcType->ArgumentsList.Span [1].ValueType == typeInt32 && funcType->ArgumentsList.Span [1].ArgType == ES_ArgumentType.Normal) {
-                        fp = (delegate* unmanaged[Cdecl]<int, int, int>) func.Address->FunctionPointer;
-                        matchSig = true;
-                    }
-
-                    if (fp != null) {
-                        var a = rand.Next (int.MinValue, int.MaxValue);
-                        var b = rand.Next (int.MinValue, int.MaxValue);
-                        int ret = fp (a, b);
-
-                        errList.Add (new CompilerMessage ("lol", new EchelonScriptErrorMessage ($"test ({a}, {b}) returned {ret}.", 0, 0, 0, 0)));
-                    } else if (matchSig)
-                        errList.Add (new CompilerMessage ("lol", new EchelonScriptErrorMessage ($"test had a null function pointer.", 0, 0, 0, 0)));
-                    else
-                        errList.Add (new CompilerMessage ("lol", new EchelonScriptErrorMessage ($"test didn't match signature.", 0, 0, 0, 0)));
-                }
             }
         }
 

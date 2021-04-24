@@ -10,20 +10,10 @@
 using System;
 using ChronosLib.Pooled;
 using EchelonScriptCompiler.Data;
+using EchelonScriptCompiler.Data.Types;
 using EchelonScriptCompiler.Utilities;
 
 namespace EchelonScriptCompiler.Frontend {
-    public enum ES_ArgumentType {
-        /// <summary>Passed normally.</summary>
-        Normal,
-        /// <summary>Passed by reference.</summary>
-        Ref,
-        /// <summary>Passed as const.</summary>
-        In,
-        /// <summary>Passed by reference, and requires setting before returning.</summary>
-        Out,
-    }
-
     public struct ES_AstNodeBounds {
         public int StartPos;
         public int EndPos;
@@ -179,6 +169,24 @@ namespace EchelonScriptCompiler.Frontend {
 
             return new string (chars.Span);
         }
+    }
+
+    public unsafe class ES_AstTypeDeclaration_TypeReference : ES_AstTypeDeclaration {
+        public override ES_AstNodeBounds NodeBounds => Declaration.NodeBounds;
+
+        public ES_AstTypeDeclaration Declaration;
+        public ES_TypeInfo* Reference;
+
+        public ES_AstTypeDeclaration_TypeReference (ES_AstTypeDeclaration decl, ES_TypeInfo* typeRef) : base (1) {
+            Declaration = decl;
+            Reference = typeRef;
+        }
+
+        public override int GetStringLength ()
+            => Declaration.GetStringLength ();
+
+        public override void ToString (Span<char> chars)
+            => Declaration.ToString (chars);
     }
 
     public class ES_AstTypeDeclaration_TypeName : ES_AstTypeDeclaration {
@@ -457,12 +465,12 @@ namespace EchelonScriptCompiler.Frontend {
         public bool Static;
 
         public EchelonScriptToken Name;
-        public ES_AstTypeDeclaration ValueType;
+        public ES_AstTypeDeclaration? ValueType;
         public ES_AstExpression? InitializationExpression;
 
         public ES_AstMemberVarDefinition (
             ES_AccessModifier accessMod, EchelonScriptToken? docCom, bool staticMod,
-            EchelonScriptToken name, ES_AstTypeDeclaration valueType, ES_AstExpression? initExpr,
+            EchelonScriptToken name, ES_AstTypeDeclaration? valueType, ES_AstExpression? initExpr,
             EchelonScriptToken semicolonTk
         ) : base (1) {
             AccessModifier = accessMod;
@@ -474,7 +482,7 @@ namespace EchelonScriptCompiler.Frontend {
             ValueType = valueType;
             InitializationExpression = initExpr;
 
-            bounds = new ES_AstNodeBounds (valueType.NodeBounds.StartPos, semicolonTk.TextEndPos);
+            bounds = new ES_AstNodeBounds (valueType?.NodeBounds.StartPos ?? name.TextStartPos, semicolonTk.TextEndPos);
         }
     }
 
@@ -913,8 +921,6 @@ namespace EchelonScriptCompiler.Frontend {
     #region Expressions
 
     public enum SimpleBinaryExprType {
-        MemberAccess,
-
         Concatenation,
 
         Power,
@@ -963,7 +969,7 @@ namespace EchelonScriptCompiler.Frontend {
         AssignBitOr,
         AssignXor,
 
-        AssignTilde,
+        AssignConcatenate,
 
         AssignShiftLeft,
         AssignShiftRight,
@@ -981,14 +987,53 @@ namespace EchelonScriptCompiler.Frontend {
         BitNot,
     }
 
+    public static class ES_AstExtensions {
+        public static bool IsAssignment (this SimpleBinaryExprType op) {
+            return op >= SimpleBinaryExprType.TAG_AssignExpr_Start && op <= SimpleBinaryExprType.TAG_AssignExpr_End;
+        }
+
+        public static bool IsBitShift (this SimpleBinaryExprType op) {
+            switch (op) {
+                case SimpleBinaryExprType.ShiftLeft:
+                case SimpleBinaryExprType.ShiftRight:
+                case SimpleBinaryExprType.ShiftRightUnsigned:
+                case SimpleBinaryExprType.AssignShiftLeft:
+                case SimpleBinaryExprType.AssignShiftRight:
+                case SimpleBinaryExprType.AssignShiftRightUnsigned:
+                    return true;
+
+                default:
+                    return false;
+            }
+        }
+
+        public static bool IsComparison (this SimpleBinaryExprType op) {
+            switch (op) {
+                case SimpleBinaryExprType.LesserThan:
+                case SimpleBinaryExprType.GreaterThan:
+                case SimpleBinaryExprType.LesserThanEqual:
+                case SimpleBinaryExprType.GreaterThanEqual:
+                case SimpleBinaryExprType.Equals:
+                case SimpleBinaryExprType.NotEquals:
+                    return true;
+
+                default:
+                    return false;
+            }
+        }
+    }
+
     public abstract class ES_AstExpression : ES_AstNode {
         public ES_AstExpression (int nothing) : base (1) { }
     }
 
     public class ES_AstEmptyErrorExpression : ES_AstExpression {
-        public override ES_AstNodeBounds NodeBounds => throw new NotImplementedException ();
+        protected int errPos;
+        public override ES_AstNodeBounds NodeBounds => new ES_AstNodeBounds (errPos, errPos);
 
-        public ES_AstEmptyErrorExpression () : base (1) { }
+        public ES_AstEmptyErrorExpression (int pos) : base (1) {
+            errPos = pos;
+        }
     }
 
     public abstract class ES_AstBinaryExpression : ES_AstExpression {
@@ -996,7 +1041,7 @@ namespace EchelonScriptCompiler.Frontend {
             get {
                 return new ES_AstNodeBounds {
                     StartPos = Left?.NodeBounds.StartPos ?? Right?.NodeBounds.StartPos ?? 0,
-                    EndPos = Left?.NodeBounds.EndPos ?? Right?.NodeBounds.EndPos ?? 0,
+                    EndPos = Right?.NodeBounds.EndPos ?? Left?.NodeBounds.EndPos ?? 0,
                 };
             }
         }
@@ -1040,13 +1085,15 @@ namespace EchelonScriptCompiler.Frontend {
 
         public readonly bool Unsigned;
         public readonly bool Long;
+        public readonly bool HexBin;
         public readonly ulong Value;
 
         public readonly EchelonScriptToken Token;
 
-        public ES_AstIntegerLiteralExpression (bool isUnsigned, bool isLong, ulong value, EchelonScriptToken tk) : base (1) {
+        public ES_AstIntegerLiteralExpression (bool isUnsigned, bool isLong, bool hexBin, ulong value, EchelonScriptToken tk) : base (1) {
             Unsigned = isUnsigned;
             Long = isLong;
+            HexBin = hexBin;
             Value = value;
 
             Token = tk;
@@ -1164,6 +1211,28 @@ namespace EchelonScriptCompiler.Frontend {
 
         public ES_AstNameExpression (EchelonScriptToken value) : base (1) {
             Value = value;
+        }
+    }
+
+    public class ES_AstMemberAccessExpression : ES_AstExpression {
+        public override ES_AstNodeBounds NodeBounds {
+            get {
+                return new ES_AstNodeBounds {
+                    StartPos = Parent?.NodeBounds.StartPos ?? OpToken.TextStartPos,
+                    EndPos = Member?.TextEndPos ?? OpToken.TextEndPos,
+                };
+            }
+        }
+
+        public ES_AstExpression Parent;
+        public EchelonScriptToken? Member;
+        public EchelonScriptToken OpToken;
+
+        public ES_AstMemberAccessExpression (ES_AstExpression parent, EchelonScriptToken? member, EchelonScriptToken opToken) : base (1) {
+            Parent = parent;
+            Member = member;
+
+            OpToken = opToken;
         }
     }
 
@@ -1302,8 +1371,17 @@ namespace EchelonScriptCompiler.Frontend {
     }
 
     public class ES_AstCastExpression : ES_AstExpression {
-        public override ES_AstNodeBounds NodeBounds => bounds;
+        public override ES_AstNodeBounds NodeBounds {
+            get {
+                return new ES_AstNodeBounds {
+                    StartPos = bounds.StartPos,
+                    EndPos = InnerExpression?.NodeBounds.EndPos ?? bounds.EndPos,
+                };
+            }
+        }
         protected ES_AstNodeBounds bounds;
+
+        public ES_AstNodeBounds CastBounds => bounds;
 
         public ES_AstTypeDeclaration? DestinationType;
         public ES_AstExpression InnerExpression;
@@ -1331,6 +1409,25 @@ namespace EchelonScriptCompiler.Frontend {
         ) : base (left, right) {
             ExpressionType = exprType;
             OperatorToken = opToken;
+        }
+    }
+
+    public class ES_AstConditionalExpression : ES_AstExpression {
+        public override ES_AstNodeBounds NodeBounds => bounds;
+        protected ES_AstNodeBounds bounds;
+
+        public ES_AstExpression Condition;
+        public ES_AstExpression Then;
+        public ES_AstExpression Else;
+
+        public ES_AstConditionalExpression (
+            ES_AstExpression condExpr, ES_AstExpression thenExpr, ES_AstExpression elseExpr
+        ) : base (1) {
+            Condition = condExpr;
+            Then = thenExpr;
+            Else = elseExpr;
+
+            bounds = new ES_AstNodeBounds (Condition.NodeBounds.StartPos, Else.NodeBounds.EndPos);
         }
     }
 

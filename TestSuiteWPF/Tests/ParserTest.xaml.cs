@@ -14,8 +14,10 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using EchelonScriptCompiler.Data;
+using EchelonScriptCompiler.Data.Types;
 using EchelonScriptCompiler.Frontend;
 using EchelonScriptCompiler.Frontend.Parser;
+using EchelonScriptCompiler.Utilities;
 using ICSharpCode.AvalonEdit.Document;
 
 namespace TestSuiteWPF.Tests {
@@ -572,6 +574,17 @@ namespace TestSuiteWPF.Tests {
                     break;
                 }
 
+                case ES_AstMemberAccessExpression memberAccessExpr: {
+                    var thisItem = AddNodeToTree ("Member access", parentItem);
+                    AddAstNodeToTree (memberAccessExpr.Parent, thisItem);
+                    if (memberAccessExpr.Member is not null)
+                        AddNodeToTree (memberAccessExpr.Member.Value.Text.GetPooledString (), thisItem);
+                    else
+                        AddNodeToTree ("[NULL]", thisItem);
+
+                    break;
+                }
+
                 case ES_AstFunctionCallExpression funcCallExpr: {
                     var thisItem = AddNodeToTree ("Function call", parentItem);
                     var funcExpr = AddNodeToTree ("Expression", thisItem);
@@ -659,10 +672,6 @@ namespace TestSuiteWPF.Tests {
                 case ES_AstSimpleBinaryExpression simpleBinaryExpr: {
                     string opText;
                     switch (simpleBinaryExpr.ExpressionType) {
-                        case SimpleBinaryExprType.MemberAccess:
-                            opText = "Member access";
-                            break;
-
                         case SimpleBinaryExprType.Concatenation:
                             opText = "Concatenation";
                             break;
@@ -771,7 +780,7 @@ namespace TestSuiteWPF.Tests {
                             opText = "Assign-Bitwise XOR";
                             break;
 
-                        case SimpleBinaryExprType.AssignTilde:
+                        case SimpleBinaryExprType.AssignConcatenate:
                             opText = "Assign-Concatenation";
                             break;
 
@@ -798,6 +807,20 @@ namespace TestSuiteWPF.Tests {
                 }
 
                 #endregion
+
+                case ES_AstConditionalExpression condExpr: {
+                    var thisItem = AddNodeToTree ($"?:", parentItem);
+
+                    var condItem = AddNodeToTree ($"Condition", thisItem);
+                    var thenItem = AddNodeToTree ($"Then", thisItem);
+                    var elseItem = AddNodeToTree ($"Else", thisItem);
+
+                    AddAstNodeToTree (condExpr.Condition, condItem);
+                    AddAstNodeToTree (condExpr.Then, thenItem);
+                    AddAstNodeToTree (condExpr.Else, elseItem);
+
+                    break;
+                }
 
                 default:
                     throw new NotImplementedException ();

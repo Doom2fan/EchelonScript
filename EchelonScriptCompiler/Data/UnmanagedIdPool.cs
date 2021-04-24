@@ -19,6 +19,24 @@ using Collections.Pooled;
 using Microsoft.Toolkit.HighPerformance;
 
 namespace EchelonScriptCompiler.Data {
+    public class UnmanagedIdentifierComparer : IComparer<ArrayPointer<byte>> {
+        public static UnmanagedIdentifierComparer Instance = new UnmanagedIdentifierComparer ();
+
+        public unsafe int Compare ([DisallowNull] ArrayPointer<byte> x, [DisallowNull] ArrayPointer<byte> y) {
+            var comp = ((IntPtr) x.Elements).CompareTo ((IntPtr) y.Elements);
+
+            if (comp != 0)
+                return comp;
+
+            comp = x.Length.CompareTo (y.Length);
+
+            if (comp != 0)
+                return comp;
+
+            return 0;
+        }
+    }
+
     public unsafe class UnmanagedIdentifierPool : IDisposable {
         #region ================== Constants
 
@@ -216,6 +234,9 @@ namespace EchelonScriptCompiler.Data {
         public ArrayPointer<byte> GetIdentifier (ReadOnlySpan<byte> bytes) {
             CheckDisposed ();
 
+            if (bytes.Length < 1)
+                return ArrayPointer<byte>.Null;
+
             int hashCode = bytes.GetDjb2HashCode ();
 
             ArrayPointer<byte>? ret = null;
@@ -296,6 +317,9 @@ namespace EchelonScriptCompiler.Data {
 
         public ArrayPointer<byte> GetIdentifier (ReadOnlySpan<char> chars) {
             CheckDisposed ();
+
+            if (chars.Length < 1)
+                return ArrayPointer<byte>.Null;
 
             Span<byte> nameBytes = stackalloc byte [chars.Length];
             Encoding.ASCII.GetBytes (chars, nameBytes);

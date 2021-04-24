@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>WinExe</OutputType>
+    <OutputType>Exe</OutputType>
     <TargetFramework>net5.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
   </PropertyGroup>
@@ -23,8 +23,15 @@
     <ProjectReference Include="..\EchelonScriptCompiler\EchelonScriptCompiler.csproj" />
   </ItemGroup>
 
+  <PropertyGroup>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">$(NETCoreSdkRuntimeIdentifier)</RuntimeIdentifier>
+  </PropertyGroup>
+
   <ItemGroup>
     <Compile Update="Tests\CompilerTest.xaml.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Update="Tests\FrontendTest.xaml.cs">
       <SubType>Code</SubType>
     </Compile>
     <Compile Update="Tests\ParserTest.xaml.cs">
@@ -34,6 +41,10 @@
 
   <ItemGroup>
     <Page Update="Tests\CompilerTest.xaml">
+      <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="Tests\FrontendTest.xaml">
       <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
       <SubType>Designer</SubType>
     </Page>

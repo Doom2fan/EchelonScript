@@ -8,6 +8,7 @@
  */
 
 using System;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 
@@ -22,78 +23,144 @@ namespace EchelonScriptCompiler.Data.Types {
         Abstract = 1 << 2,
     }
 
+    public enum ES_ArgumentType {
+        /// <summary>Passed normally.</summary>
+        Normal,
+        /// <summary>Passed by reference.</summary>
+        Ref,
+        /// <summary>Passed as const.</summary>
+        In,
+        /// <summary>Passed by reference, and requires setting before returning.</summary>
+        Out,
+    }
+
     [StructLayout (LayoutKind.Sequential, Pack = 1)]
-    [ES_ExportAggregate (new [] { "EchelonScript", "Reflection" }, "FunctionArgData", ES_ExportAttributeBase.AggregateType.Struct)]
-    public unsafe struct ES_FunctionArgData {
+    [ES_ExportAggregate (new [] { "EchelonScript", "Reflection" }, "FunctionData", ES_ExportAttributeBase.AggregateType.Struct)]
+    public readonly unsafe struct ES_FunctionData {
         #region ================== Instance fields
 
-        private ES_TypeInfo* argType;
-        private ArrayPointer<byte> argName;
+        public readonly ArrayPointer<byte> Name;
+        public readonly ArrayPointer<byte> FullyQualifiedName;
 
-        #endregion
+        public readonly ES_AccessModifier AccessModifier;
+        public readonly ArrayPointer<byte> SourceUnit;
 
-        #region ================== Instance properties
+        public readonly ES_FunctionPrototypeData* FunctionType;
+        public readonly ArrayPointer<ES_FunctionArgData> Arguments;
+        public readonly int OptionalArgsCount;
 
-        public ES_TypeInfo* ArgType => argType;
-        public ArrayPointer<byte> ArgName => argName;
+        public readonly void* FunctionPointer;
 
         #endregion
 
         #region ================== Constructors
 
-        public ES_FunctionArgData (ArrayPointer<byte> name, ES_TypeInfo* type) {
-            argName = name;
-            argType = type;
+        public ES_FunctionData (
+            ArrayPointer<byte> name, ArrayPointer<byte> fqn,
+            ES_AccessModifier accessMod, ArrayPointer<byte> sourceUnit,
+            ES_FunctionPrototypeData* functionType, ArrayPointer<ES_FunctionArgData> args, int optArgCount
+        ) {
+            Debug.Assert (functionType is not null);
+            Debug.Assert (args.Length == functionType->ArgumentsList.Length);
+
+            Name = name;
+            FullyQualifiedName = fqn;
+
+            AccessModifier = accessMod;
+            SourceUnit = sourceUnit;
+
+            FunctionType = functionType;
+            Arguments = args;
+            OptionalArgsCount = optArgCount;
+
+            FunctionPointer = null;
+        }
+
+        public ES_FunctionData (ES_FunctionData funcData, void* funcPtr) {
+            this = funcData;
+
+            FunctionPointer = funcPtr;
         }
 
         #endregion
     }
 
     [StructLayout (LayoutKind.Sequential, Pack = 1)]
-    [ES_ExportAggregate (new [] { "EchelonScript", "Reflection" }, "FunctionData", ES_ExportAttributeBase.AggregateType.Struct)]
-    public unsafe struct ES_FunctionData {
+    [ES_ExportAggregate (new [] { "EchelonScript", "Reflection" }, "FunctionArgData", ES_ExportAttributeBase.AggregateType.Struct)]
+    public unsafe struct ES_FunctionArgData {
+        #region ================== Instance fields
+
+        public readonly ArrayPointer<byte> Name;
+        public void* DefaultValue;
+
+        #endregion
+
+        #region ================== Constructors
+
+        public ES_FunctionArgData (ArrayPointer<byte> name, void* defaultVal) {
+            Name = name;
+            DefaultValue = defaultVal;
+        }
+
+        #endregion
+    }
+
+    [StructLayout (LayoutKind.Sequential, Pack = 1)]
+    [ES_ExportAggregate (new [] { "EchelonScript", "Reflection" }, "FunctionTypeArgData", ES_ExportAttributeBase.AggregateType.Struct)]
+    public unsafe struct ES_FunctionPrototypeArgData {
+        #region ================== Instance fields
+
+        public readonly ES_ArgumentType ArgType;
+        public readonly ES_TypeInfo* ValueType;
+
+        #endregion
+
+        #region ================== Constructors
+
+        public ES_FunctionPrototypeArgData (ES_ArgumentType argType, ES_TypeInfo* valueType) {
+            ArgType = argType;
+            ValueType = valueType;
+        }
+
+        #endregion
+    }
+
+    [StructLayout (LayoutKind.Sequential, Pack = 1)]
+    [ES_ExportAggregate (new [] { "EchelonScript", "Reflection" }, "FunctionTypeData", ES_ExportAttributeBase.AggregateType.Struct)]
+    public unsafe struct ES_FunctionPrototypeData {
         public unsafe sealed class Builder {
             #region ================== Instance fields
 
-            private ES_FunctionData* functionData;
+            private ES_FunctionPrototypeData* functionProtoData;
 
             #endregion
 
             #region ================== Instance properties
 
-            /// <summary>The pointer to the function this builder is for.</summary>
-            public ES_FunctionData* FunctionData => functionData;
-
-            public ES_FunctionFlags Flags {
-                get => functionData->flags;
-                set => functionData->flags = value;
-            }
-
-            public ES_TypeInfo* ParentType {
-                get => functionData->parentType;
-                set => functionData->parentType = value;
-            }
+            /// <summary>The pointer to the function prototype this builder is for.</summary>
+            public ES_FunctionPrototypeData* FunctionProtoData => functionProtoData;
 
             public ES_TypeInfo* ReturnType {
-                get => functionData->returnType;
-                set => functionData->returnType = value;
+                get => functionProtoData->returnType;
+                set => functionProtoData->returnType = value;
             }
 
-            public ArrayPointer<ES_FunctionArgData> ArgumentsList {
-                get => functionData->argumentsList;
-                set => functionData->argumentsList = value;
+            public ArrayPointer<ES_FunctionPrototypeArgData> ArgumentsList {
+                get => functionProtoData->argumentsList;
+                set => functionProtoData->argumentsList = value;
             }
 
             #endregion
 
             #region ================== Constructors
 
-            internal Builder ([DisallowNull] ES_FunctionData* data, ES_AccessModifier accessMod,
+            internal Builder ([DisallowNull] ES_FunctionPrototypeData* data, ES_AccessModifier accessMod,
                 ArrayPointer<byte> typeName, ArrayPointer<byte> fullyQualifiedName,
                 ArrayPointer<byte> sourceUnit
             ) {
-                functionData = data;
+                functionProtoData = data;
                 data->TypeInfo = new ES_TypeInfo (ES_TypeTag.Function, accessMod, sourceUnit, typeName, fullyQualifiedName);
+                data->TypeInfo.RuntimeSize = IntPtr.Size;
             }
 
             #endregion
@@ -102,19 +169,31 @@ namespace EchelonScriptCompiler.Data.Types {
         #region ================== Instance fields
 
         public ES_TypeInfo TypeInfo;
-        private ES_FunctionFlags flags;
-        private ES_TypeInfo* parentType;
         private ES_TypeInfo* returnType;
-        private ArrayPointer<ES_FunctionArgData> argumentsList;
+        private ArrayPointer<ES_FunctionPrototypeArgData> argumentsList;
+
+        #endregion
+
+        #region ================== Constructors
+
+        public ES_FunctionPrototypeData (ES_AccessModifier accessMod,
+            ES_TypeInfo* retType, ArrayPointer<ES_FunctionPrototypeArgData> argsList,
+            ArrayPointer<byte> typeName, ArrayPointer<byte> fullyQualifiedName,
+            ArrayPointer<byte> sourceUnit
+        ) {
+            TypeInfo = new ES_TypeInfo (ES_TypeTag.Function, accessMod, sourceUnit, typeName, fullyQualifiedName);
+            TypeInfo.RuntimeSize = IntPtr.Size;
+
+            returnType = retType;
+            argumentsList = argsList;
+        }
 
         #endregion
 
         #region ================== Instance properties
 
-        public ES_FunctionFlags Flags => flags;
-        public ES_TypeInfo* ParentType => parentType;
         public ES_TypeInfo* ReturnType => returnType;
-        public ArrayPointer<ES_FunctionArgData> ArgumentsList => argumentsList;
+        public ArrayPointer<ES_FunctionPrototypeArgData> ArgumentsList => argumentsList;
 
         #endregion
     }

@@ -11,15 +11,21 @@ using System.Text;
 using Microsoft.Toolkit.HighPerformance.Buffers;
 
 namespace EchelonScriptCompiler.Data.Types {
-    public enum ES_TypeTag {
+    public enum ES_TypeTag : int {
         UNKNOWN   = 0,
-        Function  = 1,
-        Struct    = 2,
-        Class     = 3,
-        Enum      = 4,
-        Interface = 5,
-        Pointer   = 6,
-        Array     = 7,
+        Void      = 1,
+        Bool      = 2,
+        Int       = 3,
+        Float     = 4,
+        Function  = 5,
+        Struct    = 6,
+        Class     = 7,
+        Enum      = 8,
+        Interface = 9,
+        Pointer   = 10,
+        Const     = 11,
+        Immutable = 12,
+        Array     = 13,
     }
 
     public unsafe struct ES_TypeInfo {
@@ -43,6 +49,9 @@ namespace EchelonScriptCompiler.Data.Types {
         /// <summary>The source translation unit of the type.</summary>
         public readonly ArrayPointer<byte> SourceUnit;
 
+        /// <summary>The members list of the type.</summary>
+        public ES_TypeMembers MembersList;
+
         #endregion
 
         #region ================== Constructors
@@ -60,6 +69,8 @@ namespace EchelonScriptCompiler.Data.Types {
             TypeName = name;
             FullyQualifiedName = fullyQualifiedName;
             SourceUnit = sourceUnit;
+
+            MembersList = new ES_TypeMembers ();
         }
 
         #endregion

@@ -7,8 +7,13 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+using System;
+using ChronosLib.Pooled;
+using EchelonScriptCompiler.Data.Types;
+
 namespace EchelonScriptCompiler.Frontend {
     public static class ES_PrimitiveTypes {
+        public const string Void = "void";
         public const string Object = "object";
         public const string Bool = "bool";
 
@@ -17,16 +22,48 @@ namespace EchelonScriptCompiler.Frontend {
         public const string Int16 = "int16";
         public const string Int8  = "int8";
 
-        public const string UInt64 = "int64";
-        public const string UInt32 = "int32";
-        public const string UInt16 = "int16";
-        public const string UInt8  = "int8";
+        public const string UInt64 = "uint64";
+        public const string UInt32 = "uint32";
+        public const string UInt16 = "uint16";
+        public const string UInt8  = "uint8";
 
         public const string Float32 = "float32";
         public const string Float64 = "float64";
 
         public const string String = "string";
         public const string Char = "char";
+
+        public static ReadOnlySpan<char> GetIntName (ES_IntSize size, bool unsigned) {
+            switch (size) {
+                case ES_IntSize.Int8:
+                    return unsigned ? UInt8 : Int8;
+
+                case ES_IntSize.Int16:
+                    return unsigned ? UInt16 : Int16;
+
+                case ES_IntSize.Int32:
+                    return unsigned ? UInt32 : Int32;
+
+                case ES_IntSize.Int64:
+                    return unsigned ? UInt64 : Int64;
+
+                default:
+                    throw new NotImplementedException ();
+            }
+        }
+
+        public static ReadOnlySpan<char> GetFloatName (ES_FloatSize size) {
+            switch (size) {
+                case ES_FloatSize.Single:
+                    return Float32;
+
+                case ES_FloatSize.Double:
+                    return Float64;
+
+                default:
+                    throw new NotImplementedException ();
+            }
+        }
     }
 
     public static class ES_Keywords {

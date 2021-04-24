@@ -19,6 +19,11 @@
                 <Tests:ParserTest />
             </Grid>
         </TabItem>
+        <TabItem Header="Frontend test">
+            <Grid Background="#FFE5E5E5">
+                <Tests:FrontendTest />
+            </Grid>
+        </TabItem>
         <TabItem Header="Compiler test">
             <Grid Background="#FFE5E5E5">
                 <Tests:CompilerTest />

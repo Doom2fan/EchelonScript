@@ -11,19 +11,23 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Runtime.InteropServices;
 using System.Text;
 using ChronosLib.Pooled;
+using ChronosLib.Unmanaged;
 using Collections.Pooled;
+using EchelonScriptCompiler.Backends;
 using EchelonScriptCompiler.Data.Types;
+using EchelonScriptCompiler.Frontend;
 using EchelonScriptCompiler.Utilities;
 using Microsoft.Toolkit.HighPerformance.Buffers;
 
 namespace EchelonScriptCompiler.Data {
-    public unsafe class ES_NamespaceData : IDisposable {
+    public unsafe class ES_NamespaceData {
         public class Builder : IDisposable {
             #region ================== Instance fields
 
+            private EchelonScriptEnvironment env;
+            private EchelonScriptEnvironment.Builder envBuilder;
             private ES_NamespaceData namespaceData;
 
             #endregion
@@ -35,7 +39,7 @@ namespace EchelonScriptCompiler.Data {
             public PooledDictionary<ArrayPointer<byte>, ES_ClassData.Builder> ClassBuilders { get; protected set; }
             public PooledDictionary<ArrayPointer<byte>, ES_StructData.Builder> StructBuilders { get; protected set; }
             public PooledDictionary<ArrayPointer<byte>, ES_EnumData.Builder> EnumBuilders { get; protected set; }
-            public PooledDictionary<ArrayPointer<byte>, ES_FunctionData.Builder> FunctionBuilders { get; protected set; }
+            public Dictionary<ArrayPointer<byte>, Pointer<ES_FunctionData>> Functions => namespaceData.functions;
 
             public int TypesStartIdx {
                 get => namespaceData.typesStartIdx;
@@ -51,13 +55,18 @@ namespace EchelonScriptCompiler.Data {
 
             #region ================== Constructors
 
-            public Builder ([DisallowNull] ES_NamespaceData nm) {
+            public Builder (
+                [DisallowNull] EchelonScriptEnvironment env, [DisallowNull] EchelonScriptEnvironment.Builder envBuilder,
+                [DisallowNull] ES_NamespaceData nm
+            ) {
+                this.env = env;
+                this.envBuilder = envBuilder;
+
                 namespaceData = nm;
 
                 ClassBuilders = new PooledDictionary<ArrayPointer<byte>, ES_ClassData.Builder> ();
                 StructBuilders = new PooledDictionary<ArrayPointer<byte>, ES_StructData.Builder> ();
                 EnumBuilders = new PooledDictionary<ArrayPointer<byte>, ES_EnumData.Builder> ();
-                FunctionBuilders = new PooledDictionary<ArrayPointer<byte>, ES_FunctionData.Builder> ();
             }
 
             #endregion
@@ -65,11 +74,17 @@ namespace EchelonScriptCompiler.Data {
             #region ================== Instance methods
 
             public ES_TypeTag? CheckTypeExists (ArrayPointer<byte> name, ES_TypeTag? ignoredType) {
-                if (ignoredType != ES_TypeTag.Class && ClassBuilders.TryGetValue (name, out var asd))
+                if (ignoredType != ES_TypeTag.Class && ClassBuilders.TryGetValue (name, out var _))
                     return ES_TypeTag.Class;
 
-                if (ignoredType != ES_TypeTag.Struct && StructBuilders.TryGetValue (name, out var fs))
+                if (ignoredType != ES_TypeTag.Struct && StructBuilders.TryGetValue (name, out var _))
                     return ES_TypeTag.Struct;
+
+                if (ignoredType != ES_TypeTag.Enum && EnumBuilders.TryGetValue (name, out var _))
+                    return ES_TypeTag.Enum;
+
+                if (ignoredType != ES_TypeTag.Function && namespaceData.functions.TryGetValue (name, out var _))
+                    return ES_TypeTag.Function;
 
                 return null;
             }
@@ -86,7 +101,7 @@ namespace EchelonScriptCompiler.Data {
                 if (ClassBuilders.TryGetValue (name, out var builder))
                     return builder;
 
-                var classDataPtr = (ES_ClassData*) Marshal.AllocHGlobal (sizeof (ES_ClassData));
+                var classDataPtr = envBuilder.MemoryManager.GetMemory<ES_ClassData> ();
 
                 builder = new ES_ClassData.Builder (classDataPtr, accessMod, name, fullyQualifiedName, sourceUnit);
                 ClassBuilders.Add (name, builder);
@@ -111,7 +126,7 @@ namespace EchelonScriptCompiler.Data {
                 if (StructBuilders.TryGetValue (name, out var builder))
                     return builder;
 
-                var structDataPtr = (ES_StructData*) Marshal.AllocHGlobal (sizeof (ES_StructData));
+                var structDataPtr = envBuilder.MemoryManager.GetMemory<ES_StructData> ();
 
                 builder = new ES_StructData.Builder (structDataPtr, accessMod, name, fullyQualifiedName, sourceUnit);
                 StructBuilders.Add (name, builder);
@@ -131,30 +146,10 @@ namespace EchelonScriptCompiler.Data {
                 if (EnumBuilders.TryGetValue (name, out var builder))
                     return builder;
 
-                var enumDataPtr = (ES_EnumData*) Marshal.AllocHGlobal (sizeof (ES_EnumData));
+                var enumDataPtr = envBuilder.MemoryManager.GetMemory<ES_EnumData> ();
 
                 builder = new ES_EnumData.Builder (enumDataPtr, accessMod, name, fullyQualifiedName, sourceUnit);
                 EnumBuilders.Add (name, builder);
-
-                return builder;
-            }
-
-            public ES_FunctionData.Builder GetOrCreateFunction (ES_AccessModifier accessMod,
-                ArrayPointer<byte> name, ArrayPointer<byte> fullyQualifiedName,
-                ArrayPointer<byte> sourceUnit
-            ) {
-                CheckDisposed ();
-
-                if (CheckTypeExists (name, ES_TypeTag.Function) != null)
-                    throw new CompilationException (ES_FrontendErrors.ClashingTypeExists);
-
-                if (FunctionBuilders.TryGetValue (name, out var builder))
-                    return builder;
-
-                var classDataPtr = (ES_FunctionData*) Marshal.AllocHGlobal (sizeof (ES_FunctionData));
-
-                builder = new ES_FunctionData.Builder (classDataPtr, accessMod, name, fullyQualifiedName, sourceUnit);
-                FunctionBuilders.Add (name, builder);
 
                 return builder;
             }
@@ -186,15 +181,6 @@ namespace EchelonScriptCompiler.Data {
                 return null;
             }
 
-            public ES_FunctionData.Builder? GetFunction (ArrayPointer<byte> name) {
-                CheckDisposed ();
-
-                if (FunctionBuilders.TryGetValue (name, out var builder))
-                    return builder;
-
-                return null;
-            }
-
             protected void CheckDisposed () {
                 if (disposedValue)
                     throw new ObjectDisposedException (nameof (ES_NamespaceData.Builder));
@@ -214,6 +200,8 @@ namespace EchelonScriptCompiler.Data {
             protected virtual void DoDispose () {
                 if (!disposedValue) {
                     ClassBuilders?.Dispose ();
+                    StructBuilders?.Dispose ();
+                    EnumBuilders?.Dispose ();
 
                     disposedValue = true;
                 }
@@ -231,6 +219,7 @@ namespace EchelonScriptCompiler.Data {
 
         protected EchelonScriptEnvironment environment;
         protected ArrayPointer<byte> namespaceName;
+        protected Dictionary<ArrayPointer<byte>, Pointer<ES_FunctionData>> functions;
 
         protected int typesStartIdx;
         protected int typesLength;
@@ -247,6 +236,8 @@ namespace EchelonScriptCompiler.Data {
             }
         }
 
+        public IReadOnlyDictionary<ArrayPointer<byte>, Pointer<ES_FunctionData>> Functions => functions;
+
         public int TypesStartIdx => typesStartIdx;
         public int TypesLength => typesLength;
 
@@ -260,28 +251,8 @@ namespace EchelonScriptCompiler.Data {
         public ES_NamespaceData (EchelonScriptEnvironment env, ArrayPointer<byte> name) {
             environment = env;
             namespaceName = name;
-        }
 
-        #endregion
-
-        #region ================== IDisposable support
-
-        private bool disposedValue = false;
-
-        ~ES_NamespaceData () {
-            if (!disposedValue)
-                DoDispose ();
-        }
-
-        protected virtual void DoDispose () {
-            if (!disposedValue) {
-                disposedValue = true;
-            }
-        }
-
-        public void Dispose () {
-            DoDispose ();
-            GC.SuppressFinalize (this);
+            functions = new Dictionary<ArrayPointer<byte>, Pointer<ES_FunctionData>> ();
         }
 
         #endregion
@@ -299,7 +270,39 @@ namespace EchelonScriptCompiler.Data {
 
             public PooledDictionary<ArrayPointer<byte>, ES_NamespaceData.Builder> NamespaceBuilders { get; protected set; }
 
+            public IMemoryManager MemoryManager => environment.memManager;
+
             public PooledList<Pointer<ES_TypeInfo>> TypesList => environment.typesList;
+
+            public ArrayPointer<Pointer<ES_TypeInfo>> BuiltinTypesList {
+                get => environment.builtinTypesList;
+                set => environment.builtinTypesList = value;
+            }
+
+            public ES_TypeInfo* TypeVoid {
+                get => environment.typeVoid;
+                set => environment.typeVoid = value;
+            }
+
+            public ES_TypeInfo* TypeBool {
+                get => environment.typeBool;
+                set => environment.typeBool = value;
+            }
+
+            public ES_TypeInfo* TypeFloat32 {
+                get => environment.typeFloat32;
+                set => environment.typeFloat32 = value;
+            }
+
+            public ES_TypeInfo* TypeFloat64 {
+                get => environment.typeFloat64;
+                set => environment.typeFloat64 = value;
+            }
+
+            public IBackendData? BackendData {
+                get => environment.backendData;
+                set => environment.backendData = value;
+            }
 
             #endregion
 
@@ -324,28 +327,433 @@ namespace EchelonScriptCompiler.Data {
                 var namespaceData = new ES_NamespaceData (environment, namePtr);
                 environment.namespacesDict.Add (namePtr, namespaceData);
 
-                builder = new ES_NamespaceData.Builder (namespaceData);
+                builder = new ES_NamespaceData.Builder (environment, this, namespaceData);
                 NamespaceBuilders.Add (namePtr, builder);
 
                 return builder;
             }
 
-            public IntPtr GetUnmanagedMemory (int byteCount) {
-                var ptr = Marshal.AllocHGlobal (byteCount);
+            public ES_TypeInfo* DetermineIntLiteralType (ES_AstIntegerLiteralExpression intLitExpr, ES_TypeInfo* expectedType) {
+                // TODO: Improve this. Doesn't work as well as it should for negated ints.
+                ES_IntTypeData* expectedIntType = null;
+                bool unsigned = intLitExpr.Unsigned;
+                ES_IntSize size;
 
-                environment.allocatedMemory.Add ((byte*) ptr);
+                if (expectedType != null && expectedType->TypeTag == ES_TypeTag.Int)
+                    expectedIntType = (ES_IntTypeData*) expectedType;
 
-                return ptr;
+                ES_IntSize minSize;
+
+                if (expectedIntType is not null && expectedIntType->Unsigned)
+                    unsigned = true;
+
+                ulong value = intLitExpr.Value;
+                if (unsigned || intLitExpr.HexBin) {
+                    if (value <= byte.MaxValue)
+                        minSize = ES_IntSize.Int8;
+                    else if (value <= ushort.MaxValue)
+                        minSize = ES_IntSize.Int16;
+                    else if (value <= uint.MaxValue)
+                        minSize = ES_IntSize.Int32;
+                    else
+                        minSize = ES_IntSize.Int64;
+                } else {
+                    if (value <= (ulong) sbyte.MaxValue)
+                        minSize = ES_IntSize.Int8;
+                    else if (value <= (ulong) short.MaxValue)
+                        minSize = ES_IntSize.Int16;
+                    else if (value <= int.MaxValue)
+                        minSize = ES_IntSize.Int32;
+                    else if (value <= long.MaxValue)
+                        minSize = ES_IntSize.Int64;
+                    else {
+                        minSize = ES_IntSize.Int64;
+                        unsigned = true;
+                    }
+                }
+
+                if (intLitExpr.Long)
+                    minSize = ES_IntSize.Int64;
+
+                size = minSize;
+                if (expectedIntType is not null) {
+                    bool isCompat = false;
+
+                    if (intLitExpr.HexBin && !unsigned && minSize <= expectedIntType->IntSize)
+                        isCompat = true;
+                    else if (unsigned == expectedIntType->Unsigned && minSize <= expectedIntType->IntSize)
+                        isCompat = true;
+
+                    if (isCompat) {
+                        size = expectedIntType->IntSize;
+                        unsigned = expectedIntType->Unsigned;
+                    }
+                }
+
+                var typeName = environment.IdPool.GetIdentifier (ES_PrimitiveTypes.GetIntName (size, unsigned));
+                var typeFqn = environment.GetFullyQualifiedName (ArrayPointer<byte>.Null, typeName);
+                var intType = environment.GetFullyQualifiedType (typeFqn);
+                Debug.Assert (intType is not null);
+
+                return intType;
             }
 
-            public T* GetUnmanagedMemory<T> (int count)
-                where T : unmanaged {
-                var ptr = (T*) Marshal.AllocHGlobal (sizeof (T) * count);
+            #region BinaryOpCompat
 
-                environment.allocatedMemory.Add ((byte*) ptr);
+            public bool BinaryOpCompat (ES_TypeInfo* lhsType, ES_TypeInfo* rhsType, SimpleBinaryExprType exprType, out ES_TypeInfo* finalType) {
+                finalType = environment.TypeUnknownValue;
 
-                return ptr;
+                if (lhsType->TypeTag == ES_TypeTag.UNKNOWN || rhsType->TypeTag == ES_TypeTag.UNKNOWN)
+                    return true;
+
+                if (lhsType->TypeTag == ES_TypeTag.Int && rhsType->TypeTag == ES_TypeTag.Int)
+                    return BinaryOpCompat_IntInt (lhsType, rhsType, exprType, out finalType);
+
+                if (lhsType->TypeTag == ES_TypeTag.Bool && rhsType->TypeTag == ES_TypeTag.Bool)
+                    return BinaryOpCompat_BoolBool (lhsType, rhsType, exprType, out finalType);
+
+                if (lhsType->TypeTag == ES_TypeTag.Float && rhsType->TypeTag == ES_TypeTag.Float)
+                    return BinaryOpCompat_FloatFloat (lhsType, rhsType, exprType, out finalType);
+
+                if (lhsType->TypeTag == ES_TypeTag.Float && rhsType->TypeTag == ES_TypeTag.Int)
+                    return BinaryOpCompat_FloatInt (lhsType, rhsType, exprType, out finalType);
+
+                return false;
             }
+
+            private bool BinaryOpCompat_IntInt (ES_TypeInfo* lhsType, ES_TypeInfo* rhsType, SimpleBinaryExprType exprType, out ES_TypeInfo* finalType) {
+                Debug.Assert (lhsType->TypeTag == ES_TypeTag.Int);
+                Debug.Assert (rhsType->TypeTag == ES_TypeTag.Int);
+
+                var lhsIntType = (ES_IntTypeData*) lhsType;
+                var rhsIntType = (ES_IntTypeData*) rhsType;
+
+                bool compOp = false;
+
+                finalType = environment.TypeUnknownValue;
+
+                switch (exprType) {
+                    case SimpleBinaryExprType.Power:
+                    case SimpleBinaryExprType.Multiply:
+                    case SimpleBinaryExprType.Divide:
+                    case SimpleBinaryExprType.Modulo:
+                    case SimpleBinaryExprType.Add:
+                    case SimpleBinaryExprType.Subtract:
+                    case SimpleBinaryExprType.BitAnd:
+                    case SimpleBinaryExprType.BitXor:
+                    case SimpleBinaryExprType.BitOr:
+                        break;
+
+                    case SimpleBinaryExprType.LesserThan:
+                    case SimpleBinaryExprType.GreaterThan:
+                    case SimpleBinaryExprType.LesserThanEqual:
+                    case SimpleBinaryExprType.GreaterThanEqual:
+                    case SimpleBinaryExprType.Equals:
+                    case SimpleBinaryExprType.NotEquals:
+                        compOp = true;
+                        break;
+
+                    case SimpleBinaryExprType.Assign:
+                    case SimpleBinaryExprType.AssignAdd:
+                    case SimpleBinaryExprType.AssignSubtract:
+                    case SimpleBinaryExprType.AssignMultiply:
+                    case SimpleBinaryExprType.AssignDivide:
+                    case SimpleBinaryExprType.AssignModulo:
+                    case SimpleBinaryExprType.AssignPower:
+                    case SimpleBinaryExprType.AssignBitAnd:
+                    case SimpleBinaryExprType.AssignBitOr:
+                    case SimpleBinaryExprType.AssignXor:
+                        break;
+
+                    case SimpleBinaryExprType.ShiftLeft:
+                    case SimpleBinaryExprType.ShiftRight:
+                    case SimpleBinaryExprType.ShiftRightUnsigned:
+                    case SimpleBinaryExprType.AssignShiftLeft:
+                    case SimpleBinaryExprType.AssignShiftRight:
+                    case SimpleBinaryExprType.AssignShiftRightUnsigned:
+                        break;
+
+                    default:
+                        return false;
+                }
+
+                bool isCompatible;
+
+                if (exprType.IsBitShift ()) {
+                    if (!rhsIntType->Unsigned)
+                        return false;
+
+                    if (rhsIntType->IntSize > lhsIntType->IntSize)
+                        return false;
+
+                    return true;
+                } else if (lhsIntType->Unsigned == rhsIntType->Unsigned)
+                    isCompatible = true;
+                else
+                    isCompatible = false;
+
+                if (isCompatible) {
+                    if (exprType.IsAssignment ()) {
+                        if (lhsIntType->IntSize < rhsIntType->IntSize)
+                            return false;
+                    } else if (!compOp) {
+                        if (lhsIntType->IntSize >= rhsIntType->IntSize)
+                            finalType = lhsType;
+                        else
+                            finalType = rhsType;
+                    } else
+                        finalType = environment.TypeBool;
+                }
+
+                return isCompatible;
+            }
+
+            private bool BinaryOpCompat_BoolBool (ES_TypeInfo* lhsType, ES_TypeInfo* rhsType, SimpleBinaryExprType exprType, out ES_TypeInfo* finalType) {
+                Debug.Assert (lhsType->TypeTag == ES_TypeTag.Bool);
+                Debug.Assert (rhsType->TypeTag == ES_TypeTag.Bool);
+
+                switch (exprType) {
+                    case SimpleBinaryExprType.BitAnd:
+                    case SimpleBinaryExprType.BitXor:
+                    case SimpleBinaryExprType.BitOr:
+                        break;
+
+                    case SimpleBinaryExprType.Equals:
+                    case SimpleBinaryExprType.NotEquals:
+                        break;
+
+                    case SimpleBinaryExprType.LogicalAnd:
+                    case SimpleBinaryExprType.LogicalOr:
+                        break;
+
+                    case SimpleBinaryExprType.Assign:
+                    case SimpleBinaryExprType.AssignBitAnd:
+                    case SimpleBinaryExprType.AssignBitOr:
+                    case SimpleBinaryExprType.AssignXor:
+                        break;
+
+                    default:
+                        finalType = environment.TypeUnknownValue;
+                        return false;
+                }
+
+                finalType = environment.TypeBool;
+                return true;
+            }
+
+            private bool BinaryOpCompat_FloatFloat (ES_TypeInfo* lhsType, ES_TypeInfo* rhsType, SimpleBinaryExprType exprType, out ES_TypeInfo* finalType) {
+                Debug.Assert (lhsType->TypeTag == ES_TypeTag.Float);
+                Debug.Assert (rhsType->TypeTag == ES_TypeTag.Float);
+
+                var lhsFloatType = (ES_FloatTypeData*) lhsType;
+                var rhsFloatType = (ES_FloatTypeData*) rhsType;
+
+                finalType = environment.TypeUnknownValue;
+
+                if (lhsFloatType->FloatSize != rhsFloatType->FloatSize)
+                    return false;
+
+                bool compOp = false;
+
+                switch (exprType) {
+                    case SimpleBinaryExprType.Power:
+                    case SimpleBinaryExprType.Multiply:
+                    case SimpleBinaryExprType.Divide:
+                    case SimpleBinaryExprType.Modulo:
+                    case SimpleBinaryExprType.Add:
+                    case SimpleBinaryExprType.Subtract:
+                        break;
+
+                    case SimpleBinaryExprType.LesserThan:
+                    case SimpleBinaryExprType.GreaterThan:
+                    case SimpleBinaryExprType.LesserThanEqual:
+                    case SimpleBinaryExprType.GreaterThanEqual:
+                    case SimpleBinaryExprType.Equals:
+                    case SimpleBinaryExprType.NotEquals:
+                        compOp = true;
+                        break;
+
+                    case SimpleBinaryExprType.Assign:
+                    case SimpleBinaryExprType.AssignAdd:
+                    case SimpleBinaryExprType.AssignSubtract:
+                    case SimpleBinaryExprType.AssignMultiply:
+                    case SimpleBinaryExprType.AssignDivide:
+                    case SimpleBinaryExprType.AssignModulo:
+                    case SimpleBinaryExprType.AssignPower:
+                        break;
+
+                    default:
+                        return false;
+                }
+
+                finalType = !compOp ? lhsType : environment.typeBool;
+
+                return true;
+            }
+
+            private bool BinaryOpCompat_FloatInt (ES_TypeInfo* lhsType, ES_TypeInfo* rhsType, SimpleBinaryExprType exprType, out ES_TypeInfo* finalType) {
+                Debug.Assert (lhsType->TypeTag == ES_TypeTag.Float);
+                Debug.Assert (rhsType->TypeTag == ES_TypeTag.Int);
+
+                finalType = environment.TypeUnknownValue;
+
+                switch (exprType) {
+                    case SimpleBinaryExprType.Power:
+                    case SimpleBinaryExprType.AssignPower:
+                        break;
+
+                    default:
+                        return false;
+                }
+
+                finalType = lhsType;
+
+                return true;
+            }
+
+            #endregion
+
+            #region UnaryOpCompat
+
+            public bool UnaryOpCompat (ES_TypeInfo* exprType, SimpleUnaryExprType op, out ES_TypeInfo* finalType) {
+                switch (exprType->TypeTag) {
+                    case ES_TypeTag.Int:
+                        return UnaryOpCompat_Int (exprType, op, out finalType);
+
+                    case ES_TypeTag.Bool:
+                        return UnaryOpCompat_Bool (exprType, op, out finalType);
+
+                    case ES_TypeTag.Float:
+                        return UnaryOpCompat_Float (exprType, op, out finalType);
+
+                    default:
+                        finalType = environment.TypeUnknownValue;
+                        return false;
+                }
+            }
+
+            private bool UnaryOpCompat_Int (ES_TypeInfo* exprType, SimpleUnaryExprType op, out ES_TypeInfo* finalType) {
+                Debug.Assert (exprType->TypeTag == ES_TypeTag.Int);
+
+                switch (op) {
+                    case SimpleUnaryExprType.Positive:
+                    case SimpleUnaryExprType.BitNot:
+                        finalType = exprType;
+                        return true;
+
+                    case SimpleUnaryExprType.Negative: {
+                        var intData = (ES_IntTypeData*) exprType;
+
+                        if (!intData->Unsigned) {
+                            finalType = exprType;
+                            return true;
+                        } else {
+                            finalType = environment.TypeUnknownValue;
+                            return false;
+                        }
+                    }
+
+                    case SimpleUnaryExprType.LogicalNot:
+                        finalType = environment.TypeUnknownValue;
+                        return false;
+
+                    default:
+                        throw new NotImplementedException ();
+                }
+            }
+
+            private bool UnaryOpCompat_Bool (ES_TypeInfo* exprType, SimpleUnaryExprType op, out ES_TypeInfo* finalType) {
+                Debug.Assert (exprType->TypeTag == ES_TypeTag.Bool);
+
+                switch (op) {
+                    case SimpleUnaryExprType.LogicalNot:
+                        finalType = exprType;
+                        return true;
+
+                    case SimpleUnaryExprType.Positive:
+                    case SimpleUnaryExprType.Negative:
+                    case SimpleUnaryExprType.BitNot:
+                        finalType = environment.TypeUnknownValue;
+                        return false;
+
+                    default:
+                        throw new NotImplementedException ();
+                }
+            }
+
+            private bool UnaryOpCompat_Float (ES_TypeInfo* exprType, SimpleUnaryExprType op, out ES_TypeInfo* finalType) {
+                Debug.Assert (exprType->TypeTag == ES_TypeTag.Float);
+
+                switch (op) {
+                    case SimpleUnaryExprType.Positive:
+                    case SimpleUnaryExprType.Negative:
+                        finalType = exprType;
+                        return true;
+
+                    case SimpleUnaryExprType.LogicalNot:
+                    case SimpleUnaryExprType.BitNot:
+                        finalType = environment.TypeUnknownValue;
+                        return false;
+
+                    default:
+                        throw new NotImplementedException ();
+                }
+            }
+
+            #endregion
+
+            public ES_FunctionPrototypeData* GetOrAddFunctionType (ES_TypeInfo* returnType, ReadOnlySpan<ES_FunctionPrototypeArgData> args, bool doAdd) {
+                var name = environment.GetFunctionTypeName (returnType, args);
+                var fqn = environment.GetFullyQualifiedName (ArrayPointer<byte>.Null, name);
+
+                var funcType = (ES_FunctionPrototypeData*) environment.GetFullyQualifiedType (fqn);
+
+                if (funcType == null && doAdd) {
+                    funcType = MemoryManager.GetMemory<ES_FunctionPrototypeData> (1);
+
+                    var argsList = ArrayPointer<ES_FunctionPrototypeArgData>.Null;
+                    if (args.Length > 0) {
+                        argsList = MemoryManager.GetArray<ES_FunctionPrototypeArgData> (args.Length);
+                        args.CopyTo (argsList.Span);
+                    }
+
+                    *funcType = new ES_FunctionPrototypeData (
+                        ES_AccessModifier.Public,
+                        returnType, argsList,
+                        name, fqn, ArrayPointer<byte>.Null
+                    );
+                }
+
+                return funcType;
+            }
+
+            #region Derived type creation
+
+            public ES_TypeInfo* CreatePointerType (ES_TypeInfo* baseType) {
+                throw new NotImplementedException ();
+            }
+
+            public ES_TypeInfo* CreateNullableType (ES_TypeInfo* baseType) {
+                throw new NotImplementedException ();
+            }
+
+            public ES_TypeInfo* CreateConstType (ES_TypeInfo* baseType) {
+                throw new NotImplementedException ();
+            }
+
+            public ES_TypeInfo* CreateImmutableType (ES_TypeInfo* baseType) {
+                throw new NotImplementedException ();
+            }
+
+            public ES_TypeInfo* CreateArrayType (ES_TypeInfo* elementType, int dimensionCount) {
+                throw new NotImplementedException ();
+            }
+
+            public ES_TypeInfo* CreateArrayType (ES_TypeInfo* elementType, ReadOnlySpan<int> dimensionsSizes) {
+                throw new NotImplementedException ();
+            }
+
+            #endregion
 
             protected void CheckDisposed () {
                 if (disposedValue)
@@ -382,9 +790,17 @@ namespace EchelonScriptCompiler.Data {
         #region ================== Instance fields
 
         protected PooledList<Pointer<ES_TypeInfo>> typesList;
-        protected PooledList<Pointer<byte>> allocatedMemory;
+        protected ArrayPointer<Pointer<ES_TypeInfo>> builtinTypesList;
+        protected IMemoryManager memManager;
         protected Dictionary<ArrayPointer<byte>, ES_NamespaceData> namespacesDict;
+
+        protected IBackendData? backendData;
+
         protected ES_TypeInfo* typeUnknownValue;
+        protected ES_TypeInfo* typeVoid;
+        protected ES_TypeInfo* typeBool;
+        protected ES_TypeInfo* typeFloat32;
+        protected ES_TypeInfo* typeFloat64;
 
         #endregion
 
@@ -394,9 +810,15 @@ namespace EchelonScriptCompiler.Data {
 
         public IReadOnlyPooledList<Pointer<ES_TypeInfo>> TypesList => typesList;
 
+        public ArrayPointer<Pointer<ES_TypeInfo>> BuiltinTypesList => builtinTypesList;
+
         public IReadOnlyDictionary<ArrayPointer<byte>, ES_NamespaceData> Namespaces => namespacesDict;
 
         public ES_TypeInfo* TypeUnknownValue => typeUnknownValue;
+        public ES_TypeInfo* TypeVoid => typeVoid;
+        public ES_TypeInfo* TypeBool => typeBool;
+        public ES_TypeInfo* TypeFloat32 => typeFloat32;
+        public ES_TypeInfo* TypeFloat64 => typeFloat64;
 
         #endregion
 
@@ -407,11 +829,16 @@ namespace EchelonScriptCompiler.Data {
             IdPool = new UnmanagedIdentifierPool ();
 
             typesList = new PooledList<Pointer<ES_TypeInfo>> ();
-            allocatedMemory = new PooledList<Pointer<byte>> ();
+            memManager = new BasicMemoryManager ();
+
+            backendData = null;
 
             var unknTypeId = IdPool.GetIdentifier ("#UNKNOWN_TYPE");
-            var unknType = (ES_TypeInfo*) Marshal.AllocHGlobal (sizeof (ES_TypeInfo));
-            *unknType = new ES_TypeInfo (ES_TypeTag.UNKNOWN, ES_AccessModifier.Public, ArrayPointer<byte>.Null, unknTypeId, unknTypeId);
+            var unknType = memManager.GetMemory<ES_TypeInfo> ();
+            *unknType = new ES_TypeInfo (
+                ES_TypeTag.UNKNOWN, ES_AccessModifier.Public, ArrayPointer<byte>.Null,
+                unknTypeId, GetFullyQualifiedName (ArrayPointer<byte>.Null, unknTypeId)
+            );
             typeUnknownValue = unknType;
         }
 
@@ -431,21 +858,129 @@ namespace EchelonScriptCompiler.Data {
 
         #region ================== Instance methods
 
+        protected ArrayPointer<byte> GetFunctionTypeName (ES_TypeInfo* returnType, ReadOnlySpan<ES_FunctionPrototypeArgData> args) {
+            static PooledArray<char> SanitizeFQN (ReadOnlySpan<char> fqn) {
+                var argName = PooledArray<char>.GetArray (fqn.Length);
+
+                fqn.CopyTo (argName);
+
+                var namespaceSepIdx = argName.Span.IndexOf ("::");
+                Debug.Assert (namespaceSepIdx > -1);
+                argName.Span.Slice (namespaceSepIdx, 2).Fill ('@');
+
+                return argName;
+            }
+
+            Debug.Assert (returnType != null);
+
+            using var charList = new StructPooledList<char> (CL_ClearMode.Auto);
+
+            charList.AddRange ("@FuncType<");
+
+            // Add the return type.
+            charList.AddRange ("ret@");
+            using var retName = SanitizeFQN (returnType->FullyQualifiedNameString);
+            charList.AddRange (retName);
+            retName.Dispose ();
+
+            // Add the arguments.
+            bool firstArg = true;
+            foreach (var arg in args) {
+                Debug.Assert (arg.ValueType != null);
+
+                if (!firstArg)
+                    charList.AddRange (", ");
+                else
+                    firstArg = false;
+
+                charList.AddRange ("arg ");
+                switch (arg.ArgType) {
+                    case ES_ArgumentType.Normal: charList.AddRange ("normal@"); break;
+                    case ES_ArgumentType.In: charList.AddRange ("in@"); break;
+                    case ES_ArgumentType.Out: charList.AddRange ("out@"); break;
+                    case ES_ArgumentType.Ref: charList.AddRange ("ref@"); break;
+                }
+
+                using var argName = SanitizeFQN (arg.ValueType->FullyQualifiedNameString);
+                charList.AddRange (argName);
+            }
+
+            charList.AddRange (">");
+
+            return IdPool.GetIdentifier (charList.Span);
+        }
+
+        public ArrayPointer<byte> GetFullyQualifiedName (ArrayPointer<byte> namespaceName, ArrayPointer<byte> typeName) {
+            using var fqnArr = PooledArray<byte>.GetArray (namespaceName.Length + typeName.Length + 2);
+            var fqnSpan = fqnArr.Span;
+
+            int len = 0;
+
+            namespaceName.Span.CopyTo (fqnSpan.Slice (len, namespaceName.Length));
+            len += namespaceName.Length;
+
+            fqnSpan [len++] = (byte) ':';
+            fqnSpan [len++] = (byte) ':';
+
+            typeName.Span.CopyTo (fqnSpan.Slice (len, typeName.Length));
+
+            return IdPool.GetIdentifier (fqnSpan);
+        }
+
+        public ArrayPointer<byte> GetFullyQualifiedName (ArrayPointer<byte> namespaceName, ReadOnlySpan<ArrayPointer<byte>> typeName) {
+            Debug.Assert (typeName.Length > 0);
+
+            int len = namespaceName.Length + 2 + (typeName.Length - 1); // Namespace name + "::" + "."s (if any)
+            for (int i = 0; i < typeName.Length; i++)
+                len += typeName [i].Length;
+
+            using var fqnArr = PooledArray<byte>.GetArray (len);
+            var fqnSpan = fqnArr.Span;
+
+            len = 0;
+
+            // Namespace
+            namespaceName.Span.CopyTo (fqnSpan.Slice (len, namespaceName.Length));
+            len += namespaceName.Length;
+
+            // Namespace separator
+            fqnSpan [len++] = (byte) ':';
+            fqnSpan [len++] = (byte) ':';
+
+            // First type name
+            typeName [0].Span.CopyTo (fqnSpan.Slice (len, typeName [0].Length));
+            len += typeName [0].Length;
+
+            // Nested type names
+            for (int i = 1; i < typeName.Length; i++) {
+                fqnSpan [len++] = (byte) '.';
+
+                typeName [i].Span.CopyTo (fqnSpan.Slice (len, typeName [i].Length));
+                len += typeName [i].Length;
+            }
+
+            return IdPool.GetIdentifier (fqnSpan);
+        }
+
         public ES_TypeInfo* GetFullyQualifiedType (ArrayPointer<byte> fullyQualifiedName) {
             ReadOnlySpan<byte> namespaceSep = stackalloc byte [2] { (byte) ':', (byte) ':' };
             int namespaceSepPos = fullyQualifiedName.Span.IndexOf (namespaceSep);
 
             Debug.Assert (namespaceSepPos > -1, "The specified name must be fully qualified.");
 
-            var namespaceName = IdPool.GetIdentifier (fullyQualifiedName.Span.Slice (0, namespaceSepPos));
+            ReadOnlySpan<Pointer<ES_TypeInfo>> typesSpan;
+            if (namespaceSepPos > 0) {
+                var namespaceName = IdPool.GetIdentifier (fullyQualifiedName.Span.Slice (0, namespaceSepPos));
+
+                if (!Namespaces.TryGetValue (namespaceName, out var namespaceData))
+                    return null;
+
+                typesSpan = namespaceData.TypeSpan;
+            } else
+                typesSpan = builtinTypesList.Span;
+
             var typeName = IdPool.GetIdentifier (fullyQualifiedName.Span.Slice (namespaceSepPos + namespaceSep.Length));
-
-            if (!Namespaces.TryGetValue (namespaceName, out var namespaceData))
-                return null;
-
-            var namespaceTypes = namespaceData.TypeSpan;
-
-            foreach (var typePtr in namespaceTypes) {
+            foreach (var typePtr in typesSpan) {
                 var type = typePtr.Address;
 
                 if (type->TypeName.Equals (typeName))
@@ -468,19 +1003,11 @@ namespace EchelonScriptCompiler.Data {
 
         protected virtual void DoDispose () {
             if (!disposedValue) {
-                foreach (var kvp in namespacesDict)
-                    kvp.Value.Dispose ();
-
-                foreach (var type in typesList)
-                    Marshal.FreeHGlobal (type);
-
-                foreach (var mem in allocatedMemory)
-                    Marshal.FreeHGlobal (mem);
-
+                backendData?.Dispose ();
                 namespacesDict.Clear ();
                 IdPool?.Dispose ();
                 typesList?.Dispose ();
-                allocatedMemory?.Dispose ();
+                memManager?.Dispose ();
 
                 disposedValue = true;
             }

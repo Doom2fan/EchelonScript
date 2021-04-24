@@ -10,6 +10,7 @@
 using System;
 using System.Collections.Generic;
 using ChronosLib.Pooled;
+using EchelonScriptCompiler.Backends;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Frontend;
 using EchelonScriptCompiler.Frontend.Parser;
@@ -19,8 +20,13 @@ namespace EchelonScriptCompiler {
         #region ================== Instance fields
 
         protected List<EchelonScriptErrorMessage> errorsList;
+        protected List<EchelonScriptErrorMessage> warningsList;
+        protected List<EchelonScriptErrorMessage> infoList;
         protected EchelonScriptParser parser;
         protected CompilerFrontend frontend;
+        protected ICompilerBackend? backend;
+
+        protected bool disposeBackend;
 
         protected EchelonScriptEnvironment? environment;
         protected EchelonScriptEnvironment.Builder? environmentBuilder;
@@ -30,6 +36,8 @@ namespace EchelonScriptCompiler {
         #region ================== Instance properties
 
         public IReadOnlyList<EchelonScriptErrorMessage> Errors => errorsList;
+        public IReadOnlyList<EchelonScriptErrorMessage> Warnings => warningsList;
+        public IReadOnlyList<EchelonScriptErrorMessage> InfoMessages => infoList;
 
         #endregion
 
@@ -37,8 +45,24 @@ namespace EchelonScriptCompiler {
 
         public EchelonScript_Compiler () {
             errorsList = new List<EchelonScriptErrorMessage> ();
+            warningsList = new List<EchelonScriptErrorMessage> ();
+            infoList = new List<EchelonScriptErrorMessage> ();
+
             parser = new EchelonScriptParser (errorsList);
-            frontend = new CompilerFrontend (errorsList);
+            frontend = new CompilerFrontend (errorsList, warningsList, infoList);
+            backend = null;
+
+            disposeBackend = false;
+        }
+
+        public static EchelonScript_Compiler Create<TBackend> ()
+            where TBackend : ICompilerBackend, new () {
+            var comp = new EchelonScript_Compiler ();
+
+            comp.backend = new TBackend ();
+            comp.backend.Initialize (comp.errorsList, comp.warningsList, comp.infoList);
+
+            return comp;
         }
 
         #endregion
@@ -81,16 +105,25 @@ namespace EchelonScriptCompiler {
         }
 
         public void Compile () {
-            frontend.CompileCode ();
+            var code = frontend.CompileCode ();
 
             if (errorsList.Count > 0)
                 return;
+
+            if (backend is not null) {
+                backend.CompileEnvironment (environment!, environmentBuilder!, code);
+
+                if (errorsList.Count > 0)
+                    return;
+            }
         }
 
         public void Reset () {
             CheckDisposed ();
 
             errorsList.Clear ();
+            warningsList.Clear ();
+            infoList.Clear ();
             frontend.Reset ();
 
             environmentBuilder?.Dispose ();
@@ -125,6 +158,7 @@ namespace EchelonScriptCompiler {
             if (!disposedValue) {
                 parser?.Dispose ();
                 frontend?.Dispose ();
+                backend?.Dispose ();
 
                 environmentBuilder?.Dispose ();
 

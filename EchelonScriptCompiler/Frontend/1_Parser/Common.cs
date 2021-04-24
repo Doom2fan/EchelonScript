@@ -162,7 +162,6 @@ namespace EchelonScriptCompiler.Data {
         Public,
     }
 
-
     public enum ES_VirtualnessModifier {
         None,
         Virtual,

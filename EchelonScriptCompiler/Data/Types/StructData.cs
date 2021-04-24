@@ -19,6 +19,7 @@ namespace EchelonScriptCompiler.Data.Types {
             #region ================== Instance fields
 
             private ES_StructData* structData;
+            private ES_TypeMembers.Builder membersListBuilder;
 
             #endregion
 
@@ -33,6 +34,12 @@ namespace EchelonScriptCompiler.Data.Types {
                 set => structData->interfacesList = value;
             }
 
+            /// <summary>The members list of this struct.</summary>
+            public ES_TypeMembers MembersList => structData->TypeInfo.MembersList;
+
+            /// <summary>The builder for the members list of this struct.</summary>
+            public ES_TypeMembers.Builder MembersListBuilder => membersListBuilder;
+
             #endregion
 
             #region ================== Constructors
@@ -43,6 +50,7 @@ namespace EchelonScriptCompiler.Data.Types {
             ) {
                 structData = data;
                 data->TypeInfo = new ES_TypeInfo (ES_TypeTag.Struct, accessMod, sourceUnit, typeName, fullyQualifiedName);
+                membersListBuilder = new ES_TypeMembers.Builder (&structData->TypeInfo.MembersList, &structData->TypeInfo);
             }
 
             #endregion
@@ -58,7 +66,7 @@ namespace EchelonScriptCompiler.Data.Types {
         #region ================== Instance properties
 
         /// <summary>The interfaces list of this struct.</summary>
-        private ArrayPointer<Pointer<ES_InterfaceData>> InterfacesList => interfacesList;
+        public ArrayPointer<Pointer<ES_InterfaceData>> InterfacesList => interfacesList;
 
         #endregion
     }
