@@ -601,23 +601,23 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                     break;
 
                 case SimpleBinaryExprType.Equals:
-                    value = builderRef.BuildFCmp (LLVMRealPredicate.LLVMRealUEQ, lhs.Value, rhs.Value, "floatEqTmp");
+                    value = builderRef.BuildFCmp (LLVMRealPredicate.LLVMRealOEQ, lhs.Value, rhs.Value, "floatEqTmp");
                     break;
                 case SimpleBinaryExprType.NotEquals:
-                    value = builderRef.BuildFCmp (LLVMRealPredicate.LLVMRealUNE, lhs.Value, rhs.Value, "floatNotEqTmp");
+                    value = builderRef.BuildFCmp (LLVMRealPredicate.LLVMRealONE, lhs.Value, rhs.Value, "floatNotEqTmp");
                     break;
 
                 case SimpleBinaryExprType.LesserThan:
-                    value = builderRef.BuildFCmp (LLVMRealPredicate.LLVMRealULT, lhs.Value, rhs.Value, "floatLesserThanTmp");
+                    value = builderRef.BuildFCmp (LLVMRealPredicate.LLVMRealOLT, lhs.Value, rhs.Value, "floatLesserThanTmp");
                     break;
                 case SimpleBinaryExprType.GreaterThan:
-                    value = builderRef.BuildFCmp (LLVMRealPredicate.LLVMRealUGT, lhs.Value, rhs.Value, "floatGreaterThanTmp");
+                    value = builderRef.BuildFCmp (LLVMRealPredicate.LLVMRealOGT, lhs.Value, rhs.Value, "floatGreaterThanTmp");
                     break;
                 case SimpleBinaryExprType.LesserThanEqual:
-                    value = builderRef.BuildFCmp (LLVMRealPredicate.LLVMRealULE, lhs.Value, rhs.Value, "floatLesserThanEqTmp");
+                    value = builderRef.BuildFCmp (LLVMRealPredicate.LLVMRealOLE, lhs.Value, rhs.Value, "floatLesserThanEqTmp");
                     break;
                 case SimpleBinaryExprType.GreaterThanEqual:
-                    value = builderRef.BuildFCmp (LLVMRealPredicate.LLVMRealUGE, lhs.Value, rhs.Value, "floatGreaterThanEqTmp");
+                    value = builderRef.BuildFCmp (LLVMRealPredicate.LLVMRealOGE, lhs.Value, rhs.Value, "floatGreaterThanEqTmp");
                     break;
 
                 case SimpleBinaryExprType.Power:
