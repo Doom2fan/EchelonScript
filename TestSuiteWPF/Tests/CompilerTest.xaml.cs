@@ -59,6 +59,8 @@ namespace TestSuiteWPF.Tests {
         protected ObservableCollection<CompilerMessage> errList;
         protected TextMarkerService textMarkerService;
 
+        System.Globalization.CultureInfo cultureInfo;
+
         protected EchelonScript_Compiler compiler;
 
         #endregion
@@ -74,6 +76,10 @@ namespace TestSuiteWPF.Tests {
             errList = new ObservableCollection<CompilerMessage> ();
 
             errorsList.ItemsSource = errList;
+
+            cultureInfo = new System.Globalization.CultureInfo (System.Globalization.CultureInfo.CurrentCulture.Name);
+            cultureInfo.NumberFormat.NumberDecimalSeparator = ".";
+            cultureInfo.NumberFormat.NumberGroupSeparator = "'";
         }
 
         #endregion
@@ -153,10 +159,19 @@ namespace TestSuiteWPF.Tests {
             if (errList.Count > 0)
                 return;
 
+            var testI32Name = "testI32";
+            var testF32Name = "testF32";
+
             var idMain = env.IdPool.GetIdentifier ("main");
-            var idTest = env.IdPool.GetIdentifier ("test");
+            var idTestI32 = env.IdPool.GetIdentifier (testI32Name);
+            var idTestF32 = env.IdPool.GetIdentifier (testF32Name);
+
             var idInt32 = env.IdPool.GetIdentifier (ES_PrimitiveTypes.GetIntName (ES_IntSize.Int32, false));
             var typeInt32 = env.GetFullyQualifiedType (env.GetFullyQualifiedName (ArrayPointer<byte>.Null, idInt32));
+
+            var idFloat32 = env.IdPool.GetIdentifier (ES_PrimitiveTypes.GetFloatName (ES_FloatSize.Single));
+            var typeFloat32 = env.GetFullyQualifiedType (env.GetFullyQualifiedName (ArrayPointer<byte>.Null, idFloat32));
+
             Debug.Assert (typeInt32 is not null);
             foreach (var namespaceKVP in env.Namespaces) {
                 var namespaceData = namespaceKVP.Value;
@@ -174,10 +189,11 @@ namespace TestSuiteWPF.Tests {
                     }
                 }
 
-                if (namespaceData.Functions.TryGetValue (idTest, out func)) {
+                if (namespaceData.Functions.TryGetValue (idTestI32, out func)) {
                     var funcType = func.Address->FunctionType;
 
                     bool matchSig = false;
+
                     delegate* unmanaged[Cdecl]<int, int, int> fp = null;
                     if (funcType->ReturnType == typeInt32 && funcType->ArgumentsList.Length == 2 &&
                         funcType->ArgumentsList.Span [0].ValueType == typeInt32 && funcType->ArgumentsList.Span [0].ArgType == ES_ArgumentType.Normal &&
@@ -191,11 +207,38 @@ namespace TestSuiteWPF.Tests {
                         var b = rand.Next (int.MinValue, int.MaxValue);
                         int ret = fp (a, b);
 
-                        errList.Add (new CompilerMessage ("lol", new EchelonScriptErrorMessage ($"test ({a}, {b}) returned {ret}.", 0, 0, 0, 0)));
+                        var infoStr = string.Format (cultureInfo, $"{testI32Name} ({{0:n0}}, {{1:n0}}) returned {{2:n0}}.", a, b, ret);
+                        errList.Add (new CompilerMessage ("lol", new EchelonScriptErrorMessage (infoStr, 0, 0, 0, 0)));
                     } else if (matchSig)
-                        errList.Add (new CompilerMessage ("lol", new EchelonScriptErrorMessage ($"test had a null function pointer.", 0, 0, 0, 0)));
+                        errList.Add (new CompilerMessage ("lol", new EchelonScriptErrorMessage ($"{testI32Name} had a null function pointer.", 0, 0, 0, 0)));
                     else
-                        errList.Add (new CompilerMessage ("lol", new EchelonScriptErrorMessage ($"test didn't match signature.", 0, 0, 0, 0)));
+                        errList.Add (new CompilerMessage ("lol", new EchelonScriptErrorMessage ($"{testI32Name} didn't match signature.", 0, 0, 0, 0)));
+                }
+
+                if (namespaceData.Functions.TryGetValue (idTestF32, out func)) {
+                    var funcType = func.Address->FunctionType;
+
+                    bool matchSig = false;
+
+                    delegate* unmanaged[Cdecl]<float, float, float> fp = null;
+                    if (funcType->ReturnType == typeFloat32 && funcType->ArgumentsList.Length == 2 &&
+                        funcType->ArgumentsList.Span [0].ValueType == typeFloat32 && funcType->ArgumentsList.Span [0].ArgType == ES_ArgumentType.Normal &&
+                        funcType->ArgumentsList.Span [1].ValueType == typeFloat32 && funcType->ArgumentsList.Span [1].ArgType == ES_ArgumentType.Normal) {
+                        fp = (delegate* unmanaged[Cdecl]<float, float, float>) func.Address->FunctionPointer;
+                        matchSig = true;
+                    }
+
+                    if (fp != null) {
+                        var a = (float) (rand.NextDouble () * int.MaxValue);
+                        var b = (float) (rand.NextDouble () * int.MaxValue);
+                        float ret = fp (a, b);
+
+                        var infoStr = string.Format (cultureInfo, $"{testF32Name} ({{0:n}}, {{1:n}}) returned {{2:n}}.", a, b, ret);
+                        errList.Add (new CompilerMessage ("lol", new EchelonScriptErrorMessage (infoStr, 0, 0, 0, 0)));
+                    } else if (matchSig)
+                        errList.Add (new CompilerMessage ("lol", new EchelonScriptErrorMessage ($"{testF32Name} had a null function pointer.", 0, 0, 0, 0)));
+                    else
+                        errList.Add (new CompilerMessage ("lol", new EchelonScriptErrorMessage ($"{testF32Name} didn't match signature.", 0, 0, 0, 0)));
                 }
             }
         }
