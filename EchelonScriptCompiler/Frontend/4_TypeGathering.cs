@@ -489,7 +489,6 @@ namespace EchelonScriptCompiler.Frontend {
                     break;
 
                 case ES_AstBlockStatement blockStmt: {
-                    Debug.Assert (blockStmt.Statement is not null);
                     symbols.Push ();
 
                     ES_AstStatement? curStatement = blockStmt.Statement;
