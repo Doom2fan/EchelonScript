@@ -321,10 +321,10 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 return GenerateCode_BinaryExpr_IntInt (lhs, rhs, exprOp);
 
             if (lhs.Type->TypeTag == ES_TypeTag.Bool && rhs.Type->TypeTag == ES_TypeTag.Bool)
-                return GenerateCode_BinaryExpr_FloatFloat (lhs, rhs, exprOp);
+                return GenerateCode_BinaryExpr_BoolBool (lhs, rhs, exprOp);
 
             if (lhs.Type->TypeTag == ES_TypeTag.Float && rhs.Type->TypeTag == ES_TypeTag.Float)
-                return GenerateCode_BinaryExpr_BoolBool (lhs, rhs, exprOp);
+                return GenerateCode_BinaryExpr_FloatFloat (lhs, rhs, exprOp);
 
             if (lhs.Type->TypeTag == ES_TypeTag.Float && rhs.Type->TypeTag == ES_TypeTag.Int)
                 return GenerateCode_BinaryExpr_FloatInt (lhs, rhs, exprOp);
