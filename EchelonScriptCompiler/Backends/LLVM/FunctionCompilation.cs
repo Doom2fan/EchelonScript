@@ -20,10 +20,14 @@ using Microsoft.Toolkit.HighPerformance.Buffers;
 
 namespace EchelonScriptCompiler.Backends.LLVMBackend {
     public unsafe sealed partial class LLVMCompilerBackend {
-        public struct FunctionData {
-            public LLVMValueRef FunctionDef;
-            public LLVMValueRef ReturnValue;
-            public LLVMBasicBlockRef ReturnBlock;
+        public ref struct FunctionInfo {
+            public ES_FunctionData* Data;
+            public ES_FunctionPrototypeData* Type;
+
+            public LLVMValueRef Definition;
+
+            public LLVMValueRef RetValue;
+            public LLVMBasicBlockRef RetBlock;
         }
 
         public struct StatementData {
@@ -115,36 +119,35 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
             symbols.Push ();
 
-            ES_FunctionData* funcData;
+            var funcInfo = new FunctionInfo ();
 
             if (namespaceData is not null) {
                 if (!namespaceData.Functions.TryGetValue (env.IdPool.GetIdentifier (funcDef.Name.Text.Span), out var ptr))
                     throw new CompilationException (Error_LLVMError);
 
-                funcData = ptr;
+                funcInfo.Data = ptr;
             } else if (parentType is not null) {
                 throw new NotImplementedException ();
             } else
                 throw new CompilationException (Error_LLVMError);
 
-            var funcType = funcData->FunctionType;
+            funcInfo.Type = funcInfo.Data->FunctionType;
 
             using var argsArr = PooledArray<LLVMTypeRef>.GetArray (funcDef.ArgumentsList.Length);
             int argNum = 0;
-            foreach (ref var arg in funcType->ArgumentsList.Span) {
+            foreach (ref var arg in funcInfo.Type->ArgumentsList.Span) {
                 if (arg.ArgType != ES_ArgumentType.Normal)
                     throw new NotImplementedException ();
 
                 argsArr.Span [argNum++] = GetLLVMType (arg.ValueType);
             }
 
-            var retType = funcData->FunctionType->ReturnType;
+            var retType = funcInfo.Data->FunctionType->ReturnType;
             var funcTypeRef = LLVMTypeRef.CreateFunction (GetLLVMType (retType), argsArr, false);
 
-            LLVMValueRef def;
             if (namespaceData is not null) {
-                using var funcName = MangleFunctionName (namespaceData, funcData);
-                def = moduleRef.AddFunction (funcName, funcTypeRef);
+                using var funcName = MangleFunctionName (namespaceData, funcInfo.Data);
+                funcInfo.Definition = moduleRef.AddFunction (funcName, funcTypeRef);
             } else if (parentType is not null) {
                 throw new NotImplementedException ();
             } else
@@ -152,16 +155,22 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
             argsArr.Dispose ();
 
-            def.Linkage = LLVMLinkage.LLVMExternalLinkage;
+            funcInfo.Definition.Linkage = LLVMLinkage.LLVMExternalLinkage;
 
-            def.AppendBasicBlock ("entry");
-            var entryBlock = def.EntryBasicBlock;
-            builderRef.PositionAtEnd (entryBlock);
+            funcInfo.Definition.AppendBasicBlock ("entry");
+            funcInfo.RetBlock = funcInfo.Definition.AppendBasicBlock ("_retValBlock");
 
-            for (uint i = 0; i < def.ParamsCount; i++) {
-                var param = def.GetParam (i);
-                ref var argTypeInfo = ref funcType->ArgumentsList.Span [(int) i];
-                ref var argData = ref funcData->Arguments.Span [(int) i];
+            builderRef.PositionAtEnd (funcInfo.Definition.EntryBasicBlock);
+            funcInfo.RetValue = builderRef.BuildAlloca (GetLLVMType (retType), "_retVal");
+
+            builderRef.PositionAtEnd (funcInfo.RetBlock);
+            builderRef.BuildRet (GetLLVMValue (funcInfo.RetValue));
+
+            builderRef.PositionAtEnd (funcInfo.Definition.EntryBasicBlock);
+            for (uint i = 0; i < funcInfo.Definition.ParamsCount; i++) {
+                var param = funcInfo.Definition.GetParam (i);
+                ref var argTypeInfo = ref funcInfo.Type->ArgumentsList.Span [(int) i];
+                ref var argData = ref funcInfo.Data->Arguments.Span [(int) i];
 
                 var argFlags = (VariableFlags) 0;
 
@@ -193,13 +202,12 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             Debug.Assert (funcDef.Statement is not null);
             Debug.Assert (funcDef.Statement.Endpoint is null);
 
-            var stmtData = GenerateCode_Statement (ref transUnit, symbols, src, def, retType, funcDef.Statement);
+            var stmtData = GenerateCode_Statement (ref transUnit, symbols, src, funcInfo, retType, funcDef.Statement);
 
             if (!stmtData.AlwaysReturns) {
-                if (retType == env.TypeVoid) {
-                    builderRef.PositionAtEnd (entryBlock);
-                    builderRef.BuildRetVoid ();
-                } else
+                if (retType == env.TypeVoid)
+                    builderRef.BuildBr (funcInfo.RetBlock);
+                else
                     throw new CompilationException (ES_BackendErrors.FrontendError);
             }
 
@@ -208,7 +216,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
         private StatementData GenerateCode_Statement (
             ref TranslationUnitData transUnit, SymbolStack<Symbol> symbols, ReadOnlySpan<char> src,
-            LLVMValueRef funcLLVM, ES_TypeInfo* retType, ES_AstStatement stmt
+            FunctionInfo funcInfo, ES_TypeInfo* retType, ES_AstStatement stmt
         ) {
             Debug.Assert (stmt is not null);
             var idPool = env!.IdPool;
@@ -230,7 +238,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
                     ES_AstStatement? subStmt = blockStmt.Statement;
                     while (subStmt is not null) {
-                        var subStmtData = GenerateCode_Statement (ref transUnit, symbols, src, funcLLVM, retType, subStmt);
+                        var subStmtData = GenerateCode_Statement (ref transUnit, symbols, src, funcInfo, retType, subStmt);
 
                         if (subStmtData.AlwaysReturns) {
                             alwaysReturns = true;
@@ -308,23 +316,47 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 #region Jumps
 
                 case ES_AstConditionalStatement condStmt: {
-                    throw new NotImplementedException ();
-                    /*var boolType = env!.TypeBool;
+                    var boolType = env!.TypeBool;
 
-                    var condExprData = GenerateCode_Expression (ref transUnit, symbols, src, condStmt.ConditionExpression, boolType);
-                    CheckTypes_EnsureCompat (boolType, condExprData.Type, src, condExprData.Expr.NodeBounds);
-
+                    bool hasElse = condStmt.ElseStatement is not null;
                     bool alwaysReturns = false;
 
-                    var thenStmtData = CheckTypes_Statement (ref transUnit, symbols, src, retType, condStmt.ThenStatement);
-                    if (condStmt.ElseStatement is not null) {
-                        var elseStmtData = CheckTypes_Statement (ref transUnit, symbols, src, retType, condStmt.ElseStatement);
+                    // Generate the condition.
+                    var condExpr = GenerateCode_Expression (ref transUnit, symbols, src, condStmt.ConditionExpression, boolType);
+                    GenerateCode_EnsureCompat (env.TypeBool, condExpr.Type, src, condExpr.Expr.NodeBounds);
+                    condExpr.Value = GetLLVMValue (condExpr.Value);
 
-                        if (thenStmtData.AlwaysReturns && elseStmtData.AlwaysReturns)
-                            alwaysReturns = true;
+                    // Create the blocks.
+                    var thenBlock = funcInfo.Definition.AppendBasicBlock ("if_then");
+                    var endBlock = funcInfo.Definition.AppendBasicBlock ("if_end");
+                    var elseBlock = hasElse ? funcInfo.Definition.AppendBasicBlock ("if_else") : endBlock;
+
+                    builderRef.BuildCondBr (condExpr.Value, thenBlock, elseBlock);
+
+                    // Generate the then block.
+                    builderRef.PositionAtEnd (thenBlock);
+                    var thenStmtData = GenerateCode_Statement (ref transUnit, symbols, src, funcInfo, retType, condStmt.ThenStatement);
+                    if (!thenStmtData.AlwaysReturns)
+                        builderRef.BuildBr (endBlock);
+
+                    // Generate the else block (if any).
+                    if (hasElse) {
+                        builderRef.PositionAtEnd (elseBlock);
+                        var elseStmtData = GenerateCode_Statement (ref transUnit, symbols, src, funcInfo, retType, condStmt.ElseStatement!);
+
+                        if (!elseStmtData.AlwaysReturns)
+                            builderRef.BuildBr (endBlock);
+
+                        alwaysReturns = thenStmtData.AlwaysReturns && elseStmtData.AlwaysReturns;
                     }
 
-                    return new StatementData { AlwaysReturns = alwaysReturns };*/
+                    // Generate the merge/end block.
+                    if (!alwaysReturns)
+                        builderRef.PositionAtEnd (endBlock);
+                    else
+                        endBlock.Delete ();
+
+                    return new StatementData { AlwaysReturns = alwaysReturns };
                 }
 
                 case ES_AstSwitchStatement switchStmt: {
@@ -367,13 +399,14 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                         if (retStmt.ReturnExpression is not null)
                             throw new CompilationException (ES_BackendErrors.FrontendError);
 
-                        builderRef.BuildRetVoid ();
+                        builderRef.BuildBr (funcInfo.RetBlock);
                     } else if (retStmt.ReturnExpression is not null) {
                         var exprData = GenerateCode_Expression (ref transUnit, symbols, src, retStmt.ReturnExpression, retType);
 
                         //TODO: CheckTypes_EnsureCompat (retType, exprData.Type, src, exprData.Expr.NodeBounds);
 
-                        builderRef.BuildRet (GetLLVMValue (exprData.Value));
+                        builderRef.BuildStore (GetLLVMValue (exprData.Value), funcInfo.RetValue);
+                        builderRef.BuildBr (funcInfo.RetBlock);
                     } else if (retType != env.TypeVoid)
                         throw new CompilationException (ES_BackendErrors.FrontendError);
 
