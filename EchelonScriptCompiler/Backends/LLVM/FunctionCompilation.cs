@@ -28,6 +28,9 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
             public LLVMValueRef RetValue;
             public LLVMBasicBlockRef RetBlock;
+
+            public LLVMBasicBlockRef? ContinueBlock;
+            public LLVMBasicBlockRef? BreakBlock;
         }
 
         public struct StatementData {
@@ -305,7 +308,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                             throw new CompilationException (ES_BackendErrors.FrontendError);
 
                         if (hasInit)
-                            builderRef.BuildStore (initExprData.Value, varData.LLVMValue);
+                            builderRef.BuildStore (GetLLVMValue (initExprData.Value), varData.LLVMValue);
                     }
 
                     return new StatementData { AlwaysReturns = false };
@@ -418,16 +421,40 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 #region Loops
 
                 case ES_AstLoopStatement loopStmt: {
-                    throw new NotImplementedException ();
-                    /*var boolType = env!.TypeBool;
+                    var boolType = env!.TypeBool;
+
+                    symbols.Push ();
+
+                    var initBlock = funcInfo.Definition.AppendBasicBlock ("loop_init");
+                    var condBlock = funcInfo.Definition.AppendBasicBlock ("loop_cond");
+                    var bodyBlock = funcInfo.Definition.AppendBasicBlock ("loop_body");
+                    var iterBlock = funcInfo.Definition.AppendBasicBlock ("loop_iter");
+                    var endBlock  = funcInfo.Definition.AppendBasicBlock ("loop_end");
+
+                    /* Emit the jump to the init block. */
+                    builderRef.BuildBr (initBlock);
+
+                    /* Emit the init block. (emit variable inits -> jump to condition block) */
+                    builderRef.PositionAtEnd (initBlock);
 
                     if (loopStmt.InitializationStatement is not null)
-                        GenerateCode_Statement (ref transUnit, symbols, src, retType, loopStmt.InitializationStatement);
+                        GenerateCode_Statement (ref transUnit, symbols, src, funcInfo, retType, loopStmt.InitializationStatement);
+
+                    builderRef.BuildBr (condBlock);
+
+                    /* Emit the condition block. */
+                    builderRef.PositionAtEnd (condBlock);
 
                     if (loopStmt.ConditionExpression is not null) {
                         var condExprData = GenerateCode_Expression (ref transUnit, symbols, src, loopStmt.ConditionExpression, boolType);
-                        CheckTypes_EnsureCompat (boolType, condExprData.Type, src, condExprData.Expr.NodeBounds);
-                    }
+                        GenerateCode_EnsureCompat (boolType, condExprData.Type, src, condExprData.Expr.NodeBounds);
+
+                        builderRef.BuildCondBr (condExprData.Value, bodyBlock, endBlock);
+                    } else
+                        builderRef.BuildBr (bodyBlock);
+
+                    /* Emit the iteration block. */
+                    builderRef.PositionAtEnd (iterBlock);
 
                     if (loopStmt.IterationExpressions is not null) {
                         foreach (var expr in loopStmt.IterationExpressions) {
@@ -436,9 +463,26 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                         }
                     }
 
-                    GenerateCode_Statement (ref transUnit, symbols, src, retType, loopStmt.LoopBody);
+                    builderRef.BuildBr (condBlock);
 
-                    return new StatementData { AlwaysReturns = false };*/
+                    /* Emit the body block. */
+                    builderRef.PositionAtEnd (bodyBlock);
+
+                    funcInfo.ContinueBlock = condBlock;
+                    funcInfo.BreakBlock = endBlock;
+
+                    Debug.Assert (loopStmt.LoopBody is not null);
+                    Debug.Assert (loopStmt.LoopBody.Endpoint is null);
+
+                    GenerateCode_Statement (ref transUnit, symbols, src, funcInfo, retType, loopStmt.LoopBody);
+
+                    builderRef.BuildBr (iterBlock);
+
+                    builderRef.PositionAtEnd (endBlock);
+
+                    symbols.Pop ();
+
+                    return new StatementData { AlwaysReturns = false };
                 }
 
                 #endregion
