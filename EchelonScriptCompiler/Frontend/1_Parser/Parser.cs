@@ -2762,7 +2762,8 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             if (EnsureToken (tkPair.tk, EchelonScriptTokenType.ParenOpen, null) != EnsureTokenResult.Correct) {
                 errorsList.Add (ES_FrontendErrors.GenExpectedXGotY ("'('", tkPair.tk));
                 return new ES_AstEmptyErrorStatement (tkPair.tk);
-            }
+            } else
+                tokenizer.NextToken ();
 
             var conditionExpr = ParseExpression ();
 
