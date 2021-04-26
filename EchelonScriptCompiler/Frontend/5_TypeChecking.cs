@@ -415,7 +415,7 @@ namespace EchelonScriptCompiler.Frontend {
 
                     Debug.Assert (loopStmt.LoopBody is not null);
                     Debug.Assert (loopStmt.LoopBody.Endpoint is null);
-                    
+
                     CheckTypes_Statement (ref transUnit, symbols, src, retType, loopStmt.LoopBody);
 
                     symbols.Pop ();

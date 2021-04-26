@@ -936,6 +936,18 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             return EnsureToken (tkPair.tk, type, text);
         }
 
+        protected bool ParseSemicolon (out EchelonScriptToken tk) {
+            tk = tokenizer.PeekNextToken ().tk;
+
+            if (EnsureToken (tk, EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct) {
+                errorsList.Add (ES_FrontendErrors.GenExpectedXGotY ("';'", tk));
+                return false;
+            }
+
+            tokenizer.NextToken ();
+            return true;
+        }
+
         protected bool CheckNoAccessModifierErrors (EchelonScriptToken tk, ES_AggregateModifiers currentModifiers) {
             if (currentModifiers.Static == true) {
                 errorsList.Add (new EchelonScriptErrorMessage (tk, ES_FrontendErrors.AccessBeforeStorage));
@@ -1780,11 +1792,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                     break;
             }
 
-            var semicolonTkPair = tokenizer.PeekNextToken ();
-            if (EnsureToken (semicolonTkPair.tk, EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)
-                errorsList.Add (ES_FrontendErrors.GenExpectedXGotY ("';'", semicolonTkPair.tk));
-            else
-                tokenizer.NextToken ();
+            ParseSemicolon (out var semicolonTk);
 
             using var memberVarsList = new StructPooledList<ES_AstMemberVarDefinition> (CL_ClearMode.Auto);
             foreach (var memberVar in varDataList) {
@@ -1797,7 +1805,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                     memberVar.Name,
                     valueType,
                     memberVar.Expr,
-                    semicolonTkPair.tk
+                    semicolonTk
                 );
                 memberVarsList.Add (memberVarDef);
             }
@@ -2103,10 +2111,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
 
                 endTk = tokenizer.PeekNextToken ().tk;
 
-                if (EnsureToken (endTk, EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)
-                    errorsList.Add (ES_FrontendErrors.GenExpectedXGotY ("';'", endTk));
-                else
-                    tokenizer.NextToken ();
+                ParseSemicolon (out _);
 
                 statements = new ES_AstExpressionStatement (expr, endTk);
 
@@ -2226,16 +2231,30 @@ namespace EchelonScriptCompiler.Frontend.Parser {
 
                     var ret = new ES_AstLabeledStatement (labelName);
                     ret.Endpoint = ParseStatement ();
+
+                    if (ret.Endpoint is ES_AstEmptyStatement) {
+                        errorsList.Add (new EchelonScriptErrorMessage (
+                            sourceText.Span, ret.Endpoint.NodeBounds, ES_FrontendErrors.LabelOnEmptyStatement
+                        ));
+                    }
+
                     return ret;
                 }
 
                 switch (tkTextStr) {
-                    case ES_Keywords.Var:
-                        return ParseStatement_Variable (false);
+                    case ES_Keywords.Var: {
+                        var retVar = ParseStatement_Variable (false);
+                        ParseSemicolon (out _);
+                        return retVar;
+                    }
+
                     case ES_Keywords.Using: {
                         if (EnsureTokenPeek (1, EchelonScriptTokenType.Identifier, ES_Keywords.Var) == EnsureTokenResult.Correct) {
                             tokenizer.NextToken ();
-                            return ParseStatement_Variable (true);
+
+                            var retVar = ParseStatement_Variable (true);
+                            ParseSemicolon (out _);
+                            return retVar;
                         } else {
                             var import = ParseStatement_Import (out var errTok);
 
@@ -2256,7 +2275,8 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                 }
             }
 
-            return ParseEmbeddedStatementInternal ();
+            var retStmt = ParseEmbeddedStatementInternal ();
+            return retStmt;
         }
 
         protected ES_AstStatement ParseEmbeddedStatementInternal () {
@@ -2456,9 +2476,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             if (originalName is null)
                 errorsList.Add (ES_FrontendErrors.GenExpectedXGotY ("a type", tokenizer.PeekNextToken ().tk));
 
-            var endTk = tokenizer.NextToken ().tk;
-            if (EnsureToken (endTk, EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)
-                errorsList.Add (ES_FrontendErrors.GenExpectedXGotY ("';'", endTk));
+            ParseSemicolon (out var endTk);
 
             errToken = null;
             return new ES_AstTypeAlias (aliasName, originalName, startTk, endTk);
@@ -2489,6 +2507,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             if (usingVar)
                 initRequired = true;
 
+            EchelonScriptToken endTk;
             while (true) {
                 EchelonScriptToken varName = new EchelonScriptToken ();
                 ES_AstExpression? initializationExpr = null;
@@ -2520,17 +2539,13 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                 variables.Add ((varName, initializationExpr));
 
                 tkPair = tokenizer.PeekNextToken ();
-                if (tkPair.tk.Type == EchelonScriptTokenType.Comma) {
+                if (tkPair.tk.Type == EchelonScriptTokenType.Comma)
                     tokenizer.NextToken ();
-                } else
+                else {
+                    endTk = varName;
                     break;
+                }
             }
-
-            var endTk = tokenizer.PeekNextToken ().tk;
-            if (EnsureToken (endTk, EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)
-                errorsList.Add (ES_FrontendErrors.GenExpectedXGotY ("';'", endTk));
-            else
-                tokenizer.NextToken ();
 
             return new ES_AstLocalVarDefinition (
                 usingVar,
@@ -2665,11 +2680,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Identifier, null) == EnsureTokenResult.Correct)
                 labelName = tokenizer.NextToken ().tk;
 
-            var endTk = tokenizer.PeekNextToken ().tk;
-            if (EnsureToken (endTk, EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)
-                errorsList.Add (ES_FrontendErrors.GenExpectedXGotY ("';'", endTk));
-            else
-                tokenizer.NextToken ();
+            ParseSemicolon (out var endTk);
 
             return new ES_AstBreakStatement (labelName, startTk, endTk);
         }
@@ -2684,11 +2695,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Identifier, null) == EnsureTokenResult.Correct)
                 labelName = tokenizer.NextToken ().tk;
 
-            var endTk = tokenizer.PeekNextToken ().tk;
-            if (EnsureToken (endTk, EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)
-                errorsList.Add (ES_FrontendErrors.GenExpectedXGotY ("';'", endTk));
-            else
-                tokenizer.NextToken ();
+            ParseSemicolon (out var endTk);
 
             return new ES_AstContinueStatement (labelName, startTk, endTk);
         }
@@ -2704,23 +2711,25 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Identifier, null) != EnsureTokenResult.Correct)
                 errorsList.Add (ES_FrontendErrors.GenExpectedIdentifier (tkPair.tk));
 
-            var endTk = tokenizer.PeekNextToken ().tk;
-            if (EnsureToken (endTk, EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)
-                errorsList.Add (ES_FrontendErrors.GenExpectedXGotY ("';'", endTk));
-            else
-                tokenizer.NextToken ();
-
             if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Identifier, null) == EnsureTokenResult.Correct) {
                 if (tkPair.tk.Text.Span.Equals (ES_Keywords.Case, StringComparison.Ordinal)) {
                     tokenizer.NextToken ();
 
-                    statement = new ES_AstGotoCaseStatement (ParseExpression (), startTk, endTk);
+                    var expr = ParseExpression ();
+
+                    ParseSemicolon (out var endTk);
+
+                    statement = new ES_AstGotoCaseStatement (expr, startTk, endTk);
                 } else if (tkPair.tk.Text.Span.Equals (ES_Keywords.Default, StringComparison.Ordinal)) {
                     tokenizer.NextToken ();
+
+                    ParseSemicolon (out var endTk);
 
                     statement = new ES_AstGotoCaseStatement (null, startTk, endTk);
                 } else {
                     tokenizer.NextToken ();
+
+                    ParseSemicolon (out var endTk);
 
                     statement = new ES_AstGotoLabelStatement (tkPair.tk, startTk, endTk);
                 }
@@ -2740,11 +2749,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             if (EnsureTokenPeek (EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)
                 retExpr = ParseExpression ();
 
-            var endTk = tokenizer.PeekNextToken ().tk;
-            if (EnsureToken (endTk, EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)
-                errorsList.Add (ES_FrontendErrors.GenExpectedXGotY ("';'", endTk));
-            else
-                tokenizer.NextToken ();
+            ParseSemicolon (out var endTk);
 
             return new ES_AstReturnStatement (retExpr, startTk, endTk);
         }
@@ -2821,14 +2826,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                 foundCloseParen = true;
             }
 
-            bool foundSemicolon = false;
-            var semicolonTk = tokenizer.PeekNextToken ().tk;
-            if (EnsureToken (semicolonTk, EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)
-                errorsList.Add (ES_FrontendErrors.GenExpectedXGotY ("';'", semicolonTk));
-            else {
-                tokenizer.NextToken ();
-                foundSemicolon = true;
-            }
+            bool foundSemicolon = ParseSemicolon (out var semicolonTk);
 
             EchelonScriptToken? endTk;
             if (foundSemicolon)
@@ -2872,11 +2870,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                     initStatement = null;
             }
 
-            tkPair = tokenizer.PeekNextToken ();
-            if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)
-                errorsList.Add (ES_FrontendErrors.GenExpectedXGotY ("';'", tkPair.tk));
-            else
-                tokenizer.NextToken ();
+            ParseSemicolon (out _);
 
             // Condition expression
             if (EnsureTokenPeek (EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)
@@ -2884,23 +2878,13 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             else
                 conditionExpr = null;
 
-            tkPair = tokenizer.PeekNextToken ();
-            if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)
-                errorsList.Add (ES_FrontendErrors.GenExpectedXGotY ("';'", tkPair.tk));
-            else
-                tokenizer.NextToken ();
+            ParseSemicolon (out _);
 
             // Iteration expressions
             if (EnsureTokenPeek (EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)
                 iterExpressions = ParseExpressionList ();
             else
                 iterExpressions = null;
-
-            tkPair = tokenizer.PeekNextToken ();
-            if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)
-                errorsList.Add (ES_FrontendErrors.GenExpectedXGotY ("';'", tkPair.tk));
-            else
-                tokenizer.NextToken ();
 
             // Closing parenthesis
             var endTk = tokenizer.PeekNextToken ().tk;
@@ -2927,13 +2911,9 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             if (expr is ES_AstEmptyErrorExpression)
                 tokenizer.NextToken ();
 
-            var tkPair = tokenizer.PeekNextToken ();
-            if (EnsureToken (tkPair.tk, EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct)
-                errorsList.Add (ES_FrontendErrors.GenExpectedXGotY ("';'", tkPair.tk));
-            else
-                tokenizer.NextToken ();
+            ParseSemicolon (out var endTk);
 
-            return new ES_AstExpressionStatement (expr, tkPair.tk);
+            return new ES_AstExpressionStatement (expr, endTk);
         }
 
         #endregion
