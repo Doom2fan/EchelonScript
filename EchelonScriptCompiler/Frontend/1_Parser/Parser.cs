@@ -2857,7 +2857,8 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             if (EnsureToken (tkPair.tk, EchelonScriptTokenType.ParenOpen, null) != EnsureTokenResult.Correct) {
                 errorsList.Add (ES_FrontendErrors.GenExpectedXGotY ("'('", tkPair.tk));
                 return new ES_AstEmptyErrorStatement (tkPair.tk);
-            }
+            } else
+                tokenizer.NextToken ();
 
             // Initialization statement
             tkPair = tokenizer.PeekNextToken ();
@@ -2913,7 +2914,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             return new ES_AstLoopStatement (
                 initStatement, conditionExpr, iterExpressions,
                 bodyStatement, false,
-                startTk, bodyStatement == null ? (EchelonScriptToken?) endTk : null
+                startTk, bodyStatement == null ? endTk : null
             );
         }
 
