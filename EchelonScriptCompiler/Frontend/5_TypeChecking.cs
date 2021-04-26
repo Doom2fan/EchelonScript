@@ -396,6 +396,8 @@ namespace EchelonScriptCompiler.Frontend {
                 case ES_AstLoopStatement loopStmt: {
                     var boolType = Environment.TypeBool;
 
+                    symbols.Push ();
+
                     if (loopStmt.InitializationStatement is not null)
                         CheckTypes_Statement (ref transUnit, symbols, src, retType, loopStmt.InitializationStatement);
 
@@ -411,7 +413,12 @@ namespace EchelonScriptCompiler.Frontend {
                         }
                     }
 
+                    Debug.Assert (loopStmt.LoopBody is not null);
+                    Debug.Assert (loopStmt.LoopBody.Endpoint is null);
+                    
                     CheckTypes_Statement (ref transUnit, symbols, src, retType, loopStmt.LoopBody);
+
+                    symbols.Pop ();
 
                     return new StatementData { AlwaysReturns = false };
                 }

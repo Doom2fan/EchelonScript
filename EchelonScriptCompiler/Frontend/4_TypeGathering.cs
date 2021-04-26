@@ -573,6 +573,8 @@ namespace EchelonScriptCompiler.Frontend {
                 #region Loops
 
                 case ES_AstLoopStatement loopStmt: {
+                    symbols.Push ();
+
                     if (loopStmt.InitializationStatement is not null)
                         GatherTypes_Statement (ref transUnit, symbols, src, loopStmt.InitializationStatement);
 
@@ -586,7 +588,12 @@ namespace EchelonScriptCompiler.Frontend {
                         }
                     }
 
+                    Debug.Assert (loopStmt.LoopBody is not null);
+                    Debug.Assert (loopStmt.LoopBody.Endpoint is null);
+
                     GatherTypes_Statement (ref transUnit, symbols, src, loopStmt.LoopBody);
+
+                    symbols.Pop ();
 
                     break;
                 }
