@@ -138,7 +138,7 @@ namespace EchelonScriptCompiler.Frontend {
                 curStatement = curStatement.Endpoint;
             }
 
-            if (!alwaysReturns && retType != Environment.TypeVoid)
+            if (!alwaysReturns && retType is not null && retType->TypeTag != ES_TypeTag.Void)
                 errorList.Add (new EchelonScriptErrorMessage (funcDef.Name, ES_FrontendErrors.MissingReturnStatement));
 
             symbols.Pop ();
@@ -380,7 +380,7 @@ namespace EchelonScriptCompiler.Frontend {
                         var exprData = CheckTypes_Expression (ref transUnit, symbols, src, retStmt.ReturnExpression, retType);
 
                         CheckTypes_EnsureCompat (retType, exprData.Type, src, exprData.Expr.NodeBounds);
-                    } else if (retType != Environment.TypeVoid) {
+                    } else if (retType->TypeTag != ES_TypeTag.Void) {
                         errorList.Add (ES_FrontendErrors.GenMissingReturnValue (
                             retType->FullyQualifiedNameString, src, retStmt.NodeBounds
                         ));
@@ -716,15 +716,15 @@ namespace EchelonScriptCompiler.Frontend {
                 }
             }
 
-            for (int argCount = 0; argCount < callArgCount; argCount++) {
-                var arg = funcCallExpr.Arguments [argCount];
+            for (int argIdx = 0; argIdx < callArgCount; argIdx++) {
+                var arg = funcCallExpr.Arguments [argIdx];
                 ES_FunctionArgData* argData = null;
                 ES_FunctionPrototypeArgData* argTypeData = null;
 
-                if (argCount < funcArgCount) {
-                    argData = func->Arguments.Elements + argCount;
-                    argTypeData = funcType->ArgumentsList.Elements + argCount;
-                } else if (argCount == funcArgCount) {
+                if (argIdx < funcArgCount) {
+                    argData = func->Arguments.Elements + argIdx;
+                    argTypeData = funcType->ArgumentsList.Elements + argIdx;
+                } else if (argIdx == funcArgCount) {
                     errorList.Add (ES_FrontendErrors.GenTooManyFuncArgs (
                         StringPool.Shared.GetOrAdd (funcName.Span, Encoding.ASCII), src,
                         arg.ValueExpression.NodeBounds
@@ -741,7 +741,7 @@ namespace EchelonScriptCompiler.Frontend {
                             ));
                         } else {
                             errorList.Add (ES_FrontendErrors.GenWrongArgType (
-                                argCount, arg.ArgType.ToString (), src, arg.ValueExpression.NodeBounds
+                                argIdx, arg.ArgType.ToString (), src, arg.ValueExpression.NodeBounds
                             ));
                         }
                     }
@@ -754,7 +754,7 @@ namespace EchelonScriptCompiler.Frontend {
                             ));
                         } else {
                             errorList.Add (ES_FrontendErrors.GenWrongArgType (
-                                argCount, arg.ArgType.ToString (), src, arg.ValueExpression.NodeBounds
+                                argIdx, arg.ArgType.ToString (), src, arg.ValueExpression.NodeBounds
                             ));
                         }
                     }
@@ -768,7 +768,10 @@ namespace EchelonScriptCompiler.Frontend {
                     CheckTypes_EnsureCompat (argValType, argExprData.Type, src, argExprData.Expr.NodeBounds);
             }
 
-            return new ExpressionData { Expr = funcCallExpr, Type = (ES_TypeInfo*) funcType, Constant = true, Addressable = false };
+            if (func->OptionalArgsCount > 0)
+                throw new NotImplementedException ();
+
+            return new ExpressionData { Expr = funcCallExpr, Type = funcType->ReturnType, Constant = false, Addressable = false };
         }
     }
 }

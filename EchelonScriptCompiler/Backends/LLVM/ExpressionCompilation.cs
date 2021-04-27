@@ -10,6 +10,7 @@
 using System;
 using System.Diagnostics;
 using System.Text;
+using ChronosLib.Unmanaged;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Data.Types;
 using EchelonScriptCompiler.Frontend;
@@ -782,7 +783,6 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             ref TranslationUnitData transUnit, SymbolStack<Symbol> symbols, ReadOnlySpan<char> src,
             ES_AstFunctionCallExpression funcCallExpr, ES_TypeInfo* expectedType
         ) {
-            throw new NotImplementedException ();
             Debug.Assert (env is not null);
 
             var funcExpr = GenerateCode_Expression (ref transUnit, symbols, src, funcCallExpr.FunctionExpression, env.TypeUnknownValue);
@@ -816,15 +816,22 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             if (callArgCount < reqArgCount)
                 throw new CompilationException (ES_BackendErrors.FrontendError);
 
-            for (int argCount = 0; argCount < callArgCount; argCount++) {
-                var arg = funcCallExpr.Arguments [argCount];
+            var mangledName = MangleFunctionName (func);
+            var funcDef = moduleRef.GetNamedFunction (mangledName);
+
+            Debug.Assert (funcDef != null);
+
+            using var argsArr = UnmanagedArray<LLVMValueRef>.GetArray (funcArgCount);
+
+            for (int argIdx = 0; argIdx < callArgCount; argIdx++) {
+                var arg = funcCallExpr.Arguments [argIdx];
                 ES_FunctionArgData* argData = null;
                 ES_FunctionPrototypeArgData* argTypeData = null;
 
-                if (argCount < funcArgCount) {
-                    argData = func->Arguments.Elements + argCount;
-                    argTypeData = funcType->ArgumentsList.Elements + argCount;
-                } else if (argCount == funcArgCount) {
+                if (argIdx < funcArgCount) {
+                    argData = func->Arguments.Elements + argIdx;
+                    argTypeData = funcType->ArgumentsList.Elements + argIdx;
+                } else if (argIdx == funcArgCount) {
                     errorList.Add (ES_FrontendErrors.GenTooManyFuncArgs (
                         StringPool.Shared.GetOrAdd (funcName.Span, Encoding.ASCII), src,
                         arg.ValueExpression.NodeBounds
@@ -846,9 +853,17 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
                 if (argValType is not null)
                     GenerateCode_EnsureCompat (argValType, argExprData.Type, src, argExprData.Expr.NodeBounds);
+
+                argsArr.Span [argIdx] = GetLLVMValue (argExprData.Value);
             }
 
-            return new ExpressionData { Expr = funcCallExpr, Type = (ES_TypeInfo*) funcType, Constant = true, Addressable = false };
+            // TODO: Handle default args.
+            if (reqArgCount != funcArgCount)
+                throw new NotImplementedException ();
+
+            var retVal = builderRef.BuildCall (funcDef, argsArr.Span, "funcCall");
+
+            return new ExpressionData { Expr = funcCallExpr, Type = funcType->ReturnType, Value = retVal, Constant = false, Addressable = false };
         }
 
         private ExpressionData GenerateCode_ConditionalExpression (
