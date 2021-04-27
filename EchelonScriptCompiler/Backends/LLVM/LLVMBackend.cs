@@ -303,6 +303,9 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
             // Simplify the control flow graph. (Deleting unreachable blocks, etc)
             funcPassManagerRef.AddCFGSimplificationPass ();
+
+            // Inline functions.
+            funcPassManagerRef.AddFunctionInliningPass ();
         }
 
         #endregion
