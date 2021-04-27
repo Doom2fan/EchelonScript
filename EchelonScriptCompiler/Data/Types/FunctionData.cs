@@ -11,6 +11,8 @@ using System;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
+using System.Text;
+using Microsoft.Toolkit.HighPerformance.Buffers;
 
 namespace EchelonScriptCompiler.Data.Types {
     [Flags]
@@ -50,6 +52,21 @@ namespace EchelonScriptCompiler.Data.Types {
         public readonly int OptionalArgsCount;
 
         public readonly void* FunctionPointer;
+
+        #endregion
+
+        #region ================== Instance properties
+
+        public readonly string NameString {
+            get => StringPool.Shared.GetOrAdd (Name.Span, Encoding.ASCII);
+        }
+        public readonly string FullyQualifiedNameString {
+            get => StringPool.Shared.GetOrAdd (FullyQualifiedName.Span, Encoding.ASCII);
+        }
+
+        public readonly string SourceUnitString {
+            get => StringPool.Shared.GetOrAdd (SourceUnit.Span, Encoding.ASCII);
+        }
 
         #endregion
 
