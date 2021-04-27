@@ -61,27 +61,23 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             return mangleChars.ToPooledArray ();
         }
 
-        private PooledArray<char> MangleFunctionName ([DisallowNull] ES_TypeInfo* parentType, [DisallowNull] ES_FunctionData* func) {
+        private PooledArray<char> MangleFunctionName ([DisallowNull] ES_FunctionData* func) {
             // Sample name: "System.Math__FMath.Sin"
+            const string fqnSeparator = "::";
 
             using var mangleChars = new StructPooledList<char> (CL_ClearMode.Auto);
 
-            var parentFQN = parentType->FullyQualifiedNameString.AsSpan ();
+            var fqn = func->FullyQualifiedNameString.AsSpan ();
+            var fqnSepIdx = fqn.IndexOf (fqnSeparator);
 
-            // Add the namespace.
-            mangleChars.AddRange (parentFQN.Slice (0, parentFQN.IndexOf ("::")));
+            // The namespace.
+            mangleChars.AddRange (fqn [0..fqnSepIdx]);
 
-            // Namespace separator.
+            // The mangled namespace separator.
             mangleChars.AddRange ("__");
 
-            // Add the parent type's name.
-            mangleChars.AddRange (parentType->TypeNameString);
-
-            // Member separator.
-            mangleChars.Add ('.');
-
-            // Add the method's name.
-            Encoding.ASCII.GetChars (func->Name.Span, mangleChars.AddSpan (func->Name.Length));
+            // The function name.
+            mangleChars.AddRange (fqn [(fqnSepIdx + fqnSeparator.Length)..^0]);
 
             /*// Add the type's mangled name.
             mangleChars.AddRange ("_");
@@ -91,72 +87,70 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             return mangleChars.ToPooledArray ();
         }
 
-        private PooledArray<char> MangleFunctionName ([DisallowNull] ES_NamespaceData namespaceData, [DisallowNull] ES_FunctionData* func) {
-            // Sample name: "System.Math__SinF"
-
-            using var mangleChars = new StructPooledList<char> (CL_ClearMode.Auto);
-
-            // Add the namespace.
-            mangleChars.AddRange (namespaceData.NamespaceNameString);
-
-            // Namespace separator.
-            mangleChars.AddRange ("__");
-
-            // Add the function's name.
-            Encoding.ASCII.GetChars (func->Name.Span, mangleChars.AddSpan (func->Name.Length));
-
-            /*// Add the type's mangled name.
-            mangleChars.AddRange ("_");
-            using var typeMangle = MangleFunctionType (func->FunctionType);
-            mangleChars.AddRange (typeMangle);*/
-
-            return mangleChars.ToPooledArray ();
-        }
-
-        private bool GenerateCode_Function (
-            ref TranslationUnitData transUnit, ES_NamespaceData namespaceData,
-            SymbolStack<Symbol> symbols, ReadOnlySpan<char> src,
-            ES_TypeInfo* parentType, ES_AstFunctionDefinition funcDef
+        private void GetOrGenerateFunction (
+            ES_NamespaceData? namespaceData, ES_TypeInfo* parentType, ArrayPointer<byte> funcId,
+            out ES_FunctionData* funcData, out LLVMValueRef funcDef
         ) {
-            Debug.Assert (env is not null);
-
-            symbols.Push ();
-
-            var funcInfo = new FunctionInfo ();
-
             if (namespaceData is not null) {
-                if (!namespaceData.Functions.TryGetValue (env.IdPool.GetIdentifier (funcDef.Name.Text.Span), out var ptr))
-                    throw new CompilationException (Error_LLVMError);
+                if (!namespaceData.Functions.TryGetValue (funcId, out var ptr))
+                    throw new CompilationException (ES_BackendErrors.FrontendError);
 
-                funcInfo.Data = ptr;
+                funcData = ptr;
             } else if (parentType is not null) {
                 throw new NotImplementedException ();
             } else
-                throw new CompilationException (Error_LLVMError);
+                throw new CompilationException (ES_BackendErrors.FrontendError);
 
-            funcInfo.Type = funcInfo.Data->FunctionType;
+            Debug.Assert (funcData is not null);
+            var funcType = funcData->FunctionType;
 
-            using var argsArr = PooledArray<LLVMTypeRef>.GetArray (funcDef.ArgumentsList.Length);
+            if (funcData->OptionalArgsCount > 0)
+                throw new NotImplementedException ();
+
+            using var argsArr = PooledArray<LLVMTypeRef>.GetArray (funcType->ArgumentsList.Length);
             int argNum = 0;
-            foreach (ref var arg in funcInfo.Type->ArgumentsList.Span) {
+            foreach (ref var arg in funcType->ArgumentsList.Span) {
                 if (arg.ArgType != ES_ArgumentType.Normal)
                     throw new NotImplementedException ();
 
                 argsArr.Span [argNum++] = GetLLVMType (arg.ValueType);
             }
 
-            var retType = funcInfo.Data->FunctionType->ReturnType;
+            var retType = funcData->FunctionType->ReturnType;
             var funcTypeRef = LLVMTypeRef.CreateFunction (GetLLVMType (retType), argsArr, false);
+            argsArr.Dispose ();
 
             if (namespaceData is not null) {
-                using var funcName = MangleFunctionName (namespaceData, funcInfo.Data);
-                funcInfo.Definition = moduleRef.AddFunction (funcName, funcTypeRef);
+                using var funcName = MangleFunctionName (funcData);
+
+                funcDef = moduleRef.GetNamedFunction (funcName);
+                if (funcDef == null)
+                    funcDef = moduleRef.AddFunction (funcName, funcTypeRef);
             } else if (parentType is not null) {
                 throw new NotImplementedException ();
             } else
-                throw new CompilationException (Error_LLVMError);
+                throw new CompilationException (ES_BackendErrors.FrontendError);
+        }
 
-            argsArr.Dispose ();
+        private bool GenerateCode_Function (
+            ref TranslationUnitData transUnit, ES_NamespaceData? namespaceData,
+            SymbolStack<Symbol> symbols, ReadOnlySpan<char> src,
+            ES_TypeInfo* parentType, ES_AstFunctionDefinition funcDef
+        ) {
+            Debug.Assert (env is not null);
+            Debug.Assert (namespaceData is not null || parentType is not null);
+
+            symbols.Push ();
+
+            var funcInfo = new FunctionInfo ();
+
+            GetOrGenerateFunction (
+                namespaceData, parentType, env.IdPool.GetIdentifier (funcDef.Name.Text.Span),
+                out funcInfo.Data, out funcInfo.Definition
+            );
+
+            funcInfo.Type = funcInfo.Data->FunctionType;
+            var retType = funcInfo.Type->ReturnType;
 
             funcInfo.Definition.Linkage = LLVMLinkage.LLVMExternalLinkage;
 

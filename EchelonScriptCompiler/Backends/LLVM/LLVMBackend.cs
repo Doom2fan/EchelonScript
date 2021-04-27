@@ -354,7 +354,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                     var funcId = funcKVP.Key;
                     var func = funcKVP.Value.Address;
 
-                    using var funcNameMangled = MangleFunctionName (namespaceData, func);
+                    using var funcNameMangled = MangleFunctionName (func);
                     var funcDef = moduleRef.GetNamedFunction (funcNameMangled);
 
                     var asd = engine.FindFunction (funcNameMangled);
@@ -382,8 +382,24 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
         }
 
         private bool CompileCode (Span<TranslationUnitData> transUnits) {
+            CheckEnvironment ();
+            Debug.Assert (env is not null);
+            Debug.Assert (envBuilder is not null);
+
             using var symbols = new SymbolStack<Symbol> (new Symbol ());
 
+            // Pre-emit the function prototypes/headers so we don't get errors when trying to get
+            // them for calls later.
+            foreach (var namespaceKVP in env.Namespaces) {
+                var namespaceData = namespaceKVP.Value;
+
+                foreach (var funcKVP in namespaceData.Functions)
+                    GetOrGenerateFunction (namespaceData, null, funcKVP.Key, out _, out _);
+            }
+
+            // TODO: Handle functions in types!
+
+            // Generate the code.
             foreach (ref var transUnit in transUnits) {
                 BeginTranslationUnit (ref transUnit);
 
