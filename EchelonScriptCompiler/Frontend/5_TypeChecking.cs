@@ -596,8 +596,18 @@ namespace EchelonScriptCompiler.Frontend {
                 #endregion
 
                 case ES_AstSimpleBinaryExpression simpleBinaryExpr: {
+                    var expectedRightType = expectedType;
+
                     var leftType = CheckTypes_Expression (ref transUnit, symbols, src, simpleBinaryExpr.Left, expectedType);
-                    var rightType = CheckTypes_Expression (ref transUnit, symbols, src, simpleBinaryExpr.Right, expectedType);
+
+                    if (simpleBinaryExpr.ExpressionType.IsBitShift () && leftType.Type->TypeTag == ES_TypeTag.Int) {
+                        var intName = ES_PrimitiveTypes.GetIntName (((ES_IntTypeData*) expectedType)->IntSize, true);
+
+                        var intFQN = Environment.GetFullyQualifiedName (ArrayPointer<byte>.Null, idPool.GetIdentifier (intName));
+                        expectedRightType= Environment.GetFullyQualifiedType (intFQN);
+                    }
+
+                    var rightType = CheckTypes_Expression (ref transUnit, symbols, src, simpleBinaryExpr.Right, expectedRightType);
 
                     var constant = leftType.Constant & rightType.Constant;
 

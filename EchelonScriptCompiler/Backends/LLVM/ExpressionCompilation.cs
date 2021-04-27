@@ -10,6 +10,7 @@
 using System;
 using System.Diagnostics;
 using System.Text;
+using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Data.Types;
 using EchelonScriptCompiler.Frontend;
 using LLVMSharp.Interop;
@@ -184,8 +185,18 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 #endregion
 
                 case ES_AstSimpleBinaryExpression simpleBinaryExpr: {
+                    var expectedRHSType = expectedType;
+
                     var lhs = GenerateCode_Expression (ref transUnit, symbols, src, simpleBinaryExpr.Left, expectedType);
-                    var rhs = GenerateCode_Expression (ref transUnit, symbols, src, simpleBinaryExpr.Right, expectedType);
+
+                    if (simpleBinaryExpr.ExpressionType.IsBitShift () && lhs.Type->TypeTag == ES_TypeTag.Int) {
+                        var intName = ES_PrimitiveTypes.GetIntName (((ES_IntTypeData*) expectedType)->IntSize, true);
+
+                        var intFQN = env.GetFullyQualifiedName (ArrayPointer<byte>.Null, idPool.GetIdentifier (intName));
+                        expectedRHSType = env.GetFullyQualifiedType (intFQN);
+                    }
+
+                    var rhs = GenerateCode_Expression (ref transUnit, symbols, src, simpleBinaryExpr.Right, expectedRHSType);
 
                     if (!envBuilder!.BinaryOpCompat (lhs.Type, rhs.Type, simpleBinaryExpr.ExpressionType, out _))
                         throw new CompilationException (ES_BackendErrors.FrontendError);
