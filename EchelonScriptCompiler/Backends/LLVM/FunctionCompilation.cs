@@ -87,6 +87,24 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             return mangleChars.ToPooledArray ();
         }
 
+        private void InitializeVariable (ES_TypeInfo* varType, LLVMValueRef variable) {
+            switch (varType->TypeTag) {
+                case ES_TypeTag.Bool:
+                case ES_TypeTag.Int: {
+                    builderRef.BuildStore (LLVMValueRef.CreateConstInt (variable.TypeOf, 0), variable);
+                    break;
+                }
+
+                case ES_TypeTag.Float: {
+                    builderRef.BuildStore (LLVMValueRef.CreateConstReal (variable.TypeOf, 0), variable);
+                    break;
+                }
+
+                default:
+                    throw new NotImplementedException ();
+            }
+        }
+
         private void GetOrGenerateFunction (
             ES_NamespaceData? namespaceData, ES_TypeInfo* parentType, ArrayPointer<byte> funcId,
             out ES_FunctionData* funcData, out LLVMValueRef funcDef
@@ -158,10 +176,14 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             funcInfo.RetBlock = funcInfo.Definition.AppendBasicBlock ("_retValBlock");
 
             builderRef.PositionAtEnd (funcInfo.Definition.EntryBasicBlock);
-            funcInfo.RetValue = builderRef.BuildAlloca (GetLLVMType (retType), "_retVal");
+            if (retType->TypeTag != ES_TypeTag.Void)
+                funcInfo.RetValue = builderRef.BuildAlloca (GetLLVMType (retType), "_retVal");
 
             builderRef.PositionAtEnd (funcInfo.RetBlock);
-            builderRef.BuildRet (GetLLVMValue (funcInfo.RetValue));
+            if (retType->TypeTag != ES_TypeTag.Void)
+                builderRef.BuildRet (GetLLVMValue (funcInfo.RetValue));
+            else
+                builderRef.BuildRetVoid ();
 
             builderRef.PositionAtEnd (funcInfo.Definition.EntryBasicBlock);
             for (uint i = 0; i < funcInfo.Definition.ParamsCount; i++) {
@@ -202,7 +224,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             var stmtData = GenerateCode_Statement (ref transUnit, symbols, src, funcInfo, retType, funcDef.Statement);
 
             if (!stmtData.AlwaysReturns) {
-                if (retType == env.TypeVoid)
+                if (retType->TypeTag == ES_TypeTag.Void)
                     builderRef.BuildBr (funcInfo.RetBlock);
                 else
                     throw new CompilationException (ES_BackendErrors.FrontendError);
@@ -303,6 +325,8 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
                         if (hasInit)
                             builderRef.BuildStore (GetLLVMValue (initExprData.Value), varData.LLVMValue);
+                        else
+                            InitializeVariable (varData.Type, varData.LLVMValue);
                     }
 
                     return new StatementData { AlwaysReturns = false };
@@ -392,7 +416,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                     throw new NotImplementedException ();
 
                 case ES_AstReturnStatement retStmt: {
-                    if (retType == env!.TypeVoid) {
+                    if (retType->TypeTag == ES_TypeTag.Void) {
                         if (retStmt.ReturnExpression is not null)
                             throw new CompilationException (ES_BackendErrors.FrontendError);
 
@@ -402,9 +426,10 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
                         //TODO: CheckTypes_EnsureCompat (retType, exprData.Type, src, exprData.Expr.NodeBounds);
 
-                        builderRef.BuildStore (GetLLVMValue (exprData.Value), funcInfo.RetValue);
+                        if (retType->TypeTag != ES_TypeTag.Void)
+                            builderRef.BuildStore (GetLLVMValue (exprData.Value), funcInfo.RetValue);
                         builderRef.BuildBr (funcInfo.RetBlock);
-                    } else if (retType != env.TypeVoid)
+                    } else if (retType->TypeTag != ES_TypeTag.Void)
                         throw new CompilationException (ES_BackendErrors.FrontendError);
 
                     return new StatementData { AlwaysReturns = true };
