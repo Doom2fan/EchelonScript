@@ -128,8 +128,8 @@ namespace EchelonScriptCompiler.Frontend {
             if (argData.Count > 0) {
                 argDataMem = EnvironmentBuilder.MemoryManager.GetArray<ES_FunctionArgData> (argData.Count);
                 argData.Span.CopyTo (argDataMem.Span);
-                argData.Dispose ();
             }
+            argData.Dispose ();
 
             // Get the function type.
             var funcType = EnvironmentBuilder.GetOrAddFunctionType (GetTypeRef (funcDef.ReturnType), argTypes.Span, true);
@@ -154,6 +154,8 @@ namespace EchelonScriptCompiler.Frontend {
                     funcDef.AccessModifier, sourceUnit,
                     funcType, argDataMem, optArgNum
                 );
+
+                EnvironmentBuilder!.PointerAstMap.Add ((IntPtr) funcData, funcDef);
 
                 namespaceBuilder.Functions.Add (funcName, funcData);
             }

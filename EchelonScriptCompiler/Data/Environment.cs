@@ -270,6 +270,8 @@ namespace EchelonScriptCompiler.Data {
 
             public PooledDictionary<ArrayPointer<byte>, ES_NamespaceData.Builder> NamespaceBuilders { get; protected set; }
 
+            public Dictionary<IntPtr, ES_AstNode> PointerAstMap { get; protected set; }
+
             public IMemoryManager MemoryManager => environment.memManager;
 
             public PooledList<Pointer<ES_TypeInfo>> TypesList => environment.typesList;
@@ -312,6 +314,7 @@ namespace EchelonScriptCompiler.Data {
                 environment = env;
 
                 NamespaceBuilders = new PooledDictionary<ArrayPointer<byte>, ES_NamespaceData.Builder> ();
+                PointerAstMap = new Dictionary<IntPtr, ES_AstNode> ();
             }
 
             #endregion
@@ -774,6 +777,10 @@ namespace EchelonScriptCompiler.Data {
             protected virtual void DoDispose () {
                 if (!disposedValue) {
                     NamespaceBuilders?.Dispose ();
+                    NamespaceBuilders = null!;
+
+                    PointerAstMap.Clear ();
+                    PointerAstMap = null!;
 
                     disposedValue = true;
                 }

@@ -50,10 +50,12 @@ namespace EchelonScriptCompiler.Frontend {
                                     break;
                                 }
 
-                                namespaceBuilder.GetOrCreateEnum (
+                                var builder = namespaceBuilder.GetOrCreateEnum (
                                     enumDef.AccessModifier,
                                     typeName, fullyQualifiedName, transUnit.Name
                                 );
+
+                                EnvironmentBuilder!.PointerAstMap.Add ((IntPtr) builder.EnumData, enumDef);
 
                                 break;
                             }
@@ -103,6 +105,8 @@ namespace EchelonScriptCompiler.Frontend {
                 typeData = &structBuilder.StructData->TypeInfo;
             } else
                 Debug.Fail ("Not implemented/supported.");
+
+            EnvironmentBuilder!.PointerAstMap.Add ((IntPtr) typeData, typeDef);
         }
 
         protected void GenerateTypesList () {
