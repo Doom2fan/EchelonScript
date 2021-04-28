@@ -816,6 +816,8 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
             if (callArgCount < reqArgCount)
                 throw new CompilationException (ES_BackendErrors.FrontendError);
+            if (callArgCount > funcArgCount)
+                throw new CompilationException (ES_BackendErrors.FrontendError);
 
             var mangledName = MangleFunctionName (func);
             var funcDef = moduleRef.GetNamedFunction (mangledName);
@@ -826,34 +828,19 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
             for (int argIdx = 0; argIdx < callArgCount; argIdx++) {
                 var arg = funcCallExpr.Arguments [argIdx];
-                ES_FunctionArgData* argData = null;
-                ES_FunctionPrototypeArgData* argTypeData = null;
+                var argData = func->Arguments.Elements + argIdx;
+                var argTypeData = funcType->ArgumentsList.Elements + argIdx;
 
-                if (argIdx < funcArgCount) {
-                    argData = func->Arguments.Elements + argIdx;
-                    argTypeData = funcType->ArgumentsList.Elements + argIdx;
-                } else if (argIdx == funcArgCount) {
-                    errorList.Add (ES_FrontendErrors.GenTooManyFuncArgs (
-                        StringPool.Shared.GetOrAdd (funcName.Span, Encoding.ASCII), src,
-                        arg.ValueExpression.NodeBounds
-                    ));
-                }
+                if (argTypeData->ArgType == ES_ArgumentType.Normal && arg.ArgType != ES_ArgumentType.Normal)
+                    throw new CompilationException (ES_BackendErrors.FrontendError);
 
-                ES_TypeInfo* argValType = null;
-                if (argTypeData is not null) {
-                    if (argTypeData->ArgType == ES_ArgumentType.Normal && arg.ArgType != ES_ArgumentType.Normal)
-                        throw new CompilationException (ES_BackendErrors.FrontendError);
+                if (argTypeData->ArgType != ES_ArgumentType.Normal && arg.ArgType != argTypeData->ArgType)
+                    throw new CompilationException (ES_BackendErrors.FrontendError);
 
-                    if (argTypeData->ArgType != ES_ArgumentType.Normal && arg.ArgType != argTypeData->ArgType)
-                        throw new CompilationException (ES_BackendErrors.FrontendError);
-
-                    argValType = argTypeData->ValueType;
-                }
-
+                var argValType = argTypeData->ValueType;
                 var argExprData = GenerateCode_Expression (ref transUnit, symbols, src, arg.ValueExpression, argValType);
 
-                if (argValType is not null)
-                    GenerateCode_EnsureCompat (argValType, argExprData.Type, src, argExprData.Expr.NodeBounds);
+                GenerateCode_EnsureCompat (argValType, argExprData.Type, src, argExprData.Expr.NodeBounds);
 
                 argsArr.Span [argIdx] = GetLLVMValue (argExprData.Value);
             }
