@@ -113,7 +113,13 @@ namespace EchelonScriptCompiler.Frontend {
                     throw new NotImplementedException ();
 
                 var argName = idPool.GetIdentifier (arg.Name.Text.Span);
-                symbols.AddSymbol (argName, NewSymbolVariable (GetTypeRef (arg.ValueType)));
+                var argValType = GetTypeRef (arg.ValueType);
+                symbols.AddSymbol (argName, NewSymbolVariable (argValType));
+
+                if (arg.DefaultExpression is not null) {
+                    var argDefExpr = CheckTypes_Expression (ref transUnit, symbols, unitSrc, arg.DefaultExpression, argValType);
+                    CheckTypes_EnsureCompat (argValType, argDefExpr.Type, unitSrc, arg.NodeBounds);
+                }
             }
 
             if (funcDef.ExpressionBody)
