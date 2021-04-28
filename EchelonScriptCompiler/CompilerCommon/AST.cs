@@ -13,7 +13,7 @@ using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Data.Types;
 using EchelonScriptCompiler.Utilities;
 
-namespace EchelonScriptCompiler.Frontend {
+namespace EchelonScriptCompiler.CompilerCommon {
     public struct ES_AstNodeBounds {
         public int StartPos;
         public int EndPos;

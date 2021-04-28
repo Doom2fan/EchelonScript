@@ -11,6 +11,7 @@ using System;
 using System.Collections.Generic;
 using ChronosLib.Pooled;
 using EchelonScriptCompiler.Backends;
+using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Frontend;
 using EchelonScriptCompiler.Frontend.Parser;

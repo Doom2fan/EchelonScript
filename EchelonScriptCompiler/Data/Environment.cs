@@ -16,6 +16,7 @@ using ChronosLib.Pooled;
 using ChronosLib.Unmanaged;
 using Collections.Pooled;
 using EchelonScriptCompiler.Backends;
+using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data.Types;
 using EchelonScriptCompiler.Frontend;
 using EchelonScriptCompiler.Utilities;

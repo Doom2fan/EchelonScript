@@ -8,7 +8,6 @@
  */
 
 using System;
-using ChronosLib.Pooled;
 using EchelonScriptCompiler.Data.Types;
 
 namespace EchelonScriptCompiler.Frontend {

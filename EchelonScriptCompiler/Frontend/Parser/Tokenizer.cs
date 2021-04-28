@@ -11,8 +11,8 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using ChronosLib.Pooled;
+using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data;
-using EchelonScriptCompiler.Utilities;
 
 namespace EchelonScriptCompiler.Frontend.Parser {
     public class EchelonScriptTokenizer : IDisposable {
