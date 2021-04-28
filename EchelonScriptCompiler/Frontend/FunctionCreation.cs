@@ -102,6 +102,7 @@ namespace EchelonScriptCompiler.Frontend {
             int optArgNum = 0;
             int argNum = 0;
             var argNamesList = CL_PooledListPool<ArrayPointer<byte>>.Shared.Rent ();
+            bool reqAfterOptReported = false;
             foreach (var arg in funcDef.ArgumentsList) {
                 var argName = idPool.GetIdentifier (arg.Name.Text.Span);
                 arg.ValueType = GenerateASTTypeRef (ref transUnit, symbols, unitSrc, arg.ValueType!);
@@ -117,8 +118,18 @@ namespace EchelonScriptCompiler.Frontend {
                 argData.Add (new ES_FunctionArgData (argName, null));
                 argTypes.Add (new ES_FunctionPrototypeArgData (arg.ArgType, GetTypeRef (arg.ValueType)));
 
-                if (arg.DefaultExpression is not null)
+                if (arg.DefaultExpression is not null) {
+                    if (arg.ArgType == ES_ArgumentType.Out || arg.ArgType== ES_ArgumentType.Ref) {
+                        errorList.Add (ES_FrontendErrors.GenArgTypeCantUseDefExpr (
+                            arg.Name.Text.GetPooledString (), arg.ArgType.ToString (), arg.Name
+                        ));
+                    }
+
                     optArgNum++;
+                } else if (optArgNum > 0 && !reqAfterOptReported) {
+                    errorList.Add (new EchelonScriptErrorMessage (arg.Name, ES_FrontendErrors.ReqArgAfterOptional));
+                    reqAfterOptReported = true;
+                }
                 argNum++;
             }
             CL_PooledListPool<ArrayPointer<byte>>.Shared.Return (argNamesList);

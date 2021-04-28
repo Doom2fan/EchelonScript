@@ -155,10 +155,12 @@ namespace EchelonScriptCompiler.Frontend {
         public const string NotEnoughFuncArgs = "Missing required arguments in call to function \"{funcName}\".";
         public const string MissingFuncArg = "There is no argument given that corresponds to required argument \"{argName}\" in call to function \"{funcName}\".";
 
-        public const string WrongArgType = "Argument {arg} may not be passed with the \"{argType}\" keyword.";
-        public const string ArgNeedsType = "Argument {arg} must be passed with the \"{argType}\" keyword.";
+        public const string WrongArgType = "Argument \"{arg}\" may not be passed with the \"{argType}\" keyword.";
+        public const string ArgNeedsType = "Argument \"{arg}\" must be passed with the \"{argType}\" keyword.";
 
         public const string ArgAlreadyDefined = "Tried to redefine argument \"{argName}\".";
+        public const string ReqArgAfterOptional = "Required arguments must come before all optional arguments.";
+        public const string ArgTypeCantUseDefExpr = "Argument \"{arg}\" with keyword \"{argType}\" cannot have a default value.";
 
         public const string InvalidInheritance = "Cannot inherit from type \"{0}\".";
 
@@ -264,6 +266,10 @@ namespace EchelonScriptCompiler.Frontend {
 
         public static EchelonScriptErrorMessage GenArgAlreadyDefined (string argName, EchelonScriptToken errorToken) {
             var errorMessage = ArgAlreadyDefined.Replace ("{argName}", argName);
+            return new EchelonScriptErrorMessage (errorToken, errorMessage);
+        }
+        public static EchelonScriptErrorMessage GenArgTypeCantUseDefExpr (string argName, string argType, EchelonScriptToken errorToken) {
+            var errorMessage = ArgAlreadyDefined.Replace ("{arg}", argName).Replace ("{argType}", argType);
             return new EchelonScriptErrorMessage (errorToken, errorMessage);
         }
 
