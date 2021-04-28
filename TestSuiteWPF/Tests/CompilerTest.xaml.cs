@@ -184,7 +184,7 @@ namespace TestSuiteWPF.Tests {
                 if (namespaceData.Functions.TryGetValue (idMain, out var func)) {
                     var funcType = func.Address->FunctionType;
 
-                    if (funcType->ReturnType == env.TypeVoid && funcType->ArgumentsList.Length == 0) {
+                    if (funcType->ReturnType->TypeTag == ES_TypeTag.Void && funcType->ArgumentsList.Length == 0) {
                         // TODO: Add stuff here
                     }
                 }
