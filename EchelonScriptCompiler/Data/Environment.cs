@@ -337,102 +337,38 @@ namespace EchelonScriptCompiler.Data {
                 return builder;
             }
 
-            public ES_TypeInfo* DetermineIntLiteralType (ES_AstIntegerLiteralExpression intLitExpr, ES_TypeInfo* expectedType) {
-                // TODO: Improve this. Doesn't work as well as it should for negated ints.
-                ES_IntTypeData* expectedIntType = null;
-                bool unsigned = intLitExpr.Unsigned;
-                ES_IntSize size;
-
-                if (expectedType != null && expectedType->TypeTag == ES_TypeTag.Int)
-                    expectedIntType = (ES_IntTypeData*) expectedType;
-
-                ES_IntSize minSize;
-
-                if (expectedIntType is not null && expectedIntType->Unsigned)
-                    unsigned = true;
-
-                ulong value = intLitExpr.Value;
-                if (unsigned || intLitExpr.HexBin) {
-                    if (value <= byte.MaxValue)
-                        minSize = ES_IntSize.Int8;
-                    else if (value <= ushort.MaxValue)
-                        minSize = ES_IntSize.Int16;
-                    else if (value <= uint.MaxValue)
-                        minSize = ES_IntSize.Int32;
-                    else
-                        minSize = ES_IntSize.Int64;
-                } else {
-                    if (value <= (ulong) sbyte.MaxValue)
-                        minSize = ES_IntSize.Int8;
-                    else if (value <= (ulong) short.MaxValue)
-                        minSize = ES_IntSize.Int16;
-                    else if (value <= int.MaxValue)
-                        minSize = ES_IntSize.Int32;
-                    else if (value <= long.MaxValue)
-                        minSize = ES_IntSize.Int64;
-                    else {
-                        minSize = ES_IntSize.Int64;
-                        unsigned = true;
-                    }
-                }
-
-                if (intLitExpr.Long)
-                    minSize = ES_IntSize.Int64;
-
-                size = minSize;
-                if (expectedIntType is not null) {
-                    bool isCompat = false;
-
-                    if (intLitExpr.HexBin && !unsigned && minSize <= expectedIntType->IntSize)
-                        isCompat = true;
-                    else if (unsigned == expectedIntType->Unsigned && minSize <= expectedIntType->IntSize)
-                        isCompat = true;
-
-                    if (isCompat) {
-                        size = expectedIntType->IntSize;
-                        unsigned = expectedIntType->Unsigned;
-                    }
-                }
-
-                var typeName = environment.IdPool.GetIdentifier (ES_PrimitiveTypes.GetIntName (size, unsigned));
-                var typeFqn = environment.GetFullyQualifiedName (ArrayPointer<byte>.Null, typeName);
-                var intType = environment.GetFullyQualifiedType (typeFqn);
-                Debug.Assert (intType is not null);
-
-                return intType;
-            }
-
             #region BinaryOpCompat
 
-            public bool BinaryOpCompat (ES_TypeInfo* lhsType, ES_TypeInfo* rhsType, SimpleBinaryExprType exprType, out ES_TypeInfo* finalType) {
+            public bool BinaryOpCompat (ES_TypeInfo* lhsType, ES_TypeInfo* rhsType, SimpleBinaryExprType exprType, out ES_TypeInfo* finalType, out bool isConst) {
                 finalType = environment.TypeUnknownValue;
 
-                if (lhsType->TypeTag == ES_TypeTag.UNKNOWN || rhsType->TypeTag == ES_TypeTag.UNKNOWN)
+                if (lhsType->TypeTag == ES_TypeTag.UNKNOWN || rhsType->TypeTag == ES_TypeTag.UNKNOWN) {
+                    isConst = false;
                     return true;
+                }
 
                 if (lhsType->TypeTag == ES_TypeTag.Int && rhsType->TypeTag == ES_TypeTag.Int)
-                    return BinaryOpCompat_IntInt (lhsType, rhsType, exprType, out finalType);
+                    return BinaryOpCompat_IntInt (lhsType, rhsType, exprType, out finalType, out isConst);
 
                 if (lhsType->TypeTag == ES_TypeTag.Bool && rhsType->TypeTag == ES_TypeTag.Bool)
-                    return BinaryOpCompat_BoolBool (lhsType, rhsType, exprType, out finalType);
+                    return BinaryOpCompat_BoolBool (lhsType, rhsType, exprType, out finalType, out isConst);
 
                 if (lhsType->TypeTag == ES_TypeTag.Float && rhsType->TypeTag == ES_TypeTag.Float)
-                    return BinaryOpCompat_FloatFloat (lhsType, rhsType, exprType, out finalType);
+                    return BinaryOpCompat_FloatFloat (lhsType, rhsType, exprType, out finalType, out isConst);
 
                 if (lhsType->TypeTag == ES_TypeTag.Float && rhsType->TypeTag == ES_TypeTag.Int)
-                    return BinaryOpCompat_FloatInt (lhsType, rhsType, exprType, out finalType);
+                    return BinaryOpCompat_FloatInt (lhsType, rhsType, exprType, out finalType, out isConst);
 
+                isConst = false;
                 return false;
             }
 
-            private bool BinaryOpCompat_IntInt (ES_TypeInfo* lhsType, ES_TypeInfo* rhsType, SimpleBinaryExprType exprType, out ES_TypeInfo* finalType) {
+            private bool BinaryOpCompat_IntInt (ES_TypeInfo* lhsType, ES_TypeInfo* rhsType, SimpleBinaryExprType exprType, out ES_TypeInfo* finalType, out bool isConst) {
                 Debug.Assert (lhsType->TypeTag == ES_TypeTag.Int);
                 Debug.Assert (rhsType->TypeTag == ES_TypeTag.Int);
 
                 var lhsIntType = (ES_IntTypeData*) lhsType;
                 var rhsIntType = (ES_IntTypeData*) rhsType;
-
-                bool compOp = false;
 
                 finalType = environment.TypeUnknownValue;
 
@@ -446,6 +382,13 @@ namespace EchelonScriptCompiler.Data {
                     case SimpleBinaryExprType.BitAnd:
                     case SimpleBinaryExprType.BitXor:
                     case SimpleBinaryExprType.BitOr:
+                        isConst = true;
+                        break;
+
+                    case SimpleBinaryExprType.ShiftLeft:
+                    case SimpleBinaryExprType.ShiftRight:
+                    case SimpleBinaryExprType.ShiftRightUnsigned:
+                        isConst = true;
                         break;
 
                     case SimpleBinaryExprType.LesserThan:
@@ -454,7 +397,7 @@ namespace EchelonScriptCompiler.Data {
                     case SimpleBinaryExprType.GreaterThanEqual:
                     case SimpleBinaryExprType.Equals:
                     case SimpleBinaryExprType.NotEquals:
-                        compOp = true;
+                        isConst = true;
                         break;
 
                     case SimpleBinaryExprType.Assign:
@@ -467,17 +410,15 @@ namespace EchelonScriptCompiler.Data {
                     case SimpleBinaryExprType.AssignBitAnd:
                     case SimpleBinaryExprType.AssignBitOr:
                     case SimpleBinaryExprType.AssignXor:
-                        break;
 
-                    case SimpleBinaryExprType.ShiftLeft:
-                    case SimpleBinaryExprType.ShiftRight:
-                    case SimpleBinaryExprType.ShiftRightUnsigned:
                     case SimpleBinaryExprType.AssignShiftLeft:
                     case SimpleBinaryExprType.AssignShiftRight:
                     case SimpleBinaryExprType.AssignShiftRightUnsigned:
+                        isConst = false;
                         break;
 
                     default:
+                        isConst = false;
                         return false;
                 }
 
@@ -500,7 +441,7 @@ namespace EchelonScriptCompiler.Data {
                     if (exprType.IsAssignment ()) {
                         if (lhsIntType->IntSize < rhsIntType->IntSize)
                             return false;
-                    } else if (!compOp) {
+                    } else if (!exprType.IsComparison ()) {
                         if (lhsIntType->IntSize >= rhsIntType->IntSize)
                             finalType = lhsType;
                         else
@@ -512,7 +453,7 @@ namespace EchelonScriptCompiler.Data {
                 return isCompatible;
             }
 
-            private bool BinaryOpCompat_BoolBool (ES_TypeInfo* lhsType, ES_TypeInfo* rhsType, SimpleBinaryExprType exprType, out ES_TypeInfo* finalType) {
+            private bool BinaryOpCompat_BoolBool (ES_TypeInfo* lhsType, ES_TypeInfo* rhsType, SimpleBinaryExprType exprType, out ES_TypeInfo* finalType, out bool isConst) {
                 Debug.Assert (lhsType->TypeTag == ES_TypeTag.Bool);
                 Debug.Assert (rhsType->TypeTag == ES_TypeTag.Bool);
 
@@ -520,24 +461,29 @@ namespace EchelonScriptCompiler.Data {
                     case SimpleBinaryExprType.BitAnd:
                     case SimpleBinaryExprType.BitXor:
                     case SimpleBinaryExprType.BitOr:
+                        isConst = true;
                         break;
 
                     case SimpleBinaryExprType.Equals:
                     case SimpleBinaryExprType.NotEquals:
+                        isConst = true;
                         break;
 
                     case SimpleBinaryExprType.LogicalAnd:
                     case SimpleBinaryExprType.LogicalOr:
+                        isConst = true;
                         break;
 
                     case SimpleBinaryExprType.Assign:
                     case SimpleBinaryExprType.AssignBitAnd:
                     case SimpleBinaryExprType.AssignBitOr:
                     case SimpleBinaryExprType.AssignXor:
+                        isConst = false;
                         break;
 
                     default:
                         finalType = environment.TypeUnknownValue;
+                        isConst = false;
                         return false;
                 }
 
@@ -545,7 +491,7 @@ namespace EchelonScriptCompiler.Data {
                 return true;
             }
 
-            private bool BinaryOpCompat_FloatFloat (ES_TypeInfo* lhsType, ES_TypeInfo* rhsType, SimpleBinaryExprType exprType, out ES_TypeInfo* finalType) {
+            private bool BinaryOpCompat_FloatFloat (ES_TypeInfo* lhsType, ES_TypeInfo* rhsType, SimpleBinaryExprType exprType, out ES_TypeInfo* finalType, out bool isConst) {
                 Debug.Assert (lhsType->TypeTag == ES_TypeTag.Float);
                 Debug.Assert (rhsType->TypeTag == ES_TypeTag.Float);
 
@@ -554,10 +500,10 @@ namespace EchelonScriptCompiler.Data {
 
                 finalType = environment.TypeUnknownValue;
 
-                if (lhsFloatType->FloatSize != rhsFloatType->FloatSize)
+                if (lhsFloatType->FloatSize != rhsFloatType->FloatSize) {
+                    isConst = false;
                     return false;
-
-                bool compOp = false;
+                }
 
                 switch (exprType) {
                     case SimpleBinaryExprType.Power:
@@ -566,6 +512,7 @@ namespace EchelonScriptCompiler.Data {
                     case SimpleBinaryExprType.Modulo:
                     case SimpleBinaryExprType.Add:
                     case SimpleBinaryExprType.Subtract:
+                        isConst = true;
                         break;
 
                     case SimpleBinaryExprType.LesserThan:
@@ -574,7 +521,7 @@ namespace EchelonScriptCompiler.Data {
                     case SimpleBinaryExprType.GreaterThanEqual:
                     case SimpleBinaryExprType.Equals:
                     case SimpleBinaryExprType.NotEquals:
-                        compOp = true;
+                        isConst = true;
                         break;
 
                     case SimpleBinaryExprType.Assign:
@@ -584,18 +531,20 @@ namespace EchelonScriptCompiler.Data {
                     case SimpleBinaryExprType.AssignDivide:
                     case SimpleBinaryExprType.AssignModulo:
                     case SimpleBinaryExprType.AssignPower:
+                        isConst = false;
                         break;
 
                     default:
+                        isConst = false;
                         return false;
                 }
 
-                finalType = !compOp ? lhsType : environment.typeBool;
+                finalType = !exprType.IsComparison () ? lhsType : environment.typeBool;
 
                 return true;
             }
 
-            private bool BinaryOpCompat_FloatInt (ES_TypeInfo* lhsType, ES_TypeInfo* rhsType, SimpleBinaryExprType exprType, out ES_TypeInfo* finalType) {
+            private bool BinaryOpCompat_FloatInt (ES_TypeInfo* lhsType, ES_TypeInfo* rhsType, SimpleBinaryExprType exprType, out ES_TypeInfo* finalType, out bool isConst) {
                 Debug.Assert (lhsType->TypeTag == ES_TypeTag.Float);
                 Debug.Assert (rhsType->TypeTag == ES_TypeTag.Int);
 
@@ -603,10 +552,15 @@ namespace EchelonScriptCompiler.Data {
 
                 switch (exprType) {
                     case SimpleBinaryExprType.Power:
+                        isConst = true;
+                        break;
+
                     case SimpleBinaryExprType.AssignPower:
+                        isConst = false;
                         break;
 
                     default:
+                        isConst = false;
                         return false;
                 }
 
@@ -619,30 +573,32 @@ namespace EchelonScriptCompiler.Data {
 
             #region UnaryOpCompat
 
-            public bool UnaryOpCompat (ES_TypeInfo* exprType, SimpleUnaryExprType op, out ES_TypeInfo* finalType) {
+            public bool UnaryOpCompat (ES_TypeInfo* exprType, SimpleUnaryExprType op, out ES_TypeInfo* finalType, out bool isConst) {
                 switch (exprType->TypeTag) {
                     case ES_TypeTag.Int:
-                        return UnaryOpCompat_Int (exprType, op, out finalType);
+                        return UnaryOpCompat_Int (exprType, op, out finalType, out isConst);
 
                     case ES_TypeTag.Bool:
-                        return UnaryOpCompat_Bool (exprType, op, out finalType);
+                        return UnaryOpCompat_Bool (exprType, op, out finalType, out isConst);
 
                     case ES_TypeTag.Float:
-                        return UnaryOpCompat_Float (exprType, op, out finalType);
+                        return UnaryOpCompat_Float (exprType, op, out finalType, out isConst);
 
                     default:
                         finalType = environment.TypeUnknownValue;
+                        isConst = false;
                         return false;
                 }
             }
 
-            private bool UnaryOpCompat_Int (ES_TypeInfo* exprType, SimpleUnaryExprType op, out ES_TypeInfo* finalType) {
+            private bool UnaryOpCompat_Int (ES_TypeInfo* exprType, SimpleUnaryExprType op, out ES_TypeInfo* finalType, out bool isConst) {
                 Debug.Assert (exprType->TypeTag == ES_TypeTag.Int);
 
                 switch (op) {
                     case SimpleUnaryExprType.Positive:
                     case SimpleUnaryExprType.BitNot:
                         finalType = exprType;
+                        isConst = true;
                         return true;
 
                     case SimpleUnaryExprType.Negative: {
@@ -650,15 +606,18 @@ namespace EchelonScriptCompiler.Data {
 
                         if (!intData->Unsigned) {
                             finalType = exprType;
+                            isConst = true;
                             return true;
                         } else {
                             finalType = environment.TypeUnknownValue;
+                            isConst = false;
                             return false;
                         }
                     }
 
                     case SimpleUnaryExprType.LogicalNot:
                         finalType = environment.TypeUnknownValue;
+                        isConst = false;
                         return false;
 
                     default:
@@ -666,18 +625,20 @@ namespace EchelonScriptCompiler.Data {
                 }
             }
 
-            private bool UnaryOpCompat_Bool (ES_TypeInfo* exprType, SimpleUnaryExprType op, out ES_TypeInfo* finalType) {
+            private bool UnaryOpCompat_Bool (ES_TypeInfo* exprType, SimpleUnaryExprType op, out ES_TypeInfo* finalType, out bool isConst) {
                 Debug.Assert (exprType->TypeTag == ES_TypeTag.Bool);
 
                 switch (op) {
                     case SimpleUnaryExprType.LogicalNot:
                         finalType = exprType;
+                        isConst = true;
                         return true;
 
                     case SimpleUnaryExprType.Positive:
                     case SimpleUnaryExprType.Negative:
                     case SimpleUnaryExprType.BitNot:
                         finalType = environment.TypeUnknownValue;
+                        isConst = false;
                         return false;
 
                     default:
@@ -685,18 +646,20 @@ namespace EchelonScriptCompiler.Data {
                 }
             }
 
-            private bool UnaryOpCompat_Float (ES_TypeInfo* exprType, SimpleUnaryExprType op, out ES_TypeInfo* finalType) {
+            private bool UnaryOpCompat_Float (ES_TypeInfo* exprType, SimpleUnaryExprType op, out ES_TypeInfo* finalType, out bool isConst) {
                 Debug.Assert (exprType->TypeTag == ES_TypeTag.Float);
 
                 switch (op) {
                     case SimpleUnaryExprType.Positive:
                     case SimpleUnaryExprType.Negative:
                         finalType = exprType;
+                        isConst = true;
                         return true;
 
                     case SimpleUnaryExprType.LogicalNot:
                     case SimpleUnaryExprType.BitNot:
                         finalType = environment.TypeUnknownValue;
+                        isConst = false;
                         return false;
 
                     default:

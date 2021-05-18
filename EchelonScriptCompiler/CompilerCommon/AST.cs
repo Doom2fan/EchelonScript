@@ -8,6 +8,7 @@
  */
 
 using System;
+using System.Diagnostics;
 using ChronosLib.Pooled;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Data.Types;
@@ -1197,6 +1198,87 @@ namespace EchelonScriptCompiler.CompilerCommon {
             Value = value;
 
             Token = tk;
+        }
+    }
+
+    public unsafe class ES_AstIntegerConstantExpression : ES_AstExpression {
+        public override ES_AstNodeBounds NodeBounds => OriginalExpression.NodeBounds;
+
+        public readonly ES_AstExpression OriginalExpression;
+        public readonly ES_TypeInfo* IntType;
+        public readonly ulong Value;
+
+        public ES_AstIntegerConstantExpression (ES_TypeInfo* intType, ulong value, ES_AstExpression origExpr) : base (1) {
+            Debug.Assert (intType is not null);
+            Debug.Assert (intType->TypeTag == ES_TypeTag.Int);
+
+            switch (((ES_IntTypeData*) intType)->IntSize) {
+                case ES_IntSize.Int8: value &= 0x00000000_000000FF; break;
+                case ES_IntSize.Int16: value &= 0x00000000_0000FFFF; break;
+                case ES_IntSize.Int32: value &= 0x00000000_FFFFFFFF; break;
+                case ES_IntSize.Int64: value &= 0xFFFFFFFF_FFFFFFFF; break;
+            }
+
+            OriginalExpression = origExpr;
+            IntType = intType;
+            Value = value;
+        }
+
+        public ulong SignExtend () {
+            var intType = (ES_IntTypeData*) IntType;
+
+            if (intType->Unsigned)
+                return Value;
+
+            switch (intType->IntSize) {
+                case ES_IntSize.Int8:
+                    return (ulong) (sbyte) Value;
+                case ES_IntSize.Int16:
+                    return (ulong) (short) Value;
+                case ES_IntSize.Int32:
+                    return (ulong) (int) Value;
+                case ES_IntSize.Int64:
+                    return Value;
+
+                default:
+                    throw new NotImplementedException ();
+            }
+        }
+    }
+
+    public unsafe class ES_AstBooleanConstantExpression : ES_AstExpression {
+        public override ES_AstNodeBounds NodeBounds => OriginalExpression.NodeBounds;
+
+        public readonly ES_AstExpression OriginalExpression;
+        public readonly bool Value;
+
+        public ES_AstBooleanConstantExpression (bool value, ES_AstExpression origExpr) : base (1) {
+            OriginalExpression = origExpr;
+            Value = value;
+        }
+    }
+
+    public unsafe class ES_AstFloat32ConstantExpression : ES_AstExpression {
+        public override ES_AstNodeBounds NodeBounds => OriginalExpression.NodeBounds;
+
+        public readonly ES_AstExpression OriginalExpression;
+        public readonly float Value;
+
+        public ES_AstFloat32ConstantExpression (float value, ES_AstExpression origExpr) : base (1) {
+            OriginalExpression = origExpr;
+            Value = value;
+        }
+    }
+
+    public unsafe class ES_AstFloat64ConstantExpression : ES_AstExpression {
+        public override ES_AstNodeBounds NodeBounds => OriginalExpression.NodeBounds;
+
+        public readonly ES_AstExpression OriginalExpression;
+        public readonly double Value;
+
+        public ES_AstFloat64ConstantExpression (double value, ES_AstExpression origExpr) : base (1) {
+            OriginalExpression = origExpr;
+            Value = value;
         }
     }
 

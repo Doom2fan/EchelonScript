@@ -118,7 +118,7 @@ namespace EchelonScriptCompiler.Frontend {
 
                 if (arg.DefaultExpression is not null) {
                     var argDefExpr = CheckTypes_Expression (ref transUnit, symbols, unitSrc, arg.DefaultExpression, argValType);
-                    CheckTypes_EnsureCompat (argValType, argDefExpr.Type, unitSrc, arg.NodeBounds);
+                    CheckTypes_EnsureCompat (argValType, argDefExpr.Type, unitSrc, arg.NodeBounds, out _);
                 }
             }
 
@@ -151,14 +151,17 @@ namespace EchelonScriptCompiler.Frontend {
             symbols.Pop ();
         }
 
-        protected bool CheckTypes_MustBeCompat (ES_TypeInfo* destType, ES_TypeInfo* givenType) {
+        protected bool CheckTypes_MustBeCompat (ES_TypeInfo* destType, ES_TypeInfo* givenType, out bool isConstant) {
             // We don't need to do any checks here if they're *literally* the same type.
-            if (destType == givenType)
+            if (destType == givenType) {
+                isConstant = true;
                 return true;
+            }
 
             bool cantConvert;
 
             if (destType->TypeTag == ES_TypeTag.UNKNOWN || givenType->TypeTag == ES_TypeTag.UNKNOWN) {
+                isConstant = false;
                 return true;
             } else if (destType->TypeTag == ES_TypeTag.Int && givenType->TypeTag == ES_TypeTag.Int) {
                 var destIntType = (ES_IntTypeData*) destType;
@@ -168,14 +171,18 @@ namespace EchelonScriptCompiler.Frontend {
                     cantConvert = false;
                 else
                     cantConvert = true;
-            } else
+
+                isConstant = true;
+            } else {
+                isConstant = false;
                 cantConvert = true;
+            }
 
             return !cantConvert;
         }
 
-        protected bool CheckTypes_ExplicitCast (ES_TypeInfo* castType, ES_TypeInfo* exprType, out bool castRedundant) {
-            if (CheckTypes_MustBeCompat (castType, exprType)) {
+        protected bool CheckTypes_ExplicitCast (ES_TypeInfo* castType, ES_TypeInfo* exprType, out bool castRedundant, out bool isConstant) {
+            if (CheckTypes_MustBeCompat (castType, exprType, out isConstant)) {
                 castRedundant = true;
                 return true;
             }
@@ -189,28 +196,33 @@ namespace EchelonScriptCompiler.Frontend {
                     castIntType->Unsigned == exprIntType->Unsigned
                 );
 
+                isConstant = true;
                 return true;
             } else if (castType->TypeTag == ES_TypeTag.Float && exprType->TypeTag == ES_TypeTag.Int) {
                 castRedundant = false;
+                isConstant = true;
                 return true;
             } else if (castType->TypeTag == ES_TypeTag.Int && exprType->TypeTag == ES_TypeTag.Float) {
                 castRedundant = false;
+                isConstant = true;
                 return true;
             } else if (castType->TypeTag == ES_TypeTag.Float && exprType->TypeTag == ES_TypeTag.Float) {
                 var castFloatType = (ES_FloatTypeData*) castType;
                 var exprFloatType = (ES_FloatTypeData*) exprType;
 
                 castRedundant = castFloatType->FloatSize == exprFloatType->FloatSize;
+                isConstant = true;
                 return true;
             }
 
+            isConstant = false;
             castRedundant = false;
             return false;
         }
 
-        protected bool CheckTypes_EnsureCompat (ES_TypeInfo* destType, ES_TypeInfo* givenType, ReadOnlySpan<char> src, ES_AstNodeBounds bounds) {
-            if (!CheckTypes_MustBeCompat (destType, givenType)) {
-                if (CheckTypes_ExplicitCast (destType, givenType, out _)) {
+        protected bool CheckTypes_EnsureCompat (ES_TypeInfo* destType, ES_TypeInfo* givenType, ReadOnlySpan<char> src, ES_AstNodeBounds bounds, out bool isConstant) {
+            if (!CheckTypes_MustBeCompat (destType, givenType, out isConstant)) {
+                if (CheckTypes_ExplicitCast (destType, givenType, out _, out _)) {
                     errorList.Add (ES_FrontendErrors.GenNoImplicitCast (
                         destType->FullyQualifiedNameString, givenType->FullyQualifiedNameString,
                         src, bounds
@@ -304,7 +316,7 @@ namespace EchelonScriptCompiler.Frontend {
 
                             if (variable.InitializationExpression is not null) {
                                 var exprData = CheckTypes_Expression (ref transUnit, symbols, src, variable.InitializationExpression, varType);
-                                CheckTypes_EnsureCompat (varType, exprData.Type, src, exprData.Expr.NodeBounds);
+                                CheckTypes_EnsureCompat (varType, exprData.Type, src, exprData.Expr.NodeBounds, out _);
                             }
                         } else {
                             Debug.Assert (variable.InitializationExpression is not null);
@@ -329,7 +341,7 @@ namespace EchelonScriptCompiler.Frontend {
                     var boolType = Environment.TypeBool;
 
                     var condExprData = CheckTypes_Expression (ref transUnit, symbols, src, condStmt.ConditionExpression, boolType);
-                    CheckTypes_EnsureCompat (boolType, condExprData.Type, src, condExprData.Expr.NodeBounds);
+                    CheckTypes_EnsureCompat (boolType, condExprData.Type, src, condExprData.Expr.NodeBounds, out _);
 
                     bool alwaysReturns = false;
 
@@ -358,10 +370,16 @@ namespace EchelonScriptCompiler.Frontend {
                                     ));
                                 }
 
-                                if (!CheckTypes_MustBeCompat (exprTypeData.Type, sectionTypeData.Type)) {
+                                if (!CheckTypes_MustBeCompat (exprTypeData.Type, sectionTypeData.Type, out var sectionConst)) {
                                     errorList.Add (ES_FrontendErrors.GenNoCast (
                                         exprTypeData.Type->FullyQualifiedNameString, sectionTypeData.Type->FullyQualifiedNameString,
                                         src, sectionTypeData.Expr.NodeBounds
+                                    ));
+                                }
+
+                                if (!sectionTypeData.Constant || !sectionConst) {
+                                    errorList.Add (new EchelonScriptErrorMessage (
+                                        src, expr.NodeBounds, ES_FrontendErrors.ConstantExprExpected
                                     ));
                                 }
                             }
@@ -386,7 +404,7 @@ namespace EchelonScriptCompiler.Frontend {
                     if (retStmt.ReturnExpression is not null) {
                         var exprData = CheckTypes_Expression (ref transUnit, symbols, src, retStmt.ReturnExpression, retType);
 
-                        CheckTypes_EnsureCompat (retType, exprData.Type, src, exprData.Expr.NodeBounds);
+                        CheckTypes_EnsureCompat (retType, exprData.Type, src, exprData.Expr.NodeBounds, out _);
                     } else if (retType->TypeTag != ES_TypeTag.Void) {
                         errorList.Add (ES_FrontendErrors.GenMissingReturnValue (
                             retType->FullyQualifiedNameString, src, retStmt.NodeBounds
@@ -410,7 +428,7 @@ namespace EchelonScriptCompiler.Frontend {
 
                     if (loopStmt.ConditionExpression is not null) {
                         var condExprData = CheckTypes_Expression (ref transUnit, symbols, src, loopStmt.ConditionExpression, boolType);
-                        CheckTypes_EnsureCompat (boolType, condExprData.Type, src, condExprData.Expr.NodeBounds);
+                        CheckTypes_EnsureCompat (boolType, condExprData.Type, src, condExprData.Expr.NodeBounds, out _);
                     }
 
                     if (loopStmt.IterationExpressions is not null) {
@@ -484,24 +502,28 @@ namespace EchelonScriptCompiler.Frontend {
                         CheckTypes_Expression (ref transUnit, symbols, src, args.ValueExpression);*/
                 }
 
-                case ES_AstIntegerLiteralExpression intLitExpr: {
-                    var intType = EnvironmentBuilder!.DetermineIntLiteralType (intLitExpr, expectedType);
-                    return new ExpressionData { Expr = expr, Type = intType, Constant = true, Addressable = false };
-                }
-
+                case ES_AstIntegerLiteralExpression:
                 case ES_AstBooleanLiteralExpression:
-                    return new ExpressionData { Expr = expr, Type = Environment.TypeBool, Constant = true, Addressable = false };
-
-                case ES_AstFloatLiteralExpression floatLitExpr: {
-                    var type = floatLitExpr.IsFloat ? Environment.TypeFloat32 : Environment.TypeFloat64;
-                    return new ExpressionData { Expr = expr, Type = type, Constant = true, Addressable = false };
-                }
+                case ES_AstFloatLiteralExpression:
+                    throw new CompilationException (ES_FrontendErrors.ConstFoldFailure);
 
                 case ES_AstStringLiteralExpression:
                     throw new NotImplementedException ();
 
                 case ES_AstCharLiteralExpression:
                     throw new NotImplementedException ();
+
+                case ES_AstIntegerConstantExpression intConstExpr:
+                    return new ExpressionData { Expr = expr, Type = intConstExpr.IntType, Constant = true, Addressable = false };
+
+                case ES_AstBooleanConstantExpression:
+                    return new ExpressionData { Expr = expr, Type = Environment.TypeBool, Constant = true, Addressable = false };
+
+                case ES_AstFloat32ConstantExpression:
+                    return new ExpressionData { Expr = expr, Type = Environment.TypeFloat32, Constant = true, Addressable = false };
+
+                case ES_AstFloat64ConstantExpression:
+                    return new ExpressionData { Expr = expr, Type = Environment.TypeFloat64, Constant = true, Addressable = false };
 
                 case ES_AstNameExpression nameExpr: {
                     var id = idPool.GetIdentifier (nameExpr.Value.Text.Span);
@@ -570,34 +592,38 @@ namespace EchelonScriptCompiler.Frontend {
                 case ES_AstSimpleUnaryExpression unaryExpr: {
                     var exprData = CheckTypes_Expression (ref transUnit, symbols, src, unaryExpr.Inner, expectedType);
 
-                    if (!EnvironmentBuilder!.UnaryOpCompat (exprData.Type, unaryExpr.ExpressionType, out var finalType)) {
+                    if (!EnvironmentBuilder!.UnaryOpCompat (exprData.Type, unaryExpr.ExpressionType, out var finalType, out var opConst)) {
                         errorList.Add (ES_FrontendErrors.GenCantApplyUnaryOp (
                             unaryExpr.OperatorToken.Text.GetPooledString (), exprData.Type->FullyQualifiedNameString,
                             src, exprData.Expr.NodeBounds
                         ));
+
+                        return new ExpressionData { Expr = expr, Type = typeUnkn, Constant = opConst, Addressable = false };
                     }
 
-                    return new ExpressionData { Expr = expr, Type = finalType, Constant = false, Addressable = false };
+                    return new ExpressionData { Expr = expr, Type = finalType, Constant = opConst, Addressable = false };
                 }
 
                 case ES_AstCastExpression castExpr: {
                     var destType = GetTypeRef (castExpr.DestinationType);
                     var exprType = CheckTypes_Expression (ref transUnit, symbols, src, castExpr.InnerExpression, null);
 
-                    if (!CheckTypes_ExplicitCast (destType, exprType.Type, out bool castRedundant)) {
+                    if (!CheckTypes_ExplicitCast (destType, exprType.Type, out bool castRedundant, out var isConstant)) {
                         errorList.Add (ES_FrontendErrors.GenNoExplicitCast (
                             destType->FullyQualifiedNameString, exprType.Type->FullyQualifiedNameString,
                             src, castExpr.NodeBounds
                         ));
-                    } else {
-                        if (castRedundant) {
-                            infoList.Add (new EchelonScriptErrorMessage (
-                                src, castExpr.CastBounds, ES_FrontendInfoMsg.RedundantCast
-                            ));
-                        }
+
+                        return new ExpressionData { Expr = expr, Type = typeUnkn, Constant = isConstant, Addressable = false };
                     }
 
-                    return new ExpressionData { Expr = expr, Type = destType, Constant = false, Addressable = false };
+                    if (castRedundant) {
+                        infoList.Add (new EchelonScriptErrorMessage (
+                            src, castExpr.CastBounds, ES_FrontendInfoMsg.RedundantCast
+                        ));
+                    }
+
+                    return new ExpressionData { Expr = expr, Type = destType, Constant = isConstant, Addressable = false };
                 }
 
                 #endregion
@@ -621,15 +647,16 @@ namespace EchelonScriptCompiler.Frontend {
                     if (leftType.Type is null || rightType.Type is null)
                         return new ExpressionData { Expr = expr, Type = typeUnkn, Constant = constant, Addressable = false };
 
-                    if (!EnvironmentBuilder!.BinaryOpCompat (leftType.Type, rightType.Type, simpleBinaryExpr.ExpressionType, out var finalType)) {
+                    if (!EnvironmentBuilder!.BinaryOpCompat (leftType.Type, rightType.Type, simpleBinaryExpr.ExpressionType, out var finalType, out var opConst)) {
                         errorList.Add (ES_FrontendErrors.GenCantApplyBinaryOp (
                             simpleBinaryExpr.OperatorToken.Text.GetPooledString (),
                             leftType.Type->FullyQualifiedNameString, rightType.Type->FullyQualifiedNameString,
                             src, simpleBinaryExpr.NodeBounds
                         ));
 
-                        return new ExpressionData { Expr = expr, Type = Environment.TypeUnknownValue, Constant = constant, Addressable = false };
+                        return new ExpressionData { Expr = expr, Type = typeUnkn, Constant = constant, Addressable = false };
                     }
+                    constant &= opConst;
 
                     if (simpleBinaryExpr.ExpressionType.IsAssignment () && !leftType.Addressable) {
                         errorList.Add (new EchelonScriptErrorMessage (
@@ -643,18 +670,18 @@ namespace EchelonScriptCompiler.Frontend {
                 case ES_AstConditionalExpression condExpr: {
                     var condType = CheckTypes_Expression (ref transUnit, symbols, src, condExpr.Condition, Environment.TypeBool);
 
-                    CheckTypes_EnsureCompat (Environment.TypeBool, condType.Type, src, condType.Expr.NodeBounds);
+                    CheckTypes_EnsureCompat (Environment.TypeBool, condType.Type, src, condType.Expr.NodeBounds, out var condConst);
 
                     var leftExpr = CheckTypes_Expression (ref transUnit, symbols, src, condExpr.Then, expectedType);
                     var rightExpr = CheckTypes_Expression (ref transUnit, symbols, src, condExpr.Else, expectedType);
 
-                    bool isCompat = true;
-                    isCompat &= CheckTypes_EnsureCompat (expectedType, leftExpr.Type, src, leftExpr.Expr.NodeBounds);
-                    isCompat &= CheckTypes_EnsureCompat (expectedType, rightExpr.Type, src, rightExpr.Expr.NodeBounds);
+                    bool isCompat = (
+                        CheckTypes_EnsureCompat (expectedType, leftExpr.Type, src, leftExpr.Expr.NodeBounds, out var leftConst) &
+                        CheckTypes_EnsureCompat (expectedType, rightExpr.Type, src, rightExpr.Expr.NodeBounds, out var rightConst)
+                    );
+                    bool constant = condType.Constant & leftExpr.Constant & rightExpr.Constant & condConst & leftConst & rightConst;
 
-                    bool constant = condType.Constant & leftExpr.Constant & rightExpr.Constant;
-
-                    var finalType = isCompat ? expectedType : Environment.TypeUnknownValue;
+                    var finalType = isCompat ? expectedType : typeUnkn;
 
                     return new ExpressionData { Expr = expr, Type = finalType, Constant = constant, Addressable = false };
                 }
@@ -683,7 +710,7 @@ namespace EchelonScriptCompiler.Frontend {
                     errorList.Add (ES_FrontendErrors.GenCantInvokeType (
                         funcExpr.TypeInfo->FullyQualifiedNameString, src, funcExpr.Expr.NodeBounds
                     ));
-                    return new ExpressionData { Expr = funcCallExpr, Type = Environment.TypeUnknownValue, Constant = false, Addressable = false };
+                    return new ExpressionData { Expr = funcCallExpr, Type = typeUnkn, Constant = false, Addressable = false };
                 } else if (funcExpr.Type is not null) {
                     // TODO: Some types might be allowed to have `()` overrides too in the future. But not now.
                     if (funcExpr.Type->TypeTag != ES_TypeTag.UNKNOWN) {
@@ -691,7 +718,7 @@ namespace EchelonScriptCompiler.Frontend {
                             src, funcExpr.Expr.NodeBounds, ES_FrontendErrors.CantInvokeExpr
                         ));
                     }
-                    return new ExpressionData { Expr = funcCallExpr, Type = Environment.TypeUnknownValue, Constant = false, Addressable = false };
+                    return new ExpressionData { Expr = funcCallExpr, Type = typeUnkn, Constant = false, Addressable = false };
                 } else
                     Debug.Fail ("???");
             }
@@ -772,11 +799,8 @@ namespace EchelonScriptCompiler.Frontend {
                 var argExprData = CheckTypes_Expression (ref transUnit, symbols, src, arg.ValueExpression, argValType);
 
                 if (argValType is not null)
-                    CheckTypes_EnsureCompat (argValType, argExprData.Type, src, argExprData.Expr.NodeBounds);
+                    CheckTypes_EnsureCompat (argValType, argExprData.Type, src, argExprData.Expr.NodeBounds, out _);
             }
-
-            if (func->OptionalArgsCount > 0)
-                throw new NotImplementedException ();
 
             return new ExpressionData { Expr = funcCallExpr, Type = funcType->ReturnType, Constant = false, Addressable = false };
         }

@@ -9,14 +9,12 @@
 
 using System;
 using System.Diagnostics;
-using System.Text;
 using ChronosLib.Unmanaged;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Data.Types;
 using EchelonScriptCompiler.Frontend;
 using LLVMSharp.Interop;
-using Microsoft.Toolkit.HighPerformance.Buffers;
 
 namespace EchelonScriptCompiler.Backends.LLVMBackend {
     public unsafe sealed partial class LLVMCompilerBackend {
@@ -32,12 +30,25 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             public bool Addressable;
         }
 
-        private bool GenerateCode_EnsureCompat (ES_TypeInfo* destType, ES_TypeInfo* givenType, ReadOnlySpan<char> src, ES_AstNodeBounds bounds) {
-            /* if (!GenerateCode_MustBeCompat (destType, givenType)) {
-                throw new CompilationException (ES_BackendErrors.FrontendError);
-            }*/
+        private void GenerateCode_EnsureImplicitCompat (ref ExpressionData exprData, ES_TypeInfo* dstType) {
+            var srcType = exprData.Type;
 
-            return true;
+            Debug.Assert (srcType is not null);
+
+            if (exprData.Type == dstType)
+                return;
+
+            if (dstType->TypeTag == ES_TypeTag.Int && dstType->TypeTag == ES_TypeTag.Int) {
+                var dstIntType = (ES_IntTypeData*) dstType;
+                var srcIntType = (ES_IntTypeData*) srcType;
+
+                if (srcIntType->IntSize <= dstIntType->IntSize && dstIntType->Unsigned == srcIntType->Unsigned) {
+                    exprData = GenerateCode_Cast (exprData, dstType);
+                    return;
+                }
+            }
+
+            throw new CompilationException (ES_BackendErrors.FrontendError);
         }
 
         private ExpressionData GenerateCode_Expression (
@@ -76,14 +87,20 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                         GenerateCode_Expression (ref transUnit, symbols, src, args.ValueExpression);*/
                 }
 
-                case ES_AstIntegerLiteralExpression intLitExpr: {
-                    var type = envBuilder!.DetermineIntLiteralType (intLitExpr, expectedType);
+                case ES_AstIntegerLiteralExpression:
+                case ES_AstBooleanLiteralExpression:
+                case ES_AstFloatLiteralExpression:
+                    throw new CompilationException (ES_BackendErrors.FrontendError);
+
+                case ES_AstIntegerConstantExpression intConstExpr: {
+                    Debug.Assert (intConstExpr.IntType->TypeTag == ES_TypeTag.Int);
+                    var type = intConstExpr.IntType;
                     var intType = (ES_IntTypeData*) type;
 
                     LLVMValueRef value;
 
                     bool unsigned = intType->Unsigned;
-                    ulong constVal = intLitExpr.Value;
+                    ulong constVal = intConstExpr.Value;
                     switch (intType->IntSize) {
                         case ES_IntSize.Int8:
                             value = LLVMValueRef.CreateConstInt (contextRef.Int8Type, constVal, !unsigned);
@@ -105,18 +122,19 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                     return new ExpressionData { Expr = expr, Type = type, Value = value, Constant = true, Addressable = false };
                 }
 
-                case ES_AstBooleanLiteralExpression boolLitExpr: {
-                    var value = LLVMValueRef.CreateConstInt (contextRef.Int1Type, boolLitExpr.Value ? 1uL : 0uL, false);
+                case ES_AstBooleanConstantExpression boolConstExpr: {
+                    var value = LLVMValueRef.CreateConstInt (contextRef.Int1Type, boolConstExpr.Value ? 1uL : 0uL, false);
                     return new ExpressionData { Expr = expr, Type = env.TypeBool, Constant = true, Addressable = false };
                 }
 
-                case ES_AstFloatLiteralExpression floatLitExpr: {
-                    var type = floatLitExpr.IsFloat ? env.TypeFloat32 : env.TypeFloat64;
-                    var constVal = floatLitExpr.IsFloat ? floatLitExpr.ValueFloat : floatLitExpr.ValueDouble;
-                    var floatType = (ES_FloatTypeData*) type;
+                case ES_AstFloat32ConstantExpression floatConstLit: {
+                    var value = LLVM.ConstReal (GetFloatType (ES_FloatSize.Single), floatConstLit.Value);
+                    return new ExpressionData { Expr = expr, Type = env.TypeFloat32, Value = value, Constant = true, Addressable = false };
+                }
 
-                    var value = LLVM.ConstReal (GetFloatType (floatType->FloatSize), constVal);
-                    return new ExpressionData { Expr = expr, Type = type, Value = value, Constant = true, Addressable = false };
+                case ES_AstFloat64ConstantExpression doubleConstLit: {
+                    var value = LLVM.ConstReal (GetFloatType (ES_FloatSize.Double), doubleConstLit.Value);
+                    return new ExpressionData { Expr = expr, Type = env.TypeFloat64, Value = value, Constant = true, Addressable = false };
                 }
 
                 case ES_AstStringLiteralExpression:
@@ -200,7 +218,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
                     var rhs = GenerateCode_Expression (ref transUnit, symbols, src, simpleBinaryExpr.Right, expectedRHSType);
 
-                    if (!envBuilder!.BinaryOpCompat (lhs.Type, rhs.Type, simpleBinaryExpr.ExpressionType, out _))
+                    if (!envBuilder!.BinaryOpCompat (lhs.Type, rhs.Type, simpleBinaryExpr.ExpressionType, out _, out _))
                         throw new CompilationException (ES_BackendErrors.FrontendError);
 
                     if (simpleBinaryExpr.ExpressionType.IsAssignment () && (!lhs.Addressable || lhs.Value.IsAAllocaInst == null))
@@ -324,7 +342,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
         #region SimpleBinaryExpr
 
         private ExpressionData GenerateCode_BinaryExpr (ExpressionData lhs, ExpressionData rhs, SimpleBinaryExprType exprOp) {
-            if (!envBuilder!.BinaryOpCompat (lhs.Type, rhs.Type, exprOp, out _))
+            if (!envBuilder!.BinaryOpCompat (lhs.Type, rhs.Type, exprOp, out _, out _))
                 throw new CompilationException (ES_BackendErrors.FrontendError);
 
             Debug.Assert (lhs.Value != null);
@@ -690,7 +708,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
         #region SimpleUnaryExpr
 
         private ExpressionData GenerateCode_UnaryExpr (ExpressionData inner, SimpleUnaryExprType exprOp) {
-            if (!envBuilder!.UnaryOpCompat (inner.Type, exprOp, out var _))
+            if (!envBuilder!.UnaryOpCompat (inner.Type, exprOp, out var _, out _))
                 throw new CompilationException (ES_BackendErrors.FrontendError);
 
             Debug.Assert (inner.Value != null);
@@ -840,7 +858,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 var argValType = argTypeData->ValueType;
                 var argExprData = GenerateCode_Expression (ref transUnit, symbols, src, arg.ValueExpression, argValType);
 
-                GenerateCode_EnsureCompat (argValType, argExprData.Type, src, argExprData.Expr.NodeBounds);
+                GenerateCode_EnsureImplicitCompat (ref argExprData, argValType);
 
                 argsArr.Span [argIdx] = GetLLVMValue (argExprData.Value);
             }
@@ -860,7 +878,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
         ) {
             var condExpr = GenerateCode_Expression (ref transUnit, symbols, src, expr.Condition, env!.TypeBool);
 
-            GenerateCode_EnsureCompat (env.TypeBool, condExpr.Type, src, condExpr.Expr.NodeBounds);
+            GenerateCode_EnsureImplicitCompat (ref condExpr, env.TypeBool);
 
             condExpr.Value = GetLLVMValue (condExpr.Value);
 
@@ -889,9 +907,8 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             elseBlock = builderRef.InsertBlock;
 
             // Checks
-            bool isCompat = true;
-            isCompat &= GenerateCode_EnsureCompat (expectedType, leftExpr.Type, src, leftExpr.Expr.NodeBounds);
-            isCompat &= GenerateCode_EnsureCompat (expectedType, rightExpr.Type, src, rightExpr.Expr.NodeBounds);
+            GenerateCode_EnsureImplicitCompat (ref leftExpr, expectedType);
+            GenerateCode_EnsureImplicitCompat (ref rightExpr, expectedType);
 
             // End
             builderRef.PositionAtEnd (endBlock);
@@ -901,9 +918,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
             bool constant = condExpr.Constant & leftExpr.Constant & rightExpr.Constant;
 
-            var finalType = isCompat ? expectedType : env.TypeUnknownValue;
-
-            return new ExpressionData { Expr = expr, Type = finalType, Value = phi, Constant = constant, Addressable = false };
+            return new ExpressionData { Expr = expr, Type = leftExpr.Type, Value = phi, Constant = constant, Addressable = false };
         }
     }
 }

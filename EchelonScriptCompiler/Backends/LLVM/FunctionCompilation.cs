@@ -306,7 +306,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                             if (variable.InitializationExpression is not null) {
                                 hasInit = true;
                                 initExprData = GenerateCode_Expression (ref transUnit, symbols, src, variable.InitializationExpression, varData.Type);
-                                //TODO: CheckTypes_EnsureCompat (varType, exprData.Type, src, exprData.Expr.NodeBounds);
+                                GenerateCode_EnsureImplicitCompat (ref initExprData, varData.Type);
                             } else {
                                 hasInit = false;
                                 initExprData = default;
@@ -345,8 +345,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
                     // Generate the condition.
                     var condExpr = GenerateCode_Expression (ref transUnit, symbols, src, condStmt.ConditionExpression, boolType);
-                    GenerateCode_EnsureCompat (env.TypeBool, condExpr.Type, src, condExpr.Expr.NodeBounds);
-                    condExpr.Value = GetLLVMValue (condExpr.Value);
+                    GenerateCode_EnsureImplicitCompat (ref condExpr, boolType);
 
                     // Create the blocks.
                     var thenBlock = funcInfo.Definition.AppendBasicBlock ("if_then");
@@ -425,7 +424,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                     } else if (retStmt.ReturnExpression is not null) {
                         var exprData = GenerateCode_Expression (ref transUnit, symbols, src, retStmt.ReturnExpression, retType);
 
-                        //TODO: CheckTypes_EnsureCompat (retType, exprData.Type, src, exprData.Expr.NodeBounds);
+                        GenerateCode_EnsureImplicitCompat (ref exprData, retType);
 
                         if (retType->TypeTag != ES_TypeTag.Void)
                             builderRef.BuildStore (GetLLVMValue (exprData.Value), funcInfo.RetValue);
@@ -467,7 +466,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
                     if (loopStmt.ConditionExpression is not null) {
                         var condExprData = GenerateCode_Expression (ref transUnit, symbols, src, loopStmt.ConditionExpression, boolType);
-                        GenerateCode_EnsureCompat (boolType, condExprData.Type, src, condExprData.Expr.NodeBounds);
+                        GenerateCode_EnsureImplicitCompat (ref condExprData, boolType);
 
                         builderRef.BuildCondBr (condExprData.Value, bodyBlock, endBlock);
                     } else

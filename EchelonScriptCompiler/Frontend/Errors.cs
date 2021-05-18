@@ -326,6 +326,8 @@ namespace EchelonScriptCompiler.Frontend {
 
         public const string ClashingTypeExists = "A clashing type exists. The caller must check for this before calling this function.";
 
+        public const string ConstFoldFailure = "The constant folding pass left a literal node untransformed.";
+
         #endregion
     }
 
