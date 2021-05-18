@@ -411,7 +411,7 @@ namespace EchelonScriptCompiler.Frontend {
                 }
 
                 default:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("Size not implemented.");
             }
 
             expr = new ES_AstIntegerConstantExpression (&lhsType->TypeInfo, finalValue, expr);
@@ -463,7 +463,7 @@ namespace EchelonScriptCompiler.Frontend {
                     break;
 
                 case SimpleBinaryExprType.Power:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("[TODO] ** is not implemented yet.");
 
                 // Bit ops
                 case SimpleBinaryExprType.BitAnd:

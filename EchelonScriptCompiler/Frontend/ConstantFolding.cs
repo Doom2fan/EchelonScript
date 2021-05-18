@@ -36,7 +36,7 @@ namespace EchelonScriptCompiler.Frontend {
                                 Debug.Assert (classBuilder is not null);
 
                                 //FoldConstants_Class (ref transUnit, ref astUnit, classDef, classBuilder);
-                                throw new NotImplementedException ();
+                                throw new NotImplementedException ("[TODO] Classes not implemented yet.");
                             }
 
                             case ES_AstStructDefinition structDef: {
@@ -45,7 +45,7 @@ namespace EchelonScriptCompiler.Frontend {
                                 Debug.Assert (structBuilder is not null);
 
                                 //FoldConstants_Struct (ref transUnit, ref astUnit, structDef, structBuilder);
-                                throw new NotImplementedException ();
+                                throw new NotImplementedException ("[TODO] Structs not implemented yet.");
                             }
 
                             case ES_AstEnumDefinition enumDef: {
@@ -54,7 +54,7 @@ namespace EchelonScriptCompiler.Frontend {
                                 Debug.Assert (enumBuilder is not null);
 
                                 //FoldConstants_Enum (ref transUnit, ref astUnit, enumDef, enumBuilder);
-                                throw new NotImplementedException ();
+                                throw new NotImplementedException ("[TODO] Enums not implemented yet.");
                             }
 
                             case ES_AstFunctionDefinition funcDef:
@@ -62,7 +62,7 @@ namespace EchelonScriptCompiler.Frontend {
                                 break;
 
                             default:
-                                throw new NotImplementedException ();
+                                throw new NotImplementedException ("Node type not implemented.");
                         }
                     }
 
@@ -82,7 +82,7 @@ namespace EchelonScriptCompiler.Frontend {
 
             foreach (var arg in funcDef.ArgumentsList) {
                 if (arg.ArgType != ES_ArgumentType.Normal)
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("[TODO] Argument type not implemented yet.");
 
                 var argName = idPool.GetIdentifier (arg.Name.Text.Span);
                 var argValType = GetTypeRef (arg.ValueType);
@@ -115,7 +115,7 @@ namespace EchelonScriptCompiler.Frontend {
                     break;
 
                 case ES_AstLabeledStatement labelStmt:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("[TODO] Labels not implemented yet.");
 
                 case ES_AstBlockStatement blockStmt: {
                     symbols.Push ();
@@ -208,7 +208,7 @@ namespace EchelonScriptCompiler.Frontend {
                 }
 
                 case ES_AstGotoCaseStatement gotoCaseStmt:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("[TODO] 'goto case' not implemented yet.");
 
                 case ES_AstReturnStatement retStmt: {
                     if (retStmt.ReturnExpression is not null)
@@ -263,7 +263,7 @@ namespace EchelonScriptCompiler.Frontend {
                 }
 
                 default:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("Statement type not implemented.");
             }
         }
 
@@ -289,7 +289,7 @@ namespace EchelonScriptCompiler.Frontend {
                             return true;
 
                         default:
-                            throw new NotImplementedException ();
+                            throw new NotImplementedException ("Size not implemented.");
                     }
                 }
 
@@ -306,7 +306,7 @@ namespace EchelonScriptCompiler.Frontend {
                             return true;
 
                         default:
-                            throw new NotImplementedException ();
+                            throw new NotImplementedException ("Size not implemented.");
                     }
                 }
 
@@ -468,7 +468,7 @@ namespace EchelonScriptCompiler.Frontend {
                     return FoldConstants_Expression_FunctionCall (ref transUnit, symbols, src, funcCallExpr, expectedType);
 
                 case ES_AstIndexingExpression indexExpr: {
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("[TODO] Indexing not implemented yet.");
                     /*FoldConstants_Expression (ref transUnit, symbols, src, indexExpr.IndexedExpression);
                     foreach (var rank in indexExpr.RankExpressions) {
                         if (rank is not null)
@@ -477,7 +477,7 @@ namespace EchelonScriptCompiler.Frontend {
                 }
 
                 case ES_AstNewExpression newExpr: {
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("[TODO] 'new' not implemented yet.");
                     /*if (newExpr.TypeDeclaration is not null)
                         newExpr.TypeDeclaration = GenerateASTTypeRef (ref transUnit, symbols, src, newExpr.TypeDeclaration);
 
@@ -510,10 +510,10 @@ namespace EchelonScriptCompiler.Frontend {
                 }
 
                 case ES_AstStringLiteralExpression:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("[TODO] String literals not implemented yet.");
 
                 case ES_AstCharLiteralExpression:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("[TODO] Char literals not implemented yet.");
 
                 #endregion
 
@@ -560,12 +560,12 @@ namespace EchelonScriptCompiler.Frontend {
                         }
 
                         default:
-                            throw new NotImplementedException ();
+                            throw new NotImplementedException ("Symbol type not implemented.");
                     }
                 }
 
                 case ES_AstMemberAccessExpression memberAccessExpr:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("[TODO] Member access not implemented yet.");
 
                 #endregion
 
@@ -655,7 +655,7 @@ namespace EchelonScriptCompiler.Frontend {
                 }
 
                 default:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("Expression type not implemented.");
             }
         }
 

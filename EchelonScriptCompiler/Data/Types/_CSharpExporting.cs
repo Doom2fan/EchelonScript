@@ -60,7 +60,7 @@ namespace EchelonScriptCompiler.Data.Types {
                 throw new ArgumentException ("Invalid name.", nameof (name));
 
             exportName = name;
-            throw new NotImplementedException ();
+            throw new NotImplementedException ("[TODO] Exports not implemented yet.");
         }
     }
 }

@@ -61,10 +61,10 @@ namespace EchelonScriptCompiler.Frontend {
 
                     return Environment.TypeUnknownValue;
                 } else if (symbol.Tag != FrontendSymbolType.Type)
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("Not implemented?");
 
                 if (typeParts.Length > 1)
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("[TODO] Nested types not implemented yet.");
 
                 return symbol.MatchType ();
             }
@@ -94,7 +94,7 @@ namespace EchelonScriptCompiler.Frontend {
                             break;
 
                         default:
-                            throw new NotImplementedException ();
+                            throw new NotImplementedException ("Access modifier not implemented yet.");
                     }
 
                     return type;
@@ -104,7 +104,7 @@ namespace EchelonScriptCompiler.Frontend {
                     return typeRef.Reference;
 
                 case ES_AstTypeDeclaration_Array arrayDecl:
-                    throw new NotImplementedException ("Array declarations not implemented");
+                    throw new NotImplementedException ("[TODO] Array declarations not implemented yet.");
 
                 case ES_AstTypeDeclaration_Basic basicDecl: {
                     var innerType = ResolveTypeDeclaration (ref transUnit, symbols, src, basicDecl.Inner!);
@@ -123,12 +123,12 @@ namespace EchelonScriptCompiler.Frontend {
                             return EnvironmentBuilder!.CreatePointerType (innerType);
 
                         default:
-                            throw new NotImplementedException ();
+                            throw new NotImplementedException ("Basic declaration type not implemented.");
                     }
                 }
 
                 default:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("Declaration type not implemented.");
             }
         }
 
@@ -350,7 +350,7 @@ namespace EchelonScriptCompiler.Frontend {
                                 break;
 
                             default:
-                                throw new NotImplementedException ();
+                                throw new NotImplementedException ("Node type not implemented.");
                         }
                     }
 
@@ -431,7 +431,7 @@ namespace EchelonScriptCompiler.Frontend {
             builder.BaseClass = baseClass;
             builder.InterfacesList = interfacesList;
 
-            throw new NotImplementedException ();
+            throw new NotImplementedException ("[TODO] Classes not implemented yet.");
         }
 
         protected void GatherTypes_Struct (ref TranslationUnitData transUnit, ref AstUnitData astUnit, ES_AstStructDefinition structDef, ES_StructData.Builder builder) {
@@ -447,11 +447,11 @@ namespace EchelonScriptCompiler.Frontend {
 
             ResolveAggregate (ref transUnit, ref astUnit, structDef);
 
-            return;
+            throw new NotImplementedException ("[TODO] Structs not implemented yet.");
         }
 
         protected void GatherTypes_Enum (ref TranslationUnitData transUnit, ref AstUnitData astUnit, ES_AstEnumDefinition enumDef, ES_EnumData.Builder builder) {
-            throw new NotImplementedException ();
+            throw new NotImplementedException ("[TODO] Enums not implemented yet.");
         }
 
         protected void GatherTypes_Function (ref TranslationUnitData transUnit, ref AstUnitData astUnit, ES_AstFunctionDefinition funcDef) {
@@ -464,19 +464,16 @@ namespace EchelonScriptCompiler.Frontend {
             Debug.Assert (funcDef.ArgumentsList is not null);
 
             Debug.Assert (funcDef.Statement is not null);
+            Debug.Assert (funcDef.Statement.Endpoint is null);
             // Expression-body functions must contain exactly a single expression statement.
             Debug.Assert (
-                (funcDef.ExpressionBody && funcDef.Statement is ES_AstExpressionStatement && funcDef.Statement.Endpoint is null) ||
+                (funcDef.ExpressionBody && funcDef.Statement is ES_AstExpressionStatement) ||
                 !funcDef.ExpressionBody
             );
 
             symbols.Push ();
 
-            ES_AstStatement? curStatement = funcDef.Statement;
-            while (curStatement is not null) {
-                GatherTypes_Statement (ref transUnit, symbols, unitSrc, curStatement);
-                curStatement = curStatement.Endpoint;
-            }
+            GatherTypes_Statement (ref transUnit, symbols, unitSrc, funcDef.Statement);
 
             symbols.Pop ();
         }
@@ -612,7 +609,7 @@ namespace EchelonScriptCompiler.Frontend {
                 }
 
                 default:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("Statement type not implemented.");
             }
         }
 
@@ -698,7 +695,7 @@ namespace EchelonScriptCompiler.Frontend {
                     break;
 
                 default:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("Expression type not implemented.");
             }
         }
     }

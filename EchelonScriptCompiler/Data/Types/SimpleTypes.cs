@@ -52,7 +52,7 @@ namespace EchelonScriptCompiler.Data.Types {
                 ES_IntSize.Int32 => 4,
                 ES_IntSize.Int64 => 8,
 
-                _ => throw new NotImplementedException (),
+                _ => throw new NotImplementedException ("Size not implemented."),
             };
         }
 
@@ -84,7 +84,7 @@ namespace EchelonScriptCompiler.Data.Types {
                 ES_FloatSize.Single => 4,
                 ES_FloatSize.Double => 8,
 
-                _ => throw new NotImplementedException (),
+                _ => throw new NotImplementedException ("Size not implemented."),
             };
         }
 

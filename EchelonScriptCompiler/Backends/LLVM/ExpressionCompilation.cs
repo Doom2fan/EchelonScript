@@ -70,7 +70,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                     return GenerateCode_Expression_FunctionCall (ref transUnit, symbols, src, funcCallExpr, expectedType);
 
                 case ES_AstIndexingExpression indexExpr: {
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("[TODO] Indexing expressions not implemented yet.");
                     /*GenerateCode_Expression (ref transUnit, symbols, src, indexExpr.IndexedExpression);
                     foreach (var rank in indexExpr.RankExpressions) {
                         if (rank is not null)
@@ -79,7 +79,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 }
 
                 case ES_AstNewExpression newExpr: {
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("[TODO] 'new' expressions not implemented yet.");
                     /*if (newExpr.TypeDeclaration is not null)
                         newExpr.TypeDeclaration = GenerateASTTypeRef (ref transUnit, symbols, src, newExpr.TypeDeclaration);
 
@@ -116,7 +116,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                             break;
 
                         default:
-                            throw new NotImplementedException ();
+                            throw new NotImplementedException ("Size not implemented.");
                     }
 
                     return new ExpressionData { Expr = expr, Type = type, Value = value, Constant = true, Addressable = false };
@@ -138,10 +138,10 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 }
 
                 case ES_AstStringLiteralExpression:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("[TODO] String literals not implemented yet.");
 
                 case ES_AstCharLiteralExpression:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("[TODO] Character literals not implemented yet.");
 
                 case ES_AstNameExpression nameExpr: {
                     var id = idPool.GetIdentifier (nameExpr.Value.Text.Span);
@@ -170,12 +170,12 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                         }
 
                         default:
-                            throw new NotImplementedException ();
+                            throw new NotImplementedException ("Symbol type not implemented.");
                     }
                 }
 
                 case ES_AstMemberAccessExpression memberAccessExpr:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("[TODO] Member access not implemented yet.");
 
                 #endregion
 
@@ -233,7 +233,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                     return GenerateCode_ConditionalExpression (ref transUnit, symbols, src, condExpr, expectedType);
 
                 default:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("Expression type not implemented.");
             }
         }
 
@@ -302,7 +302,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 }
 
                 default:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("Cast not implemented.");
             }
 
             return ret;
@@ -477,7 +477,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
                 case SimpleBinaryExprType.Power:
                 case SimpleBinaryExprType.AssignPower:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("[TODO] ** not implemented yet.");
 
                 case SimpleBinaryExprType.Equals:
                     value = builderRef.BuildICmp (LLVMIntPredicate.LLVMIntEQ, lhs.Value, rhs.Value, "intEqTmp");
@@ -513,7 +513,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                     break;
 
                 default:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("Operation not implemented yet");
             }
 
             if (isAssignment)
@@ -568,11 +568,12 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                     break;
 
                 case SimpleBinaryExprType.LogicalAnd:
+                    throw new NotImplementedException ("[TODO] && not implemented yet.");
                 case SimpleBinaryExprType.LogicalOr:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("[TODO] || not implemented yet.");
 
                 default:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("Operation not implemented yet.");
             }
 
             if (isAssignment)
@@ -653,10 +654,10 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
                 case SimpleBinaryExprType.Power:
                 case SimpleBinaryExprType.AssignPower:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("[TODO] ** not implemented yet.");
 
                 default:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("Operation not implemented yet.");
             }
 
             if (isAssignment)
@@ -688,10 +689,10 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             switch (exprOp) {
                 case SimpleBinaryExprType.Power:
                 case SimpleBinaryExprType.AssignPower:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("[TODO] ** not implemented yet.");
 
                 default:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("Operation not implemented yet.");
             }
 
             if (isAssignment)
@@ -720,7 +721,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             else if (inner.Type->TypeTag == ES_TypeTag.Float)
                 return GenerateCode_UnaryExpr_Float (inner, exprOp);
             else
-                throw new NotImplementedException ();
+                throw new NotImplementedException ("Operation not implemented yet.");
 
             throw new CompilationException (ES_BackendErrors.FrontendError);
         }
@@ -747,7 +748,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                     break;
 
                 default:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("Operation not implemented yet.");
             }
 
             return new ExpressionData { Type = inner.Type, Value = value, Constant = inner.Constant, Addressable = false, };
@@ -767,7 +768,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                     break;
 
                 default:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("Operation not implemented yet.");
             }
 
             return new ExpressionData { Type = inner.Type, Value = value, Constant = inner.Constant, Addressable = false, };
@@ -790,7 +791,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                     break;
 
                 default:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("Operation not implemented yet.");
             }
 
             return new ExpressionData { Type = inner.Type, Value = value, Constant = inner.Constant, Addressable = false, };
@@ -865,7 +866,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
             // TODO: Handle default args.
             if (reqArgCount != funcArgCount)
-                throw new NotImplementedException ();
+                throw new NotImplementedException ("[TODO] Default args not implemented yet.");
 
             var retVal = builderRef.BuildCall (funcDef, argsArr.Span, "funcCall");
 

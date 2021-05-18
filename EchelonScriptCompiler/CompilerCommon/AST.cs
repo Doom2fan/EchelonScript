@@ -271,7 +271,7 @@ namespace EchelonScriptCompiler.CompilerCommon {
                     return innerLen + 1;
 
                 default:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("Declaration type not implemented.");
             }
         }
 
@@ -327,7 +327,7 @@ namespace EchelonScriptCompiler.CompilerCommon {
                 }
 
                 default:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("Declaration type not implemented.");
             }
         }
     }
@@ -1241,7 +1241,7 @@ namespace EchelonScriptCompiler.CompilerCommon {
                     return Value;
 
                 default:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("Size not implemented.");
             }
         }
     }

@@ -433,7 +433,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                                     break;
 
                                 case FrontendSymbolType.Variable:
-                                    throw new NotImplementedException ();
+                                    throw new NotImplementedException ("?");
                             }
                         }
                     }
@@ -451,11 +451,11 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                         foreach (var def in nmDef.Contents) {
                             switch (def) {
                                 case ES_AstClassDefinition classDef:
-                                    throw new NotImplementedException ();
+                                    throw new NotImplementedException ("[TODO] Classes not implemented yet.");
                                 case ES_AstStructDefinition structDef:
-                                    throw new NotImplementedException ();
+                                    throw new NotImplementedException ("[TODO] Structs not implemented yet.");
                                 case ES_AstEnumDefinition enumDef:
-                                    throw new NotImplementedException ();
+                                    throw new NotImplementedException ("[TODO] Enums not implemented yet.");
 
                                 case ES_AstFunctionDefinition funcDef: {
                                     GenerateCode_Function (ref transUnit, namespaceData, symbols, src, null, funcDef);
@@ -495,7 +495,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                         case ES_IntSize.Int64: return contextRef.Int64Type;
 
                         default:
-                            throw new NotImplementedException ();
+                            throw new NotImplementedException ("Size not implemented.");
                     }
                 }
 
@@ -507,7 +507,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                         case ES_FloatSize.Double: return contextRef.DoubleType;
 
                         default:
-                            throw new NotImplementedException ();
+                            throw new NotImplementedException ("Size not implemented.");
                     }
                 }
 
@@ -520,10 +520,10 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 case ES_TypeTag.Const:
                 case ES_TypeTag.Immutable:
                 case ES_TypeTag.Array:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("[TODO] Type not implemented yet.");
 
                 default:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("Type not implemented.");
             }
         }
 
@@ -535,7 +535,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 case ES_IntSize.Int64: return contextRef.Int64Type;
 
                 default:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("Size not implemented.");
             }
         }
 
@@ -545,7 +545,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 case ES_FloatSize.Double: return contextRef.DoubleType;
 
                 default:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("Size not implemented.");
             }
         }
 

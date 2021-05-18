@@ -102,7 +102,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 }
 
                 default:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("Variable type not implemented.");
             }
         }
 
@@ -116,7 +116,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
                 funcData = ptr;
             } else if (parentType is not null) {
-                throw new NotImplementedException ();
+                throw new NotImplementedException ("[TODO] Member functions not implemented yet.");
             } else
                 throw new CompilationException (ES_BackendErrors.FrontendError);
 
@@ -124,13 +124,13 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             var funcType = funcData->FunctionType;
 
             if (funcData->OptionalArgsCount > 0)
-                throw new NotImplementedException ();
+                throw new NotImplementedException ("[TODO] Optional arguments not implemented yet.");
 
             using var argsArr = PooledArray<LLVMTypeRef>.GetArray (funcType->ArgumentsList.Length);
             int argNum = 0;
             foreach (ref var arg in funcType->ArgumentsList.Span) {
                 if (arg.ArgType != ES_ArgumentType.Normal)
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("[TODO] Argument type not implemented yet.");
 
                 argsArr.Span [argNum++] = GetLLVMType (arg.ValueType);
             }
@@ -146,7 +146,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 if (funcDef == null)
                     funcDef = moduleRef.AddFunction (funcName, funcTypeRef);
             } else if (parentType is not null) {
-                throw new NotImplementedException ();
+                throw new NotImplementedException ("[TODO] Member functions not implemented yet.");
             } else
                 throw new CompilationException (ES_BackendErrors.FrontendError);
         }
@@ -202,7 +202,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                         break;
 
                     default:
-                        throw new NotImplementedException ();
+                        throw new NotImplementedException ("Argument type not implemented.");
                 }
 
                 symbols.AddSymbol (argData.Name, new Symbol (
@@ -263,7 +263,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                     return new StatementData { AlwaysReturns = false };
 
                 case ES_AstLabeledStatement labelStmt: {
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("[TODO] Labels not implemented yet.");
                     //return GenerateCode_Statement (ref transUnit, symbols, src, retType, labelStmt.Statement);
                 }
 
@@ -397,7 +397,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 }
 
                 case ES_AstSwitchStatement switchStmt: {
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("[TODO] Switches not implemented yet.");
                     /*var exprTypeData = GenerateCode_Expression (ref transUnit, symbols, src, switchStmt.ValueExpression, null);
 
                     foreach (var section in switchStmt.Sections) {
@@ -429,7 +429,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 }
 
                 case ES_AstGotoCaseStatement gotoCaseStmt:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("[TODO] 'goto case' not implemented yet.");
 
                 case ES_AstReturnStatement retStmt: {
                     if (retType->TypeTag == ES_TypeTag.Void) {
@@ -534,7 +534,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 }
 
                 default:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("Expression type not implemented.");
             }
         }
     }

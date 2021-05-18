@@ -47,7 +47,7 @@ namespace EchelonScriptCompiler.Frontend {
                     return unsigned ? UInt64 : Int64;
 
                 default:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("Size not implemented.");
             }
         }
 
@@ -60,7 +60,7 @@ namespace EchelonScriptCompiler.Frontend {
                     return Float64;
 
                 default:
-                    throw new NotImplementedException ();
+                    throw new NotImplementedException ("Size not implemented.");
             }
         }
     }

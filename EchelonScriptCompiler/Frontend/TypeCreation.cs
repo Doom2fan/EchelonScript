@@ -62,10 +62,11 @@ namespace EchelonScriptCompiler.Frontend {
                             }
 
                             case ES_AstFunctionDefinition:
+                                // Functions are handled in a pass of their own.
                                 break;
 
                             default:
-                                throw new NotImplementedException ();
+                                throw new NotImplementedException ("Node type not implemented yet.");
                         }
                     }
                 }

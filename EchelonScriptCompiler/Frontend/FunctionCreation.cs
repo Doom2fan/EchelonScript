@@ -48,15 +48,16 @@ namespace EchelonScriptCompiler.Frontend {
                             // Once we've got everything else working with aggregates, we need to traverse
                             // these to create their functions.
                             case ES_AstClassDefinition classDef:
+                                throw new NotImplementedException ("[TODO] Classes not implemented yet.");
                             case ES_AstStructDefinition structDef:
-                                throw new NotImplementedException ();
+                                throw new NotImplementedException ("[TODO] Structs not implemented yet.");
 
                             // These are ignored.
                             case ES_AstEnumDefinition enumDef:
                                 break;
 
                             default:
-                                throw new NotImplementedException ();
+                                throw new NotImplementedException ("Node type not implemented.");
                         }
                     }
 
@@ -146,7 +147,7 @@ namespace EchelonScriptCompiler.Frontend {
 
             // Add the function variant to the namespace or parent type.
             if (parentType != null) {
-                throw new NotImplementedException ();
+                throw new NotImplementedException ("[TODO] Member functions not implemented yet.");
             } else {
                 if (namespaceBuilder.CheckTypeExists (funcName, null) != null) {
                     errorList.Add (ES_FrontendErrors.GenTypeAlreadyDefined (

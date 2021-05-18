@@ -621,7 +621,7 @@ namespace EchelonScriptCompiler.Data {
                         return false;
 
                     default:
-                        throw new NotImplementedException ();
+                        throw new NotImplementedException ("Operation not implemented.");
                 }
             }
 
@@ -642,7 +642,7 @@ namespace EchelonScriptCompiler.Data {
                         return false;
 
                     default:
-                        throw new NotImplementedException ();
+                        throw new NotImplementedException ("Operation not implemented.");
                 }
             }
 
@@ -663,7 +663,7 @@ namespace EchelonScriptCompiler.Data {
                         return false;
 
                     default:
-                        throw new NotImplementedException ();
+                        throw new NotImplementedException ("Operation not implemented.");
                 }
             }
 
@@ -697,27 +697,27 @@ namespace EchelonScriptCompiler.Data {
             #region Derived type creation
 
             public ES_TypeInfo* CreatePointerType (ES_TypeInfo* baseType) {
-                throw new NotImplementedException ();
+                throw new NotImplementedException ("[TODO] Pointers not implemented yet.");
             }
 
             public ES_TypeInfo* CreateNullableType (ES_TypeInfo* baseType) {
-                throw new NotImplementedException ();
+                throw new NotImplementedException ("[TODO] Nullables not implemented yet.");
             }
 
             public ES_TypeInfo* CreateConstType (ES_TypeInfo* baseType) {
-                throw new NotImplementedException ();
+                throw new NotImplementedException ("[TODO] Const not implemented yet.");
             }
 
             public ES_TypeInfo* CreateImmutableType (ES_TypeInfo* baseType) {
-                throw new NotImplementedException ();
+                throw new NotImplementedException ("[TODO] Immutable not implemented yet.");
             }
 
             public ES_TypeInfo* CreateArrayType (ES_TypeInfo* elementType, int dimensionCount) {
-                throw new NotImplementedException ();
+                throw new NotImplementedException ("[TODO] Arrays not implemented yet.");
             }
 
             public ES_TypeInfo* CreateArrayType (ES_TypeInfo* elementType, ReadOnlySpan<int> dimensionsSizes) {
-                throw new NotImplementedException ();
+                throw new NotImplementedException ("[TODO] Arrays not implemented yet.");
             }
 
             #endregion

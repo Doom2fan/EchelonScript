@@ -136,7 +136,7 @@ namespace EchelonScriptCompiler.Frontend {
                     break;
 
                 case SimpleBinaryExprType.Power:
-                    throw new NotImplementedException ("** is not implemented yet.");
+                    throw new NotImplementedException ("[TODO] ** is not implemented yet.");
 
                 default:
                     return;
@@ -154,7 +154,7 @@ namespace EchelonScriptCompiler.Frontend {
             float finalValue;
             switch (op) {
                 case SimpleBinaryExprType.Power:
-                    throw new NotImplementedException ("** is not implemented yet.");
+                    throw new NotImplementedException ("[TODO] ** is not implemented yet.");
 
                 default:
                     return;
@@ -232,7 +232,7 @@ namespace EchelonScriptCompiler.Frontend {
                     break;
 
                 case SimpleBinaryExprType.Power:
-                    throw new NotImplementedException ("** is not implemented yet.");
+                    throw new NotImplementedException ("[TODO] ** is not implemented yet.");
 
                 default:
                     return;
@@ -250,7 +250,7 @@ namespace EchelonScriptCompiler.Frontend {
             double finalValue;
             switch (op) {
                 case SimpleBinaryExprType.Power:
-                    throw new NotImplementedException ("** is not implemented yet.");
+                    throw new NotImplementedException ("[TODO] ** is not implemented yet.");
 
                 default:
                     return;
