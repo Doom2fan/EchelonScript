@@ -245,6 +245,8 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 }
             }
 
+            symbols.Pop ();
+
             return true;
         }
 
