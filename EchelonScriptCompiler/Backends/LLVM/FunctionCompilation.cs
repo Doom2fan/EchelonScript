@@ -216,19 +216,33 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 param.Name = StringPool.Shared.GetOrAdd (argData.Name.Span, Encoding.ASCII);
             }
 
-            if (funcDef.ExpressionBody)
-                throw new NotImplementedException ();
-
             Debug.Assert (funcDef.Statement is not null);
             Debug.Assert (funcDef.Statement.Endpoint is null);
+            if (funcDef.ExpressionBody) {
+                Debug.Assert (funcDef.Statement is ES_AstExpressionStatement);
 
-            var stmtData = GenerateCode_Statement (ref transUnit, symbols, src, funcInfo, retType, funcDef.Statement);
+                var exprExpType = retType->TypeTag != ES_TypeTag.Void ? retType : env.TypeUnknownValue;
+                var exprStmt = (funcDef.Statement as ES_AstExpressionStatement)!;
+                var exprData = GenerateCode_Expression (ref transUnit, symbols, src, exprStmt.Expression, exprExpType);
 
-            if (!stmtData.AlwaysReturns) {
-                if (retType->TypeTag == ES_TypeTag.Void)
-                    builderRef.BuildBr (funcInfo.RetBlock);
-                else
+                if (exprData.TypeInfo is not null || exprData.Function is not null)
                     throw new CompilationException (ES_BackendErrors.FrontendError);
+
+                if (retType->TypeTag != ES_TypeTag.Void) {
+                    GenerateCode_EnsureImplicitCompat (ref exprData, retType);
+                    builderRef.BuildStore (GetLLVMValue (exprData.Value), funcInfo.RetValue);
+                }
+
+                builderRef.BuildBr (funcInfo.RetBlock);
+            } else {
+                var stmtData = GenerateCode_Statement (ref transUnit, symbols, src, funcInfo, retType, funcDef.Statement);
+
+                if (!stmtData.AlwaysReturns) {
+                    if (retType->TypeTag == ES_TypeTag.Void)
+                        builderRef.BuildBr (funcInfo.RetBlock);
+                    else
+                        throw new CompilationException (ES_BackendErrors.FrontendError);
+                }
             }
 
             return true;

@@ -108,6 +108,8 @@ namespace EchelonScriptCompiler.Frontend {
 
             var retType = GetTypeRef (funcDef.ReturnType);
 
+            Debug.Assert (retType is not null);
+
             foreach (var arg in funcDef.ArgumentsList) {
                 if (arg.ArgType != ES_ArgumentType.Normal)
                     throw new NotImplementedException ();
@@ -122,31 +124,25 @@ namespace EchelonScriptCompiler.Frontend {
                 }
             }
 
-            if (funcDef.ExpressionBody)
-                throw new NotImplementedException ();
+            Debug.Assert (funcDef.Statement is not null);
+            Debug.Assert (funcDef.Statement.Endpoint is null);
+            if (funcDef.ExpressionBody) {
+                Debug.Assert (funcDef.Statement is ES_AstExpressionStatement);
 
-            bool alwaysReturns = false;
-            bool reportedUnreachable = false;
+                var exprExpType = retType->TypeTag != ES_TypeTag.Void ? retType : Environment.TypeUnknownValue;
+                var exprStmt = (funcDef.Statement as ES_AstExpressionStatement)!;
+                var exprVal = CheckTypes_Expression (ref transUnit, symbols, unitSrc, exprStmt.Expression, exprExpType);
 
-            ES_AstStatement? curStatement = funcDef.Statement;
-            while (curStatement is not null) {
-                if (alwaysReturns && !reportedUnreachable) {
-                    warningList.Add (new EchelonScriptErrorMessage (
-                        unitSrc, curStatement.NodeBounds, ES_FrontendWarnings.UnreachableCode
-                    ));
-
-                    reportedUnreachable = true;
+                if (retType->TypeTag != ES_TypeTag.Void) {
+                    if (!CheckTypes_EnsureCompat (retType, exprVal.Type, unitSrc, exprVal.Expr.NodeBounds, out _))
+                        errorList.Add (new EchelonScriptErrorMessage (funcDef.Name, ES_FrontendErrors.MissingReturnStatement));
                 }
+            } else {
+                var stmtData = CheckTypes_Statement (ref transUnit, symbols, unitSrc, retType, funcDef.Statement);
 
-                var stmtData = CheckTypes_Statement (ref transUnit, symbols, unitSrc, retType, curStatement);
-
-                alwaysReturns |= stmtData.AlwaysReturns;
-
-                curStatement = curStatement.Endpoint;
+                if (!stmtData.AlwaysReturns && retType->TypeTag != ES_TypeTag.Void)
+                    errorList.Add (new EchelonScriptErrorMessage (funcDef.Name, ES_FrontendErrors.MissingReturnStatement));
             }
-
-            if (!alwaysReturns && retType is not null && retType->TypeTag != ES_TypeTag.Void)
-                errorList.Add (new EchelonScriptErrorMessage (funcDef.Name, ES_FrontendErrors.MissingReturnStatement));
 
             symbols.Pop ();
         }
