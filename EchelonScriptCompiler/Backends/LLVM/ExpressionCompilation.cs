@@ -124,7 +124,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
                 case ES_AstBooleanConstantExpression boolConstExpr: {
                     var value = LLVMValueRef.CreateConstInt (contextRef.Int1Type, boolConstExpr.Value ? 1uL : 0uL, false);
-                    return new ExpressionData { Expr = expr, Type = env.TypeBool, Constant = true, Addressable = false };
+                    return new ExpressionData { Expr = expr, Type = env.TypeBool, Value = value, Constant = true, Addressable = false };
                 }
 
                 case ES_AstFloat32ConstantExpression floatConstLit: {
