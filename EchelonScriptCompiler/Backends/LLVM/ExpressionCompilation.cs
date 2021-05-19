@@ -205,6 +205,9 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 #endregion
 
                 case ES_AstSimpleBinaryExpression simpleBinaryExpr: {
+                    if (simpleBinaryExpr.ExpressionType.IsLogical ())
+                        return GenerateCode_LogicalBinaryExpr (ref transUnit, symbols, src, simpleBinaryExpr);
+
                     var expectedRHSType = expectedType;
 
                     var lhs = GenerateCode_Expression (ref transUnit, symbols, src, simpleBinaryExpr.Left, expectedType);
@@ -567,11 +570,6 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                     value = builderRef.BuildXor (lhs.Value, rhs.Value, "boolXorTmp");
                     break;
 
-                case SimpleBinaryExprType.LogicalAnd:
-                    throw new NotImplementedException ("[TODO] && not implemented yet.");
-                case SimpleBinaryExprType.LogicalOr:
-                    throw new NotImplementedException ("[TODO] || not implemented yet.");
-
                 default:
                     throw new NotImplementedException ("Operation not implemented yet.");
             }
@@ -702,6 +700,60 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 return new ExpressionData { Type = lhs.Type, Value = value, Constant = false, Addressable = false, };
             else
                 return new ExpressionData { Type = env!.TypeBool, Value = value, Constant = false, Addressable = false, };
+        }
+
+        private ExpressionData GenerateCode_LogicalBinaryExpr (
+            ref TranslationUnitData transUnit, SymbolStack<Symbol> symbols, ReadOnlySpan<char> src,
+            ES_AstSimpleBinaryExpression binExpr
+        ) {
+            var boolType = env!.TypeBool;
+
+            var exprOp = binExpr.ExpressionType;
+            Debug.Assert (exprOp.IsLogical ());
+
+            bool isAnd = exprOp == SimpleBinaryExprType.LogicalAnd;
+            Debug.Assert (isAnd || exprOp == SimpleBinaryExprType.LogicalOr);
+
+            var ownerFunc = builderRef.InsertBlock.Parent;
+
+            var lhsBlock = builderRef.InsertBlock;
+            var rhsBlock = ownerFunc.AppendBasicBlock ("logicalOp_rhs");
+            var endBlock = ownerFunc.AppendBasicBlock ("logicalOp_end");
+
+            // Generate the left-hand side.
+            var lhs = GenerateCode_Expression (ref transUnit, symbols, src, binExpr.Left, boolType);
+
+            GenerateCode_EnsureImplicitCompat (ref lhs, boolType);
+
+            lhs.Value = GetLLVMValue (lhs.Value);
+            if (isAnd)
+                builderRef.BuildCondBr (lhs.Value, rhsBlock, endBlock);
+            else
+                builderRef.BuildCondBr (lhs.Value, endBlock, rhsBlock);
+
+            // Generate the right-hand side.
+            builderRef.PositionAtEnd (rhsBlock);
+
+            var rhs = GenerateCode_Expression (ref transUnit, symbols, src, binExpr.Right, boolType);
+            GenerateCode_EnsureImplicitCompat (ref rhs, boolType);
+
+            LLVMValueRef rhsValue;
+
+            rhs.Value = GetLLVMValue (rhs.Value);
+            if (isAnd)
+                rhsValue = builderRef.BuildAnd (lhs.Value, rhs.Value, "boolLogicalAndTmp");
+            else
+                rhsValue = builderRef.BuildOr (lhs.Value, rhs.Value, "boolLogicalOrTmp");
+            builderRef.BuildBr (endBlock);
+
+            // Generate the end block.
+            builderRef.PositionAtEnd (endBlock);
+
+            var value = builderRef.BuildPhi (GetLLVMType (boolType), "boolLogicalOrVal");
+            value.AddIncoming (lhs.Value, lhsBlock);
+            value.AddIncoming (rhsValue, rhsBlock);
+
+            return new ExpressionData { Type = boolType, Value = value, Constant = false, Addressable = false, };
         }
 
         #endregion

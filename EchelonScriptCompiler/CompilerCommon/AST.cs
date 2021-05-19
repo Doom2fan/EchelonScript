@@ -996,6 +996,10 @@ namespace EchelonScriptCompiler.CompilerCommon {
             return op >= SimpleBinaryExprType.TAG_AssignExpr_Start && op <= SimpleBinaryExprType.TAG_AssignExpr_End;
         }
 
+        public static bool IsLogical (this SimpleBinaryExprType op) {
+            return op == SimpleBinaryExprType.LogicalAnd || op == SimpleBinaryExprType.LogicalOr;
+        }
+
         public static bool IsBitShift (this SimpleBinaryExprType op) {
             switch (op) {
                 case SimpleBinaryExprType.ShiftLeft:
