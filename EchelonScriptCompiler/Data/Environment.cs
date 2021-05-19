@@ -441,6 +441,8 @@ namespace EchelonScriptCompiler.Data {
                     if (exprType.IsAssignment ()) {
                         if (lhsIntType->IntSize < rhsIntType->IntSize)
                             return false;
+
+                        finalType = lhsType;
                     } else if (!exprType.IsComparison ()) {
                         if (lhsIntType->IntSize >= rhsIntType->IntSize)
                             finalType = lhsType;
