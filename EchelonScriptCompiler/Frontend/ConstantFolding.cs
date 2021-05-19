@@ -376,7 +376,7 @@ namespace EchelonScriptCompiler.Frontend {
             if (binExpr.Left is ES_AstIntegerConstantExpression lhsInt && binExpr.Right is ES_AstIntegerConstantExpression rhsInt) {
                 if (op.IsComparison ())
                     FoldConstants_BinaryExpression_IntInt_Comp (ref expr, op, lhsInt, rhsInt);
-                if (op.IsBitShift ())
+                else if (op.IsBitShift ())
                     FoldConstants_BinaryExpression_IntInt_BitShifting (ref expr, op, lhsInt, rhsInt);
                 else
                     FoldConstants_BinaryExpression_IntInt_Arithmetic (ref expr, op, lhsInt, rhsInt);
