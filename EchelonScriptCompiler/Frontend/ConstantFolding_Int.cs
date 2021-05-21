@@ -115,7 +115,7 @@ namespace EchelonScriptCompiler.Frontend {
             }
         }
 
-        protected void FoldConstants_ExplicitCast_ToInt (ES_TypeInfo* dstType, in ES_AstExpression innerExpr, ref ES_AstExpression expr) {
+        protected void FoldConstants_ExplicitCast_ToInt (ES_TypeInfo* dstType, in ES_AstExpression innerExpr, ref ES_AstExpression expr, out bool isRedundant) {
             Debug.Assert (dstType is not null);
             Debug.Assert (dstType->TypeTag == ES_TypeTag.Int);
 
@@ -130,10 +130,16 @@ namespace EchelonScriptCompiler.Frontend {
                 else
                     val = intExpr.Value;
 
+                isRedundant = (
+                    constIntType->Unsigned == dstIntType->Unsigned &&
+                    constIntType->IntSize == dstIntType->IntSize
+                );
+
                 expr = new ES_AstIntegerConstantExpression (dstType, val, expr);
             } else if (innerExpr is ES_AstFloat32ConstantExpression f32Expr) {
                 ulong val;
 
+                isRedundant = false;
                 switch (dstIntType->IntSize) {
                     case ES_IntSize.Int8:
                         if (!dstIntType->Unsigned)
@@ -168,6 +174,7 @@ namespace EchelonScriptCompiler.Frontend {
             } else if (innerExpr is ES_AstFloat64ConstantExpression f64Expr) {
                 ulong val;
 
+                isRedundant = false;
                 switch (dstIntType->IntSize) {
                     case ES_IntSize.Int8:
                         if (!dstIntType->Unsigned)
@@ -199,7 +206,8 @@ namespace EchelonScriptCompiler.Frontend {
                 }
 
                 expr = new ES_AstIntegerConstantExpression (dstType, val, expr);
-            }
+            } else
+                isRedundant = false;
         }
 
         protected void FoldConstants_BinaryExpression_IntInt_Comp (

@@ -14,7 +14,7 @@ using EchelonScriptCompiler.Data.Types;
 
 namespace EchelonScriptCompiler.Frontend {
     public unsafe partial class CompilerFrontend {
-        protected void FoldConstants_ExplicitCast_ToFloat (ES_TypeInfo* dstType, in ES_AstExpression innerExpr, ref ES_AstExpression expr) {
+        protected void FoldConstants_ExplicitCast_ToFloat (ES_TypeInfo* dstType, in ES_AstExpression innerExpr, ref ES_AstExpression expr, out bool isRedundant) {
             Debug.Assert (dstType is not null);
             Debug.Assert (dstType->TypeTag == ES_TypeTag.Float);
 
@@ -23,6 +23,7 @@ namespace EchelonScriptCompiler.Frontend {
             if (innerExpr is ES_AstIntegerConstantExpression intExpr) {
                 var srcIntType = (ES_IntTypeData*) intExpr.IntType;
 
+                isRedundant = false;
                 if (srcIntType->Unsigned) {
                     switch (dstFloatType->FloatSize) {
                         case ES_FloatSize.Single:
@@ -45,6 +46,8 @@ namespace EchelonScriptCompiler.Frontend {
                     }
                 }
             } else if (innerExpr is ES_AstFloat32ConstantExpression f32Expr) {
+                isRedundant = dstFloatType->FloatSize == ES_FloatSize.Single;
+
                 switch (dstFloatType->FloatSize) {
                     case ES_FloatSize.Single:
                         expr = new ES_AstFloat32ConstantExpression (f32Expr.Value, expr);
@@ -55,6 +58,8 @@ namespace EchelonScriptCompiler.Frontend {
                         break;
                 }
             } else if (innerExpr is ES_AstFloat64ConstantExpression f64Expr) {
+                isRedundant = dstFloatType->FloatSize == ES_FloatSize.Double;
+
                 switch (dstFloatType->FloatSize) {
                     case ES_FloatSize.Single:
                         expr = new ES_AstFloat32ConstantExpression ((float) f64Expr.Value, expr);
@@ -64,7 +69,8 @@ namespace EchelonScriptCompiler.Frontend {
                         expr = new ES_AstFloat64ConstantExpression (f64Expr.Value, expr);
                         break;
                 }
-            }
+            } else
+                isRedundant = false;
         }
 
         /*

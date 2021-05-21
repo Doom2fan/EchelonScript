@@ -342,23 +342,26 @@ namespace EchelonScriptCompiler.Frontend {
             }
         }
 
-        protected void FoldConstants_ExplicitCast (ES_TypeInfo* dstType, ref ES_AstExpression expr) {
+        protected void FoldConstants_ExplicitCast (ES_TypeInfo* dstType, ref ES_AstExpression expr, out bool isRedundant) {
             Debug.Assert (dstType is not null);
 
             var castExpr = expr as ES_AstCastExpression;
             Debug.Assert (castExpr is not null);
 
-            if (FoldConstants_EnsureCompat (dstType, ref expr))
+            if (FoldConstants_EnsureCompat (dstType, ref expr)) {
+                isRedundant = true;
                 return;
+            }
 
+            isRedundant = false;
             switch (dstType->TypeTag) {
                 case ES_TypeTag.Int: {
-                    FoldConstants_ExplicitCast_ToInt (dstType, castExpr.InnerExpression, ref expr);
+                    FoldConstants_ExplicitCast_ToInt (dstType, castExpr.InnerExpression, ref expr, out isRedundant);
                     break;
                 }
 
                 case ES_TypeTag.Float: {
-                    FoldConstants_ExplicitCast_ToFloat (dstType, castExpr.InnerExpression, ref expr);
+                    FoldConstants_ExplicitCast_ToFloat (dstType, castExpr.InnerExpression, ref expr, out isRedundant);
                     break;
                 }
             }
@@ -604,7 +607,13 @@ namespace EchelonScriptCompiler.Frontend {
                     var destType = GetTypeRef (castExpr.DestinationType);
                     var exprType = FoldConstants_Expression (ref transUnit, symbols, src, ref castExpr.InnerExpression, null);
 
-                    FoldConstants_ExplicitCast (destType, ref expr);
+                    FoldConstants_ExplicitCast (destType, ref expr, out var isRedundant);
+
+                    if (isRedundant) {
+                        infoList.Add (new EchelonScriptErrorMessage (
+                            src, castExpr.CastBounds, ES_FrontendInfoMsg.RedundantCast
+                        ));
+                    }
 
                     return new ExpressionData { Expr = expr, Type = destType };
                 }
