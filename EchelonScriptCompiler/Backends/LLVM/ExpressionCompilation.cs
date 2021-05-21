@@ -879,6 +879,12 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             int callArgCount = funcCallExpr.Arguments.Length;
             int reqArgCount = 0;
 
+            if (!envBuilder!.PointerAstMap.TryGetValue ((IntPtr) func, out var funcASTNode))
+                throw new CompilationException (ES_BackendErrors.NonExistentASTMap);
+
+            var funcAST = funcASTNode as ES_AstFunctionDefinition;
+            Debug.Assert (funcAST is not null);
+
             if (func is not null) {
                 funcName = func->FullyQualifiedName;
                 reqArgCount = funcArgCount - func->OptionalArgsCount;
@@ -896,8 +902,10 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             Debug.Assert (funcDef != null);
 
             using var argsArr = UnmanagedArray<LLVMValueRef>.GetArray (funcArgCount);
+            int argIdx = 0;
 
-            for (int argIdx = 0; argIdx < callArgCount; argIdx++) {
+            // Handle passed-in args.
+            for (; argIdx < callArgCount; argIdx++) {
                 var arg = funcCallExpr.Arguments [argIdx];
                 var argData = func->Arguments.Elements + argIdx;
                 var argTypeData = funcType->ArgumentsList.Elements + argIdx;
@@ -916,9 +924,24 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 argsArr.Span [argIdx] = GetLLVMValue (argExprData.Value);
             }
 
-            // TODO: Handle default args.
-            if (reqArgCount != funcArgCount)
-                throw new NotImplementedException ("[TODO] Default args not implemented yet.");
+            // Handle default args.
+            for (; argIdx < funcArgCount; argIdx++) {
+                var arg = funcAST.ArgumentsList [argIdx];
+                var argData = func->Arguments.Elements + argIdx;
+                var argTypeData = funcType->ArgumentsList.Elements + argIdx;
+
+                if (arg.DefaultExpression is null)
+                    throw new CompilationException (ES_BackendErrors.FrontendError);
+                if (argTypeData->ArgType != ES_ArgumentType.Normal && argTypeData->ArgType != ES_ArgumentType.In)
+                    throw new CompilationException (ES_BackendErrors.FrontendError);
+
+                var argValType = argTypeData->ValueType;
+                var argExprData = GenerateCode_Expression (ref transUnit, symbols, src, arg.DefaultExpression, argValType);
+
+                GenerateCode_EnsureImplicitCompat (ref argExprData, argValType);
+
+                argsArr.Span [argIdx] = GetLLVMValue (argExprData.Value);
+            }
 
             var retVal = builderRef.BuildCall (funcDef, argsArr.Span, "funcCall");
 

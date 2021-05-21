@@ -123,9 +123,6 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             Debug.Assert (funcData is not null);
             var funcType = funcData->FunctionType;
 
-            if (funcData->OptionalArgsCount > 0)
-                throw new NotImplementedException ("[TODO] Optional arguments not implemented yet.");
-
             using var argsArr = PooledArray<LLVMTypeRef>.GetArray (funcType->ArgumentsList.Length);
             int argNum = 0;
             foreach (ref var arg in funcType->ArgumentsList.Span) {

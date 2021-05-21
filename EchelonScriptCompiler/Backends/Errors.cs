@@ -28,6 +28,8 @@ namespace EchelonScriptCompiler.Backends {
         public const string NonExistentSymbol = "Non-existent symbol reached backend.";
         public const string FrontendError = "Type-checking or semantic analysis error reached backend.";
 
+        public const string NonExistentASTMap = "[Internal] Pointer not mapped to AST node.";
+
         #endregion
     }
 
