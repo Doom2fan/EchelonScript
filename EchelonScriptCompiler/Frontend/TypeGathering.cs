@@ -473,6 +473,13 @@ namespace EchelonScriptCompiler.Frontend {
 
             symbols.Push ();
 
+            foreach (var arg in funcDef.ArgumentsList) {
+                if (arg.DefaultExpression is null)
+                    continue;
+
+                GatherTypes_Expression (ref transUnit, symbols, unitSrc, arg.DefaultExpression);
+            }
+
             GatherTypes_Statement (ref transUnit, symbols, unitSrc, funcDef.Statement);
 
             symbols.Pop ();
