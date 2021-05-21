@@ -9,6 +9,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Reflection;
 using ChronosLib.Pooled;
 using EchelonScriptCompiler.CompilerCommon;
@@ -272,62 +273,66 @@ namespace EchelonScriptCompiler.Frontend.Parser {
 
                 switch (token.Type) {
                     case EchelonScriptTokenType.DecIntegerLiteral: {
-                        bool isLong = false;
-                        bool isUnsigned = false;
+                        bool? isSigned = null;
+                        ES_IntSize? size = null;
 
+                        var tokenChars = token.Text.Span;
                         Span<char> chars = stackalloc char [token.Text.Length];
+
                         int charsCount = 0;
-                        foreach (var c in token.Text.Span) {
+                        foreach (var c in tokenChars) {
                             if (EchelonScriptTokenizer.IsIntegerDigit (c))
                                 chars [charsCount++] = c;
-                            else if (c == 'L')
-                                isLong = true;
-                            else if (c == 'u' || c == 'U')
-                                isUnsigned = true;
+                            else if (IsSignSuffix (c)) {
+                                ParseSuffix (parser, token, tokenChars [charsCount..^0], out isSigned, out size);
+                                break;
+                            }
                         }
 
                         if (ulong.TryParse (chars.Slice (0, charsCount), System.Globalization.NumberStyles.None, null, out var resultULong))
-                            expr = new ES_AstIntegerLiteralExpression (isUnsigned, isLong, false, resultULong, token);
+                            expr = new ES_AstIntegerLiteralExpression (isSigned, size, false, resultULong, token);
                         else
                             parser.errorsList.Add (new EchelonScriptErrorMessage (token, ES_FrontendErrors.IntLiteralTooBig));
 
                         break;
                     }
                     case EchelonScriptTokenType.HexIntegerLiteral: {
-                        bool isLong = false;
-                        bool isUnsigned = false;
+                        bool? isSigned = null;
+                        ES_IntSize? size = null;
 
-                        Span<char> chars = stackalloc char [token.Text.Length];
+                        var tokenChars = token.Text.Span.Slice (2);
+                        Span<char> chars = stackalloc char [tokenChars.Length];
                         int charsCount = 0;
-                        foreach (var c in token.Text.Span.Slice (2)) {
+                        foreach (var c in tokenChars) {
                             if (EchelonScriptTokenizer.IsHexDigit (c))
                                 chars [charsCount++] = c;
-                            else if (c == 'L')
-                                isLong = true;
-                            else if (c == 'u' || c == 'U')
-                                isUnsigned = true;
+                            else if (IsSignSuffix (c)) {
+                                ParseSuffix (parser, token, tokenChars [charsCount..^0], out isSigned, out size);
+                                break;
+                            }
                         }
 
                         if (ulong.TryParse (chars.Slice (0, charsCount), System.Globalization.NumberStyles.AllowHexSpecifier, null, out var resultULong))
-                            expr = new ES_AstIntegerLiteralExpression (isUnsigned, isLong, true, resultULong, token);
+                            expr = new ES_AstIntegerLiteralExpression (isSigned, size, true, resultULong, token);
                         else
                             parser.errorsList.Add (new EchelonScriptErrorMessage (token, ES_FrontendErrors.IntLiteralTooBig));
 
                         break;
                     }
                     case EchelonScriptTokenType.BinIntegerLiteral: {
-                        bool isLong = false;
-                        bool isUnsigned = false;
+                        bool? isSigned = null;
+                        ES_IntSize? size = null;
 
-                        Span<char> chars = stackalloc char [token.Text.Length];
+                        var tokenChars = token.Text.Span.Slice (2);
+                        Span<char> chars = stackalloc char [tokenChars.Length];
                         int charsCount = 0;
-                        foreach (var c in token.Text.Span.Slice (2)) {
+                        foreach (var c in tokenChars) {
                             if (EchelonScriptTokenizer.IsBinaryDigit (c))
                                 chars [charsCount++] = c;
-                            else if (c == 'L')
-                                isLong = true;
-                            else if (c == 'u' || c == 'U')
-                                isUnsigned = true;
+                            else if (IsSignSuffix (c)) {
+                                ParseSuffix (parser, token, tokenChars [charsCount..^0], out isSigned, out size);
+                                break;
+                            }
                         }
 
                         if (charsCount > 64)
@@ -342,7 +347,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                             bitOffs++;
                         }
 
-                        expr = new ES_AstIntegerLiteralExpression (isUnsigned, isLong, true, value, token);
+                        expr = new ES_AstIntegerLiteralExpression (isSigned, size, true, value, token);
 
                         break;
                     }
@@ -408,6 +413,46 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                 parser.tokenizer.NextToken ();
 
                 return expr;
+            }
+
+            private bool IsSignSuffix (char c) {
+                return c == 's' || c == 'S' || c == 'u' || c == 'u';
+            }
+
+            private void ParseSuffix (
+                EchelonScriptParser parser, EchelonScriptToken tk,
+                ReadOnlySpan<char> suffixChars, out bool? isSigned, out ES_IntSize? size
+            ) {
+                Debug.Assert (suffixChars.Length > 0);
+                Debug.Assert (IsSignSuffix (suffixChars [0]));
+
+                var c = suffixChars [0];
+                if (c == 's' || c == 'S')
+                    isSigned = true;
+                else if (c == 'u' || c == 'U')
+                    isSigned = false;
+                else // Unreachable, only here so it doesn't complain.
+                    isSigned = null;
+
+                if (suffixChars.Length == 1) {
+                    size = null;
+                    return;
+                }
+
+                var sizeChars = suffixChars [1 .. ^0];
+
+                if (sizeChars.Equals ("8", StringComparison.Ordinal))
+                    size = ES_IntSize.Int8;
+                else if (sizeChars.Equals ("16", StringComparison.Ordinal))
+                    size = ES_IntSize.Int16;
+                else if (sizeChars.Equals ("32", StringComparison.Ordinal))
+                    size = ES_IntSize.Int32;
+                else if (sizeChars.Equals ("64", StringComparison.Ordinal))
+                    size = ES_IntSize.Int64;
+                else {
+                    parser.errorsList.Add (new EchelonScriptErrorMessage (tk, ES_FrontendErrors.InvalidIntLiteralSize));
+                    size = null;
+                }
             }
 
             #endregion

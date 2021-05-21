@@ -815,19 +815,29 @@ namespace EchelonScriptCompiler.Frontend.Parser {
         }
 
         protected bool TryReadIntSuffix () {
-            var peekedChars = PeekChars (2);
+            var peekedChars = PeekChars (3);
 
             if (peekedChars.Length < 1)
                 return false;
 
-            if (peekedChars [0] == 'L') {
-                ReadChar ();
-                return true;
-            } else if (peekedChars [0] == 'u' || peekedChars [0] == 'U') {
+            var c = peekedChars [0];
+            if (c == 's' || c == 'S' || c == 'u' || c == 'U') {
                 ReadChar ();
 
-                if (peekedChars.Length >= 2 && peekedChars [1] == 'L')
-                    ReadChar ();
+                if (peekedChars.Length >= 2) {
+                    var c1 = peekedChars [1];
+                    var c2 = peekedChars.Length >= 3 ? peekedChars [2] : 0;
+
+                    if (c1 == '8')
+                        ReadChar ();
+                    else if (
+                        (c1 == '1' && c2 == '6') ||
+                        (c1 == '3' && c2 == '2') ||
+                        (c1 == '6' && c2 == '4')
+                    ) {
+                        ReadChars (2);
+                    }
+                }
 
                 return true;
             }

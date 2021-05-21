@@ -1091,16 +1091,16 @@ namespace EchelonScriptCompiler.CompilerCommon {
             }
         }
 
-        public readonly bool Unsigned;
-        public readonly bool Long;
+        public readonly bool? Signed;
+        public readonly ES_IntSize? Size;
         public readonly bool HexBin;
         public readonly ulong Value;
 
         public readonly EchelonScriptToken Token;
 
-        public ES_AstIntegerLiteralExpression (bool isUnsigned, bool isLong, bool hexBin, ulong value, EchelonScriptToken tk) : base (1) {
-            Unsigned = isUnsigned;
-            Long = isLong;
+        public ES_AstIntegerLiteralExpression (bool? isSigned, ES_IntSize? size, bool hexBin, ulong value, EchelonScriptToken tk) : base (1) {
+            Signed = isSigned;
+            Size = size;
             HexBin = hexBin;
             Value = value;
 

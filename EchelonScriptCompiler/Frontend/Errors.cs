@@ -10,6 +10,7 @@
 using System;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data;
+using EchelonScriptCompiler.Data.Types;
 using Microsoft.Toolkit.HighPerformance.Buffers;
 
 namespace EchelonScriptCompiler.Frontend {
@@ -76,6 +77,7 @@ namespace EchelonScriptCompiler.Frontend {
 
         public const string EmptyArgument = "Argument missing; Arguments cannot be empty.";
 
+        public const string InvalidIntLiteralSize = "The specified integer literal size is not valid.";
         public const string IntLiteralTooBig = "The specified integer literal is larger than 64 bits.";
 
         public const string LabelOnEmptyStatement = "Labels cannot be put on empty statements.";
@@ -173,6 +175,8 @@ namespace EchelonScriptCompiler.Frontend {
         public const string TempValueInIncDecOp = "The operand of an increment or decrement operator cannot be a temporary value.";
 
         public const string InvalidExprTerm = "Invalid expression term \"{exprTerm}\".";
+
+        public const string IntLitTooBigForSize = "The integer literal is too big to fit in {sign} {size}-bit integer.";
 
         public const string NoCast = "Cannot convert type \"{givenType}\" to \"{destType}\".";
         public const string NoImplicitCast = "Cannot implicitly convert type \"{givenType}\" to \"{destType}\".";
@@ -290,6 +294,24 @@ namespace EchelonScriptCompiler.Frontend {
         public static EchelonScriptErrorMessage GenInvalidExprTerm (string exprTerm, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
             var errorMessage = InvalidExprTerm.Replace ("{exprTerm}", exprTerm);
             return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
+        }
+
+        public static EchelonScriptErrorMessage GenIntLitTooBig (bool sign, ES_IntSize size, EchelonScriptToken errorToken) {
+            string signStr = sign ? "a signed" : "an unsigned";
+            string sizeStr;
+
+            switch (size) {
+                case ES_IntSize.Int8: sizeStr = "8"; break;
+                case ES_IntSize.Int16: sizeStr = "16"; break;
+                case ES_IntSize.Int32: sizeStr = "32"; break;
+                case ES_IntSize.Int64: sizeStr = "64"; break;
+
+                default:
+                    throw new NotImplementedException ("Int size not implemented.");
+            }
+
+            var errorMessage = IntLitTooBigForSize.Replace ("{sign}", signStr).Replace ("{size}", sizeStr);
+            return new EchelonScriptErrorMessage (errorToken, errorMessage);
         }
 
         public static EchelonScriptErrorMessage GenNoCast (string destType, string givenType, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {

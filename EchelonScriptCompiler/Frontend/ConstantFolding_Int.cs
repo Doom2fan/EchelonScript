@@ -17,19 +17,25 @@ namespace EchelonScriptCompiler.Frontend {
     public unsafe partial class CompilerFrontend {
         public ES_IntTypeData* DetermineIntLiteralType (ES_AstIntegerLiteralExpression intLitExpr, ES_TypeInfo* expectedType, bool negated) {
             ES_IntTypeData* expectedIntType = null;
-            bool unsigned = intLitExpr.Unsigned;
-            ES_IntSize size;
 
-            if (expectedType != null && expectedType->TypeTag == ES_TypeTag.Int)
+            bool? unsigned = null;
+            var isSigned = intLitExpr.Signed;
+            var chosenSize = intLitExpr.Size;
+
+            if (expectedType != null && expectedType->TypeTag == ES_TypeTag.Int) {
                 expectedIntType = (ES_IntTypeData*) expectedType;
 
+                if (isSigned == null)
+                    isSigned = false;
+            }
+
+            ES_IntSize size;
             ES_IntSize minSize;
 
-            if (expectedIntType is not null && expectedIntType->Unsigned)
-                unsigned = true;
+            bool tooBig = false;
 
             ulong value = intLitExpr.Value;
-            if (unsigned || intLitExpr.HexBin) {
+            if (isSigned == false || intLitExpr.HexBin) {
                 if (value <= byte.MaxValue)
                     minSize = ES_IntSize.Int8;
                 else if (value <= ushort.MaxValue)
@@ -50,8 +56,13 @@ namespace EchelonScriptCompiler.Frontend {
                 else {
                     minSize = ES_IntSize.Int64;
                     unsigned = true;
+
+                    if (isSigned == true)
+                        tooBig = true;
                 }
             } else {
+                unsigned = false;
+
                 if (value <= ((ulong) sbyte.MaxValue) + 1)
                     minSize = ES_IntSize.Int8;
                 else if (value <= ((ulong) short.MaxValue) + 1)
@@ -63,28 +74,57 @@ namespace EchelonScriptCompiler.Frontend {
                 else {
                     minSize = ES_IntSize.Int64;
                     unsigned = true;
+
+                    if (isSigned == true)
+                        tooBig = true;
                 }
             }
 
-            if (intLitExpr.Long)
-                minSize = ES_IntSize.Int64;
+            tooBig |= (
+                (chosenSize is not null && chosenSize.Value < minSize) ||
+                (unsigned == true && isSigned == true)
+            );
+
+            if (tooBig) {
+                var errSize = minSize;
+                if (chosenSize is not null)
+                    errSize = chosenSize.Value;
+                errorList.Add (ES_FrontendErrors.GenIntLitTooBig (isSigned!.Value, errSize, intLitExpr.Token));
+
+                if (unsigned is null && isSigned == false)
+                    unsigned = true;
+            } else {
+                if (chosenSize is not null)
+                    minSize = chosenSize.Value;
+
+                if (unsigned is null && isSigned is not null)
+                    unsigned = !isSigned.Value;
+            }
 
             size = minSize;
             if (expectedIntType is not null) {
                 bool isCompat = false;
 
-                if (intLitExpr.HexBin && !unsigned && minSize <= expectedIntType->IntSize)
+                var expectsUnsign = expectedIntType->Unsigned;
+                var expectedSize = expectedIntType->IntSize;
+
+                if (intLitExpr.HexBin && (isSigned is null || isSigned == !expectsUnsign) && minSize <= expectedSize)
                     isCompat = true;
-                else if (unsigned == expectedIntType->Unsigned && minSize <= expectedIntType->IntSize)
+                else if (unsigned == expectsUnsign && minSize <= expectedSize)
                     isCompat = true;
 
                 if (isCompat) {
-                    size = expectedIntType->IntSize;
-                    unsigned = expectedIntType->Unsigned;
+                    size = expectedSize;
+                    unsigned = expectsUnsign;
                 }
-            }
+            } else if (chosenSize is null && size < ES_IntSize.Int32)
+                size = ES_IntSize.Int32;
 
-            var typeName = Environment!.IdPool.GetIdentifier (ES_PrimitiveTypes.GetIntName (size, unsigned));
+            // This means we got here without encountering any sign. Assume signed.
+            if (unsigned is null)
+                unsigned = false;
+
+            var typeName = Environment!.IdPool.GetIdentifier (ES_PrimitiveTypes.GetIntName (size, unsigned.Value));
             var typeFqn = Environment.GetFullyQualifiedName (ArrayPointer<byte>.Null, typeName);
             var intType = Environment.GetFullyQualifiedType (typeFqn);
 

@@ -519,7 +519,22 @@ namespace TestSuiteWPF.Tests {
                 }
 
                 case ES_AstIntegerLiteralExpression intLiteralExpr: {
-                    var thisItem = AddNodeToTree ($"Int literal {intLiteralExpr.Value}{(intLiteralExpr.Unsigned ? "u" : "")}{(intLiteralExpr.Long ? "L" : "")}", parentItem);
+                    var signSuffix = string.Empty;
+                    if (intLiteralExpr.Signed is not null)
+                        signSuffix = intLiteralExpr.Signed == true ? "s" : "u";
+
+                    var sizeSuffix = intLiteralExpr.Size switch {
+                        ES_IntSize.Int8 => "8",
+                        ES_IntSize.Int16 => "16",
+                        ES_IntSize.Int32 => "32",
+                        ES_IntSize.Int64 => "64",
+
+                        null => string.Empty,
+
+                        _ => throw new NotImplementedException (),
+                    };
+
+                    var thisItem = AddNodeToTree ($"Int literal {intLiteralExpr.Value}{signSuffix}{sizeSuffix}", parentItem);
                     thisItem.Tag = intLiteralExpr.Token;
 
                     break;
