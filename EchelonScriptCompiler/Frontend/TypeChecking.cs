@@ -117,7 +117,7 @@ namespace EchelonScriptCompiler.Frontend {
 
                 if (arg.DefaultExpression is not null) {
                     var argDefExpr = CheckTypes_Expression (ref transUnit, symbols, unitSrc, arg.DefaultExpression, argValType);
-                    CheckTypes_EnsureCompat (argValType, argDefExpr.Type, unitSrc, arg.NodeBounds, out _);
+                    CheckTypes_EnsureCompat (argValType, argDefExpr.Type, unitSrc, arg.DefaultExpression.NodeBounds, out _);
                 }
             }
 
