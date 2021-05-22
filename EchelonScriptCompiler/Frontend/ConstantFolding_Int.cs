@@ -146,6 +146,10 @@ namespace EchelonScriptCompiler.Frontend {
             } else {
                 if (!intType->Unsigned) {
                     var val = -(long) intLitExpr.Value;
+
+                    if (intLitExpr.Value == (ulong) (long.MaxValue) + 1)
+                        val = long.MinValue;
+
                     expr = new ES_AstIntegerConstantExpression ((ES_TypeInfo*) intType, (ulong) val, intLitExpr);
                     return true;
                 } else {
