@@ -26,7 +26,7 @@ namespace EchelonScriptCompiler.Frontend {
                 expectedIntType = (ES_IntTypeData*) expectedType;
 
                 if (isSigned == null)
-                    isSigned = false;
+                    isSigned = !expectedIntType->Unsigned;
             }
 
             ES_IntSize size;
