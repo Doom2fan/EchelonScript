@@ -495,8 +495,12 @@ namespace EchelonScriptCompiler.Frontend {
                         CheckTypes_Expression (ref transUnit, symbols, src, args.ValueExpression);*/
                 }
 
-                case ES_AstNewArrayExpression newArrayExpr:
-                    throw new NotImplementedException ("[TODO] 'new' array expressions not implemented yet.");
+                case ES_AstNewArrayExpression newArrayExpr: {
+                    var elemType = GetTypeRef (newArrayExpr.ElementType);
+                    var arrType = EnvironmentBuilder!.CreateArrayType (elemType, newArrayExpr.Ranks.Length);
+
+                    return new ExpressionData { Expr = expr, Type = arrType, Constant = false, Addressable = false };
+                }
 
                 case ES_AstIntegerLiteralExpression:
                 case ES_AstBooleanLiteralExpression:

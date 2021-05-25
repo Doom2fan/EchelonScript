@@ -74,6 +74,8 @@ namespace EchelonScriptCompiler.Frontend {
             ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, ReadOnlySpan<char> src,
             ES_AstTypeDeclaration typeDecl
         ) {
+            Debug.Assert (EnvironmentBuilder is not null);
+
             switch (typeDecl) {
                 case ES_AstTypeDeclaration_TypeName typeName: {
                     var type = GetType (symbols, src, typeName);
@@ -103,24 +105,26 @@ namespace EchelonScriptCompiler.Frontend {
                 case ES_AstTypeDeclaration_TypeReference typeRef:
                     return typeRef.Reference;
 
-                case ES_AstTypeDeclaration_Array arrayDecl:
-                    throw new NotImplementedException ("[TODO] Array declarations not implemented yet.");
+                case ES_AstTypeDeclaration_Array arrayDecl: {
+                    var elemType = ResolveTypeDeclaration (ref transUnit, symbols, src, arrayDecl.ElementType);
+                    return EnvironmentBuilder.CreateArrayType (elemType, arrayDecl.Dimensions);
+                }
 
                 case ES_AstTypeDeclaration_Basic basicDecl: {
                     var innerType = ResolveTypeDeclaration (ref transUnit, symbols, src, basicDecl.Inner!);
 
                     switch (basicDecl.Type) {
                         case ES_AstTypeDeclaration_Basic.DeclType.Const:
-                            return EnvironmentBuilder!.CreateConstType (innerType);
+                            return EnvironmentBuilder.CreateConstType (innerType);
 
                         case ES_AstTypeDeclaration_Basic.DeclType.Immutable:
-                            return EnvironmentBuilder!.CreateImmutableType (innerType);
+                            return EnvironmentBuilder.CreateImmutableType (innerType);
 
                         case ES_AstTypeDeclaration_Basic.DeclType.Nullable:
-                            return EnvironmentBuilder!.CreateNullableType (innerType);
+                            return EnvironmentBuilder.CreateNullableType (innerType);
 
                         case ES_AstTypeDeclaration_Basic.DeclType.Reference:
-                            return EnvironmentBuilder!.CreateReferenceType (innerType);
+                            return EnvironmentBuilder.CreateReferenceType (innerType);
 
                         default:
                             throw new NotImplementedException ("Basic declaration type not implemented.");
@@ -656,8 +660,17 @@ namespace EchelonScriptCompiler.Frontend {
                     break;
                 }
 
-                case ES_AstNewArrayExpression newArrayExpr:
-                    throw new NotImplementedException ("[TODO] 'new' array expressions not implemented yet.");
+                case ES_AstNewArrayExpression newArrayExpr: {
+                    if (newArrayExpr.ElementType is not null)
+                        newArrayExpr.ElementType = GenerateASTTypeRef (ref transUnit, symbols, src, newArrayExpr.ElementType);
+
+                    foreach (var rank in newArrayExpr.Ranks) {
+                        Debug.Assert (rank is not null);
+                        GatherTypes_Expression (ref transUnit, symbols, src, rank);
+                    }
+
+                    break;
+                }
 
                 // We don't need to do anything for these
                 case ES_AstIntegerLiteralExpression:

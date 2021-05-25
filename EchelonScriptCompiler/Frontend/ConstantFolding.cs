@@ -488,8 +488,22 @@ namespace EchelonScriptCompiler.Frontend {
                         FoldConstants_Expression (ref transUnit, symbols, src, args.ValueExpression);*/
                 }
 
-                case ES_AstNewArrayExpression newArrayExpr:
-                    throw new NotImplementedException ("[TODO] 'new' array expressions not implemented yet.");
+                case ES_AstNewArrayExpression newArrayExpr: {
+                    var intName = idPool.GetIdentifier (ES_PrimitiveTypes.GetIntName (ES_IntSize.Int32, false));
+                    var intFQN = Environment.GetFullyQualifiedName (ArrayPointer<byte>.Null, intName);
+                    var intType = Environment.GetFullyQualifiedType (intFQN);
+                    Debug.Assert (intType is not null && intType->TypeTag == ES_TypeTag.Int);
+
+                    foreach (ref var rank in newArrayExpr.Ranks.AsSpan ()) {
+                        Debug.Assert (rank is not null);
+                        FoldConstants_Expression (ref transUnit, symbols, src, ref rank, intType);
+                    }
+
+                    var elemType = GetTypeRef (newArrayExpr.ElementType);
+                    var arrType = EnvironmentBuilder!.CreateArrayType (elemType, newArrayExpr.Ranks.Length);
+
+                    return new ExpressionData { Expr = expr, Type = arrType, Constant = false, Addressable = false };
+                }
 
                 #region Literals
 

@@ -336,21 +336,21 @@ namespace EchelonScriptCompiler.CompilerCommon {
         public override ES_AstNodeBounds NodeBounds => bounds;
         protected ES_AstNodeBounds bounds;
 
-        public ES_AstTypeDeclaration Inner;
+        public ES_AstTypeDeclaration ElementType;
         public int Dimensions;
 
         public ES_AstTypeDeclaration_Array (
-            ES_AstTypeDeclaration inner, int dims,
+            ES_AstTypeDeclaration elementType, int dims,
             int endPos
         ) : base (1) {
-            Inner = inner;
+            ElementType = elementType;
             Dimensions = dims;
 
-            bounds = new ES_AstNodeBounds (inner.NodeBounds.StartPos, endPos);
+            bounds = new ES_AstNodeBounds (elementType.NodeBounds.StartPos, endPos);
         }
 
         public override int GetStringLength () {
-            int len = Inner?.GetStringLength () ?? NullInnerName.Length;
+            int len = ElementType?.GetStringLength () ?? NullInnerName.Length;
             len++; // Space
             len++; // Opening bracket
 
@@ -368,11 +368,11 @@ namespace EchelonScriptCompiler.CompilerCommon {
 
             int len = 0;
 
-            if (Inner != null)
-                Inner.ToString (chars);
+            if (ElementType != null)
+                ElementType.ToString (chars);
             else
                 NullInnerName.AsSpan ().CopyTo (chars);
-            len += Inner?.GetStringLength () ?? NullInnerName.Length;
+            len += ElementType?.GetStringLength () ?? NullInnerName.Length;
 
             chars [len++] = ' ';
             chars [len++] = '[';
