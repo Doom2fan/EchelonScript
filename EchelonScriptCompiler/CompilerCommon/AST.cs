@@ -1036,11 +1036,17 @@ namespace EchelonScriptCompiler.CompilerCommon {
     }
 
     public class ES_AstEmptyErrorExpression : ES_AstExpression {
-        protected int errPos;
-        public override ES_AstNodeBounds NodeBounds => new ES_AstNodeBounds (errPos, errPos);
+        protected int errStartPos;
+        protected int errEndPos;
+        public override ES_AstNodeBounds NodeBounds => new ES_AstNodeBounds (errStartPos, errEndPos);
 
         public ES_AstEmptyErrorExpression (int pos) : base (1) {
-            errPos = pos;
+            errStartPos = errEndPos = pos;
+        }
+
+        public ES_AstEmptyErrorExpression (int startPos, int endPos) : base (1) {
+            errStartPos = startPos;
+            errEndPos = endPos;
         }
     }
 
@@ -1369,23 +1375,23 @@ namespace EchelonScriptCompiler.CompilerCommon {
         public ES_AstExpression? [] RankExpressions;
 
         public ES_AstIndexingExpression (
-            ES_AstExpression indexedExpr, ES_AstExpression? [] ranks, EchelonScriptToken closeBracketTk
+            ES_AstExpression indexedExpr, ES_AstExpression? [] ranks, int endPos
         ) : base (1) {
             IndexedExpression = indexedExpr;
             RankExpressions = ranks;
 
-            bounds = new ES_AstNodeBounds (indexedExpr.NodeBounds.StartPos, closeBracketTk.TextEndPos);
+            bounds = new ES_AstNodeBounds (indexedExpr.NodeBounds.StartPos, endPos);
         }
     }
 
-    public class ES_AstNewExpression : ES_AstExpression {
+    public class ES_AstNewObjectExpression : ES_AstExpression {
         public override ES_AstNodeBounds NodeBounds => bounds;
         protected ES_AstNodeBounds bounds;
 
         public ES_AstTypeDeclaration? TypeDeclaration;
         public ES_AstFunctionCallArgument [] Arguments;
 
-        public ES_AstNewExpression (
+        public ES_AstNewObjectExpression (
             ES_AstTypeDeclaration? typeDecl, ES_AstFunctionCallArgument [] args,
             EchelonScriptToken newStartTk, EchelonScriptToken closeParenTk
         ) : base (1) {
@@ -1393,6 +1399,24 @@ namespace EchelonScriptCompiler.CompilerCommon {
             Arguments = args;
 
             bounds = new ES_AstNodeBounds (newStartTk.TextStartPos, closeParenTk.TextEndPos);
+        }
+    }
+
+    public class ES_AstNewArrayExpression : ES_AstExpression {
+        public override ES_AstNodeBounds NodeBounds => bounds;
+        protected ES_AstNodeBounds bounds;
+
+        public ES_AstTypeDeclaration? ElementType;
+        public ES_AstExpression? [] Ranks;
+
+        public ES_AstNewArrayExpression (
+            ES_AstTypeDeclaration? typeDecl, ES_AstExpression? [] ranks,
+            EchelonScriptToken newStartTk, int endPos
+        ) : base (1) {
+            ElementType = typeDecl;
+            Ranks = ranks;
+
+            bounds = new ES_AstNodeBounds (newStartTk.TextStartPos, endPos);
         }
     }
 

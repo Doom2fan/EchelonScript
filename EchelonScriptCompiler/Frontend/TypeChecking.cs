@@ -486,14 +486,17 @@ namespace EchelonScriptCompiler.Frontend {
                     }*/
                 }
 
-                case ES_AstNewExpression newExpr: {
-                    throw new NotImplementedException ("[TODO] 'new' not implemented yet.");
+                case ES_AstNewObjectExpression newObjExpr: {
+                    throw new NotImplementedException ("[TODO] 'new' object expressions not implemented yet.");
                     /*if (newExpr.TypeDeclaration is not null)
                         newExpr.TypeDeclaration = GenerateASTTypeRef (ref transUnit, symbols, src, newExpr.TypeDeclaration);
 
                     foreach (var args in newExpr.Arguments)
                         CheckTypes_Expression (ref transUnit, symbols, src, args.ValueExpression);*/
                 }
+
+                case ES_AstNewArrayExpression newArrayExpr:
+                    throw new NotImplementedException ("[TODO] 'new' array expressions not implemented yet.");
 
                 case ES_AstIntegerLiteralExpression:
                 case ES_AstBooleanLiteralExpression:

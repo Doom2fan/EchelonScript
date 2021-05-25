@@ -625,16 +625,29 @@ namespace TestSuiteWPF.Tests {
                     break;
                 }
 
-                case ES_AstNewExpression newExpr: {
+                case ES_AstNewObjectExpression newObjExpr: {
                     string thisItemText;
 
-                    if (newExpr.Arguments.Length < 1)
-                        thisItemText = $"new {newExpr.TypeDeclaration} ()";
+                    if (newObjExpr.Arguments.Length < 1)
+                        thisItemText = $"new {newObjExpr.TypeDeclaration} ()";
                     else
-                        thisItemText = $"new {newExpr.TypeDeclaration} ([...])";
+                        thisItemText = $"new {newObjExpr.TypeDeclaration} ([...])";
 
                     var thisItem = AddNodeToTree (thisItemText, parentItem);
-                    AddArgumentsListToTree (newExpr.Arguments, thisItem);
+                    AddArgumentsListToTree (newObjExpr.Arguments, thisItem);
+
+                    break;
+                }
+
+                case ES_AstNewArrayExpression newArrayExpr: {
+                    string thisItemText;
+
+                    thisItemText = $"new {newArrayExpr.ElementType} []";
+
+                    var thisItem = AddNodeToTree (thisItemText, parentItem);
+
+                    foreach (var rank in newArrayExpr.Ranks)
+                        AddAstNodeToTree (rank, thisItem);
 
                     break;
                 }
