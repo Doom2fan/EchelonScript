@@ -239,7 +239,7 @@ namespace EchelonScriptCompiler.CompilerCommon {
 
         public enum DeclType {
             Nullable,
-            Pointer,
+            Reference,
             Const,
             Immutable,
         }
@@ -266,7 +266,7 @@ namespace EchelonScriptCompiler.CompilerCommon {
                 case DeclType.Immutable:
                     return immutableStartStr.Length + innerLen + 1;
 
-                case DeclType.Pointer:
+                case DeclType.Reference:
                 case DeclType.Nullable:
                     return innerLen + 1;
 
@@ -313,15 +313,15 @@ namespace EchelonScriptCompiler.CompilerCommon {
                     break;
                 }
 
-                case DeclType.Pointer: {
+                case DeclType.Reference: {
                     Inner?.ToString (chars);
-                    chars [^0] = '*';
+                    chars [^1] = '&';
 
                     break;
                 }
                 case DeclType.Nullable: {
                     Inner?.ToString (chars);
-                    chars [^0] = '?';
+                    chars [^1] = '?';
 
                     break;
                 }
@@ -337,16 +337,16 @@ namespace EchelonScriptCompiler.CompilerCommon {
         protected ES_AstNodeBounds bounds;
 
         public ES_AstTypeDeclaration Inner;
-        public ES_AstExpression? [] Dimensions;
+        public int Dimensions;
 
         public ES_AstTypeDeclaration_Array (
-            ES_AstTypeDeclaration inner, ES_AstExpression? [] dims,
-            EchelonScriptToken closeBracketToken
+            ES_AstTypeDeclaration inner, int dims,
+            int endPos
         ) : base (1) {
             Inner = inner;
             Dimensions = dims;
 
-            bounds = new ES_AstNodeBounds (inner.NodeBounds.StartPos, closeBracketToken.TextEndPos);
+            bounds = new ES_AstNodeBounds (inner.NodeBounds.StartPos, endPos);
         }
 
         public override int GetStringLength () {
@@ -354,8 +354,8 @@ namespace EchelonScriptCompiler.CompilerCommon {
             len++; // Space
             len++; // Opening bracket
 
-            for (int i = 1; i < Dimensions.Length; i++)
-                len++;
+            if (Dimensions > 0)
+                len += Dimensions - 1;
 
             len++; // Closing bracket
 
@@ -377,7 +377,7 @@ namespace EchelonScriptCompiler.CompilerCommon {
             chars [len++] = ' ';
             chars [len++] = '[';
 
-            for (int i = 1; i < Dimensions.Length; i++)
+            for (int i = 1; i < Dimensions; i++)
                 chars [len++] = ',';
 
             chars [len] = ']';

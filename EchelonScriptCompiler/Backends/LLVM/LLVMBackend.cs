@@ -516,7 +516,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 case ES_TypeTag.Class:
                 case ES_TypeTag.Enum:
                 case ES_TypeTag.Interface:
-                case ES_TypeTag.Pointer:
+                case ES_TypeTag.Reference:
                 case ES_TypeTag.Const:
                 case ES_TypeTag.Immutable:
                 case ES_TypeTag.Array:

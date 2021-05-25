@@ -698,8 +698,8 @@ namespace EchelonScriptCompiler.Data {
 
             #region Derived type creation
 
-            public ES_TypeInfo* CreatePointerType (ES_TypeInfo* baseType) {
-                throw new NotImplementedException ("[TODO] Pointers not implemented yet.");
+            public ES_TypeInfo* CreateReferenceType (ES_TypeInfo* baseType) {
+                throw new NotImplementedException ("[TODO] References not implemented yet.");
             }
 
             public ES_TypeInfo* CreateNullableType (ES_TypeInfo* baseType) {

@@ -1191,7 +1191,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                         } else
                             innerDecl = new ES_AstTypeDeclaration_TypeName (dottableId);
                     }
-                } else if (tkPair.tk.Type == EchelonScriptTokenType.Asterisk) {
+                } else if (tkPair.tk.Type == EchelonScriptTokenType.And) {
                     tokenizer.NextToken ();
                     if (innerDecl == null) {
                         errorsList.Add (ES_FrontendErrors.GenUnexpectedToken (tkPair.tk));
@@ -1199,7 +1199,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                     }
 
                     var bounds = new ES_AstNodeBounds (innerDecl?.NodeBounds.StartPos ?? tkPair.tk.TextStartPos, tkPair.tk.TextEndPos);
-                    innerDecl = new ES_AstTypeDeclaration_Basic (ES_AstTypeDeclaration_Basic.DeclType.Pointer, innerDecl!, bounds);
+                    innerDecl = new ES_AstTypeDeclaration_Basic (ES_AstTypeDeclaration_Basic.DeclType.Reference, innerDecl!, bounds);
                 } else if (tkPair.tk.Type == EchelonScriptTokenType.Question) {
                     tokenizer.NextToken ();
                     if (innerDecl == null) {
@@ -1216,50 +1216,32 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                         break;
                     }
 
-                    using var rankSeps = new StructPooledList<EchelonScriptToken> (CL_ClearMode.Auto);
-                    using var ranks = new StructPooledList<ES_AstExpression?> (CL_ClearMode.Auto);
-                    bool anyHasSize = false;
+                    int ranksCount = 0;
 
-                    EchelonScriptToken endTk;
-                    ES_AstExpression? lastDim = null;
+                    int endPos;
                     while (true) {
                         tkPair = tokenizer.PeekNextToken ();
 
                         if (tkPair.tk.Type == EchelonScriptTokenType.EOF) {
                             errorsList.Add (new EchelonScriptErrorMessage (tkPair.tk, ES_FrontendErrors.UnexpectedEOF));
-                            endTk = tkPair.tk;
+                            endPos = tkPair.tk.TextEndPos;
                             break;
-                        }
-
-                        if (tkPair.tk.Type == EchelonScriptTokenType.BracketClose) {
-                            endTk = tokenizer.NextToken ().tk;
-
-                            rankSeps.Add (tkPair.tk);
-                            ranks.Add (lastDim);
-                            lastDim = null;
-
+                        } else if (tkPair.tk.Type == EchelonScriptTokenType.BracketClose) {
+                            endPos = tokenizer.NextToken ().tk.TextEndPos;
+                            ranksCount++;
                             break;
                         } else if (tkPair.tk.Type == EchelonScriptTokenType.Comma) {
                             tokenizer.NextToken ();
-
-                            ranks.Add (lastDim);
-                            rankSeps.Add (tkPair.tk);
-                            lastDim = null;
+                            ranksCount++;
                         } else {
-                            lastDim = ParseExpression ();
-                            anyHasSize = true;
+                            errorsList.Add (ES_FrontendErrors.GenExpectedXGotY ("a comma or \"]\"", tkPair.tk));
+                            endPos = tkPair.tk.TextStartPos;
+
+                            break;
                         }
                     }
 
-                    if (anyHasSize) {
-                        int count = Math.Min (ranks.Count, rankSeps.Count);
-                        for (int i = 0; i < count; i++) {
-                            if (ranks [i] == null)
-                                errorsList.Add (new EchelonScriptErrorMessage (rankSeps [i], ES_FrontendErrors.ValueExpected));
-                        }
-                    }
-
-                    innerDecl = new ES_AstTypeDeclaration_Array (innerDecl, ranks.ToArray (), endTk);
+                    innerDecl = new ES_AstTypeDeclaration_Array (innerDecl, ranksCount, endPos);
                 } else
                     break;
             }

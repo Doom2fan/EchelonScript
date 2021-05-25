@@ -92,8 +92,8 @@ namespace EchelonScriptCompiler.Data.Types {
     }
 
     [StructLayout (LayoutKind.Sequential, Pack = 1)]
-    [ES_ExportAggregate (new [] { "EchelonScript", "Reflection" }, "PointerData", ES_ExportAttributeBase.AggregateType.Struct)]
-    public unsafe struct ES_PointerData {
+    [ES_ExportAggregate (new [] { "EchelonScript", "Reflection" }, "ReferenceData", ES_ExportAttributeBase.AggregateType.Struct)]
+    public unsafe struct ES_ReferenceData {
         #region ================== Instance fields
 
         public ES_TypeInfo TypeInfo;
@@ -103,12 +103,12 @@ namespace EchelonScriptCompiler.Data.Types {
 
         #region ================== Constructors
 
-        public ES_PointerData (
+        public ES_ReferenceData (
             ES_AccessModifier accessMod, ArrayPointer<byte> sourceUnit,
             ArrayPointer<byte> name, ArrayPointer<byte> fullyQualifiedName,
             ES_TypeInfo* pointedType
         ) {
-            TypeInfo = new ES_TypeInfo (ES_TypeTag.Pointer, accessMod, sourceUnit, name, fullyQualifiedName);
+            TypeInfo = new ES_TypeInfo (ES_TypeTag.Reference, accessMod, sourceUnit, name, fullyQualifiedName);
             TypeInfo.RuntimeSize = sizeof (IntPtr);
 
             PointedType = pointedType;

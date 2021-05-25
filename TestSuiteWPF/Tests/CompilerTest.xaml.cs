@@ -259,7 +259,7 @@ namespace TestSuiteWPF.Tests {
                 case ES_TypeTag.Struct: typeType = "Struct"; break;
                 case ES_TypeTag.Interface: typeType = "Interface"; break;
                 case ES_TypeTag.Array: typeType = "Array"; break;
-                case ES_TypeTag.Pointer: typeType = "Pointer"; break;
+                case ES_TypeTag.Reference: typeType = "Reference"; break;
                 case ES_TypeTag.Function: typeType = "Function"; break;
 
                 default: typeType = "[UNRECOGNIZED]"; break;

@@ -22,7 +22,7 @@ namespace EchelonScriptCompiler.Data.Types {
         Class     = 7,
         Enum      = 8,
         Interface = 9,
-        Pointer   = 10,
+        Reference = 10,
         Const     = 11,
         Immutable = 12,
         Array     = 13,

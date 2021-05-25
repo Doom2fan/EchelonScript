@@ -119,8 +119,8 @@ namespace EchelonScriptCompiler.Frontend {
                         case ES_AstTypeDeclaration_Basic.DeclType.Nullable:
                             return EnvironmentBuilder!.CreateNullableType (innerType);
 
-                        case ES_AstTypeDeclaration_Basic.DeclType.Pointer:
-                            return EnvironmentBuilder!.CreatePointerType (innerType);
+                        case ES_AstTypeDeclaration_Basic.DeclType.Reference:
+                            return EnvironmentBuilder!.CreateReferenceType (innerType);
 
                         default:
                             throw new NotImplementedException ("Basic declaration type not implemented.");
