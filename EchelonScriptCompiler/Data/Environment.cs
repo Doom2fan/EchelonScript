@@ -695,7 +695,44 @@ namespace EchelonScriptCompiler.Data {
             }
 
             public ES_TypeInfo* CreateArrayType (ES_TypeInfo* elementType, int dimensionCount) {
-                throw new NotImplementedException ("[TODO] Arrays not implemented yet.");
+                // Format sample: "@generated::NamespaceName__TypeName[,,]"
+                var elemFQN = elementType->Name;
+
+                using var idBase = UnmanagedArray<byte>.GetArray (elemFQN.NamespaceName.Length + elemFQN.TypeName.Length + 4 + (dimensionCount - 1));
+                var idBaseSpan = idBase.Span;
+
+                int idx = 0;
+
+                elemFQN.NamespaceName.Span.CopyTo (idBaseSpan);
+                idx += elemFQN.NamespaceName.Length;
+
+                idBaseSpan.Slice (idx, 2).Fill ((byte) '_');
+                idx += 2;
+
+                elemFQN.TypeName.Span.CopyTo (idBaseSpan.Slice (idx));
+                idx += elemFQN.TypeName.Length;
+
+                idBaseSpan [idx++] = (byte) '[';
+                for (int i = 1; i < dimensionCount; i++)
+                    idBaseSpan [idx++] = (byte) ',';
+                idBaseSpan [idx++] = (byte) ']';
+
+                var arrId = environment.IdPool.GetIdentifier (idBase);
+                var arrFQN = new ES_FullyQualifiedName (environment.GeneratedTypesNamespace, arrId);
+
+                var arrType = environment.GetFullyQualifiedType (arrFQN);
+
+                if (arrType is not null) {
+                    Debug.Assert (arrType->TypeTag == ES_TypeTag.Array);
+                    return arrType;
+                }
+
+                arrType = (ES_TypeInfo*) environment.memManager.GetMemory<ES_ArrayTypeData> ();
+                *((ES_ArrayTypeData*) arrType) = new ES_ArrayTypeData (arrFQN, elementType, dimensionCount);
+
+                GetOrCreateNamespace (environment.GeneratedTypesNamespace).NamespaceData.Types.Add (arrType);
+
+                return arrType;
             }
 
             public ES_TypeInfo* CreateArrayType (ES_TypeInfo* elementType, ReadOnlySpan<int> dimensionsSizes) {
