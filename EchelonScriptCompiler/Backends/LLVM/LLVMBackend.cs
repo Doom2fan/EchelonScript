@@ -350,7 +350,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 throw new CompilationException ($"{Error_LLVMError}\n${msg}");
 
             foreach (var namespaceData in env!.Namespaces.Values) {
-                foreach (var type in namespaceData.TypeSpan) {
+                foreach (var type in namespaceData.Types) {
                     // TODO: Handle types.
                 }
 
@@ -572,8 +572,8 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
         }
 
         private void ImportNamespaceSymbols (SymbolStack<Symbol> symbols, ES_NamespaceData namespaceData) {
-            foreach (var type in namespaceData.TypeSpan)
-                symbols.AddSymbol (type.Address->TypeName, new Symbol (type));
+            foreach (var type in namespaceData.Types)
+                symbols.AddSymbol (type.Address->Name.TypeName, new Symbol (type));
             foreach (var funcKVP in namespaceData.Functions)
                 symbols.AddSymbol (funcKVP.Key, new Symbol (funcKVP.Value));
         }
@@ -586,8 +586,8 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 return;
 
             if (import.ImportedNames is null || import.ImportedNames.Length == 0) {
-                foreach (var type in namespaceData.TypeSpan) {
-                    if (!symbols.AddSymbol (type.Address->TypeName, new Symbol (type))) {
+                foreach (var type in namespaceData.Types) {
+                    if (!symbols.AddSymbol (type.Address->Name.TypeName, new Symbol (type))) {
                         errorList.Add (new EchelonScriptErrorMessage (
                             src, import.NamespaceName.NodeBounds, ES_BackendErrors.FrontendError
                         ));
@@ -608,8 +608,8 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                     bool isDuplicate = false;
 
                     if (!symbolFound) {
-                        foreach (var typeData in namespaceData.TypeSpan) {
-                            if (typeData.Address->TypeName.Equals (name)) {
+                        foreach (var typeData in namespaceData.Types) {
+                            if (typeData.Address->Name.TypeName.Equals (name)) {
                                 isDuplicate = !symbols.AddSymbol (name, new Symbol (typeData));
                                 symbolFound = true;
                                 break;

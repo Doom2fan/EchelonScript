@@ -58,14 +58,13 @@ namespace EchelonScriptCompiler.Data.Types {
         public ES_FunctionData FunctionData;
 
         public ES_MemberData_Function (
-            ES_MemberFlags flags, ArrayPointer<byte> name, ArrayPointer<byte> fqn,
+            ES_MemberFlags flags, ES_FullyQualifiedName fqn,
             ES_AccessModifier accessMod, ArrayPointer<byte> srcUnit,
             ES_FunctionPrototypeData* funcType, ArrayPointer<ES_FunctionArgData> args, int optArgCount
         ) {
-            Info = new ES_MemberData (ES_MemberType.Field, flags, name, srcUnit);
+            Info = new ES_MemberData (ES_MemberType.Field, flags, fqn.TypeName, srcUnit);
             FunctionData = new ES_FunctionData (
-                name, fqn,
-                accessMod, srcUnit,
+                fqn, accessMod, srcUnit,
                 funcType, args, optArgCount
             );
         }

@@ -41,8 +41,7 @@ namespace EchelonScriptCompiler.Data.Types {
     public readonly unsafe struct ES_FunctionData {
         #region ================== Instance fields
 
-        public readonly ArrayPointer<byte> Name;
-        public readonly ArrayPointer<byte> FullyQualifiedName;
+        public readonly ES_FullyQualifiedName Name;
 
         public readonly ES_AccessModifier AccessModifier;
         public readonly ArrayPointer<byte> SourceUnit;
@@ -57,13 +56,6 @@ namespace EchelonScriptCompiler.Data.Types {
 
         #region ================== Instance properties
 
-        public readonly string NameString {
-            get => StringPool.Shared.GetOrAdd (Name.Span, Encoding.ASCII);
-        }
-        public readonly string FullyQualifiedNameString {
-            get => StringPool.Shared.GetOrAdd (FullyQualifiedName.Span, Encoding.ASCII);
-        }
-
         public readonly string SourceUnitString {
             get => StringPool.Shared.GetOrAdd (SourceUnit.Span, Encoding.ASCII);
         }
@@ -73,15 +65,13 @@ namespace EchelonScriptCompiler.Data.Types {
         #region ================== Constructors
 
         public ES_FunctionData (
-            ArrayPointer<byte> name, ArrayPointer<byte> fqn,
-            ES_AccessModifier accessMod, ArrayPointer<byte> sourceUnit,
+            ES_FullyQualifiedName fqn, ES_AccessModifier accessMod, ArrayPointer<byte> sourceUnit,
             ES_FunctionPrototypeData* functionType, ArrayPointer<ES_FunctionArgData> args, int optArgCount
         ) {
             Debug.Assert (functionType is not null);
             Debug.Assert (args.Length == functionType->ArgumentsList.Length);
 
-            Name = name;
-            FullyQualifiedName = fqn;
+            Name = fqn;
 
             AccessModifier = accessMod;
             SourceUnit = sourceUnit;
@@ -171,12 +161,12 @@ namespace EchelonScriptCompiler.Data.Types {
 
             #region ================== Constructors
 
-            internal Builder ([DisallowNull] ES_FunctionPrototypeData* data, ES_AccessModifier accessMod,
-                ArrayPointer<byte> typeName, ArrayPointer<byte> fullyQualifiedName,
-                ArrayPointer<byte> sourceUnit
+            internal Builder (
+                [DisallowNull] ES_FunctionPrototypeData* data, ES_AccessModifier accessMod,
+                ES_FullyQualifiedName fullyQualifiedName, ArrayPointer<byte> sourceUnit
             ) {
                 functionProtoData = data;
-                data->TypeInfo = new ES_TypeInfo (ES_TypeTag.Function, accessMod, sourceUnit, typeName, fullyQualifiedName);
+                data->TypeInfo = new ES_TypeInfo (ES_TypeTag.Function, accessMod, sourceUnit, fullyQualifiedName);
                 data->TypeInfo.RuntimeSize = IntPtr.Size;
             }
 
@@ -195,10 +185,9 @@ namespace EchelonScriptCompiler.Data.Types {
 
         public ES_FunctionPrototypeData (ES_AccessModifier accessMod,
             ES_TypeInfo* retType, ArrayPointer<ES_FunctionPrototypeArgData> argsList,
-            ArrayPointer<byte> typeName, ArrayPointer<byte> fullyQualifiedName,
-            ArrayPointer<byte> sourceUnit
+            ES_FullyQualifiedName fullyQualifiedName, ArrayPointer<byte> sourceUnit
         ) {
-            TypeInfo = new ES_TypeInfo (ES_TypeTag.Function, accessMod, sourceUnit, typeName, fullyQualifiedName);
+            TypeInfo = new ES_TypeInfo (ES_TypeTag.Function, accessMod, sourceUnit, fullyQualifiedName);
             TypeInfo.RuntimeSize = IntPtr.Size;
 
             returnType = retType;

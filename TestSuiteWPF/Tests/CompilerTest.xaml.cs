@@ -167,10 +167,10 @@ namespace TestSuiteWPF.Tests {
             var idTestF32 = env.IdPool.GetIdentifier (testF32Name);
 
             var idInt32 = env.IdPool.GetIdentifier (ES_PrimitiveTypes.GetIntName (ES_IntSize.Int32, false));
-            var typeInt32 = env.GetFullyQualifiedType (env.GetFullyQualifiedName (ArrayPointer<byte>.Null, idInt32));
+            var typeInt32 = env.GetFullyQualifiedType (env.GlobalTypesNamespace, idInt32);
 
             var idFloat32 = env.IdPool.GetIdentifier (ES_PrimitiveTypes.GetFloatName (ES_FloatSize.Single));
-            var typeFloat32 = env.GetFullyQualifiedType (env.GetFullyQualifiedName (ArrayPointer<byte>.Null, idFloat32));
+            var typeFloat32 = env.GetFullyQualifiedType (env.GlobalTypesNamespace, idFloat32);
 
             Debug.Assert (typeInt32 is not null);
             foreach (var namespaceKVP in env.Namespaces) {
@@ -178,7 +178,7 @@ namespace TestSuiteWPF.Tests {
                 var namespaceNode = AddNodeToTree (namespaceData.NamespaceNameString, rootItem);
                 namespaceNode.IsExpanded = true;
 
-                foreach (var typeDataPtr in namespaceData.TypeSpan)
+                foreach (var typeDataPtr in namespaceData.Types)
                     AddTypeToTree (typeDataPtr.Address, namespaceNode);
 
                 if (namespaceData.Functions.TryGetValue (idMain, out var func)) {
@@ -265,10 +265,10 @@ namespace TestSuiteWPF.Tests {
                 default: typeType = "[UNRECOGNIZED]"; break;
             }
 
-            var typeNode = AddNodeToTree ($"{typeType} {typeData->TypeNameString}", parentItem);
+            var typeNode = AddNodeToTree ($"{typeType} {typeData->Name.TypeNameString}", parentItem);
 
             AddNodeToTree ($"Runtime size: {typeData->RuntimeSize}", typeNode);
-            AddNodeToTree ($"Fully qualified name: {typeData->FullyQualifiedNameString}", typeNode);
+            AddNodeToTree ($"Fully qualified name: {typeData->Name.GetNameAsTypeString ()}", typeNode);
             AddNodeToTree ($"Source unit: {typeData->SourceUnitString}", typeNode);
 
             if (typeData->TypeTag == ES_TypeTag.Function) {
@@ -276,7 +276,7 @@ namespace TestSuiteWPF.Tests {
                 var funcData = (ES_FunctionPrototypeData*) typeData;
 
                 if (funcData->ReturnType != null)
-                    AddNodeToTree ($"Return type: {funcData->ReturnType->FullyQualifiedNameString}", typeNode);
+                    AddNodeToTree ($"Return type: {funcData->ReturnType->Name.GetNameAsTypeString ()}", typeNode);
                 else
                     AddNodeToTree ($"Return type: void", typeNode);
 
@@ -286,7 +286,7 @@ namespace TestSuiteWPF.Tests {
                     string argTypeName;
 
                     if (arg.ValueType != null)
-                        argTypeName = arg.ValueType->FullyQualifiedNameString;
+                        argTypeName = arg.ValueType->Name.GetNameAsTypeString ();
                     else
                         argTypeName = "[NULL]";
 

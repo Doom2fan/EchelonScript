@@ -36,11 +36,10 @@ namespace EchelonScriptCompiler.Data.Types {
             #region ================== Constructors
 
             internal Builder ([DisallowNull] ES_EnumData* data, ES_AccessModifier accessMod,
-                ArrayPointer<byte> typeName, ArrayPointer<byte> fullyQualifiedName,
-                ArrayPointer<byte> sourceUnit
+                ES_FullyQualifiedName fullyQualifiedName, ArrayPointer<byte> sourceUnit
             ) {
                 enumData = data;
-                data->TypeInfo = new ES_TypeInfo (ES_TypeTag.Enum, accessMod, sourceUnit, typeName, fullyQualifiedName);
+                data->TypeInfo = new ES_TypeInfo (ES_TypeTag.Enum, accessMod, sourceUnit, fullyQualifiedName);
             }
 
             #endregion

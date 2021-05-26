@@ -217,9 +217,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
                     if (simpleBinaryExpr.ExpressionType.IsBitShift () && lhs.Type->TypeTag == ES_TypeTag.Int) {
                         var intName = ES_PrimitiveTypes.GetIntName (((ES_IntTypeData*) expectedType)->IntSize, true);
-
-                        var intFQN = env.GetFullyQualifiedName (ArrayPointer<byte>.Null, idPool.GetIdentifier (intName));
-                        expectedRHSType = env.GetFullyQualifiedType (intFQN);
+                        expectedRHSType = env.GetFullyQualifiedType (env.GlobalTypesNamespace, idPool.GetIdentifier (intName));
                     }
 
                     var rhs = GenerateCode_Expression (ref transUnit, symbols, src, simpleBinaryExpr.Right, expectedRHSType);
@@ -877,7 +875,6 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                     Debug.Fail ("???");
             }
 
-            var funcName = funcType->TypeInfo.TypeName;
             int funcArgCount = funcType->ArgumentsList.Length;
             int callArgCount = funcCallExpr.Arguments.Length;
             int reqArgCount = 0;
@@ -888,10 +885,9 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             var funcAST = funcASTNode as ES_AstFunctionDefinition;
             Debug.Assert (funcAST is not null);
 
-            if (func is not null) {
-                funcName = func->FullyQualifiedName;
+            if (func is not null)
                 reqArgCount = funcArgCount - func->OptionalArgsCount;
-            } else
+            else
                 reqArgCount = funcArgCount;
 
             if (callArgCount < reqArgCount)

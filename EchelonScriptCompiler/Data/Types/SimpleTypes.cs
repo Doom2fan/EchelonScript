@@ -37,11 +37,10 @@ namespace EchelonScriptCompiler.Data.Types {
         #region ================== Constructors
 
         public ES_IntTypeData (
-            ES_AccessModifier accessMod, ArrayPointer<byte> sourceUnit,
-            ArrayPointer<byte> name, ArrayPointer<byte> fullyQualifiedName,
+            ES_AccessModifier accessMod, ArrayPointer<byte> sourceUnit, ES_FullyQualifiedName fullyQualifiedName,
             ES_IntSize size, bool unsigned
         ) {
-            TypeInfo = new ES_TypeInfo (ES_TypeTag.Int, accessMod, sourceUnit, name, fullyQualifiedName);
+            TypeInfo = new ES_TypeInfo (ES_TypeTag.Int, accessMod, sourceUnit, fullyQualifiedName);
 
             IntSize = size;
             Unsigned = unsigned;
@@ -72,11 +71,10 @@ namespace EchelonScriptCompiler.Data.Types {
         #region ================== Constructors
 
         public ES_FloatTypeData (
-            ES_AccessModifier accessMod, ArrayPointer<byte> sourceUnit,
-            ArrayPointer<byte> name, ArrayPointer<byte> fullyQualifiedName,
+            ES_AccessModifier accessMod, ArrayPointer<byte> sourceUnit, ES_FullyQualifiedName fullyQualifiedName,
             ES_FloatSize size
         ) {
-            TypeInfo = new ES_TypeInfo (ES_TypeTag.Float, accessMod, sourceUnit, name, fullyQualifiedName);
+            TypeInfo = new ES_TypeInfo (ES_TypeTag.Float, accessMod, sourceUnit, fullyQualifiedName);
 
             FloatSize = size;
 
@@ -104,11 +102,10 @@ namespace EchelonScriptCompiler.Data.Types {
         #region ================== Constructors
 
         public ES_ReferenceData (
-            ES_AccessModifier accessMod, ArrayPointer<byte> sourceUnit,
-            ArrayPointer<byte> name, ArrayPointer<byte> fullyQualifiedName,
+            ES_AccessModifier accessMod, ArrayPointer<byte> sourceUnit, ES_FullyQualifiedName fullyQualifiedName,
             ES_TypeInfo* pointedType
         ) {
-            TypeInfo = new ES_TypeInfo (ES_TypeTag.Reference, accessMod, sourceUnit, name, fullyQualifiedName);
+            TypeInfo = new ES_TypeInfo (ES_TypeTag.Reference, accessMod, sourceUnit, fullyQualifiedName);
             TypeInfo.RuntimeSize = sizeof (IntPtr);
 
             PointedType = pointedType;

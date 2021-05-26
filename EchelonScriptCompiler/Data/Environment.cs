@@ -36,21 +36,12 @@ namespace EchelonScriptCompiler.Data {
             #region ================== Instance properties
 
             public ES_NamespaceData NamespaceData => namespaceData;
+            public ArrayPointer<byte> NamespaceName => namespaceData.namespaceName;
 
             public PooledDictionary<ArrayPointer<byte>, ES_ClassData.Builder> ClassBuilders { get; protected set; }
             public PooledDictionary<ArrayPointer<byte>, ES_StructData.Builder> StructBuilders { get; protected set; }
             public PooledDictionary<ArrayPointer<byte>, ES_EnumData.Builder> EnumBuilders { get; protected set; }
             public Dictionary<ArrayPointer<byte>, Pointer<ES_FunctionData>> Functions => namespaceData.functions;
-
-            public int TypesStartIdx {
-                get => namespaceData.typesStartIdx;
-                set => namespaceData.typesStartIdx = value;
-            }
-
-            public int TypesLength {
-                get => namespaceData.typesLength;
-                set => namespaceData.typesLength = value;
-            }
 
             #endregion
 
@@ -91,8 +82,7 @@ namespace EchelonScriptCompiler.Data {
             }
 
             public ES_ClassData.Builder GetOrCreateClass (ES_AccessModifier accessMod,
-                ArrayPointer<byte> name, ArrayPointer<byte> fullyQualifiedName,
-                ArrayPointer<byte> sourceUnit
+                ArrayPointer<byte> name, ArrayPointer<byte> sourceUnit
             ) {
                 CheckDisposed ();
 
@@ -104,8 +94,9 @@ namespace EchelonScriptCompiler.Data {
 
                 var classDataPtr = envBuilder.MemoryManager.GetMemory<ES_ClassData> ();
 
-                builder = new ES_ClassData.Builder (classDataPtr, accessMod, name, fullyQualifiedName, sourceUnit);
+                builder = new ES_ClassData.Builder (classDataPtr, accessMod, new ES_FullyQualifiedName (NamespaceName, name), sourceUnit);
                 ClassBuilders.Add (name, builder);
+                namespaceData.types.Add (&classDataPtr->TypeInfo);
 
                 var unknType = namespaceData.environment.TypeUnknownValue;
 
@@ -116,8 +107,7 @@ namespace EchelonScriptCompiler.Data {
             }
 
             public ES_StructData.Builder GetOrCreateStruct (ES_AccessModifier accessMod,
-                ArrayPointer<byte> name, ArrayPointer<byte> fullyQualifiedName,
-                ArrayPointer<byte> sourceUnit
+                ArrayPointer<byte> name, ArrayPointer<byte> sourceUnit
             ) {
                 CheckDisposed ();
 
@@ -129,15 +119,15 @@ namespace EchelonScriptCompiler.Data {
 
                 var structDataPtr = envBuilder.MemoryManager.GetMemory<ES_StructData> ();
 
-                builder = new ES_StructData.Builder (structDataPtr, accessMod, name, fullyQualifiedName, sourceUnit);
+                builder = new ES_StructData.Builder (structDataPtr, accessMod, new ES_FullyQualifiedName (NamespaceName, name), sourceUnit);
                 StructBuilders.Add (name, builder);
+                namespaceData.types.Add (&structDataPtr->TypeInfo);
 
                 return builder;
             }
 
             public ES_EnumData.Builder GetOrCreateEnum (ES_AccessModifier accessMod,
-                ArrayPointer<byte> name, ArrayPointer<byte> fullyQualifiedName,
-                ArrayPointer<byte> sourceUnit
+                ArrayPointer<byte> name, ArrayPointer<byte> sourceUnit
             ) {
                 CheckDisposed ();
 
@@ -149,8 +139,9 @@ namespace EchelonScriptCompiler.Data {
 
                 var enumDataPtr = envBuilder.MemoryManager.GetMemory<ES_EnumData> ();
 
-                builder = new ES_EnumData.Builder (enumDataPtr, accessMod, name, fullyQualifiedName, sourceUnit);
+                builder = new ES_EnumData.Builder (enumDataPtr, accessMod, new ES_FullyQualifiedName (NamespaceName, name), sourceUnit);
                 EnumBuilders.Add (name, builder);
+                namespaceData.types.Add (&enumDataPtr->TypeInfo);
 
                 return builder;
             }
@@ -222,8 +213,7 @@ namespace EchelonScriptCompiler.Data {
         protected ArrayPointer<byte> namespaceName;
         protected Dictionary<ArrayPointer<byte>, Pointer<ES_FunctionData>> functions;
 
-        protected int typesStartIdx;
-        protected int typesLength;
+        protected List<Pointer<ES_TypeInfo>> types;
 
         #endregion
 
@@ -239,11 +229,7 @@ namespace EchelonScriptCompiler.Data {
 
         public IReadOnlyDictionary<ArrayPointer<byte>, Pointer<ES_FunctionData>> Functions => functions;
 
-        public int TypesStartIdx => typesStartIdx;
-        public int TypesLength => typesLength;
-
-        public ReadOnlySpan<Pointer<ES_TypeInfo>> TypeSpan
-            => environment.TypesList.Span.Slice (typesStartIdx, typesLength);
+        public List<Pointer<ES_TypeInfo>> Types => types;
 
         #endregion
 
@@ -253,6 +239,7 @@ namespace EchelonScriptCompiler.Data {
             environment = env;
             namespaceName = name;
 
+            types = new List<Pointer<ES_TypeInfo>> ();
             functions = new Dictionary<ArrayPointer<byte>, Pointer<ES_FunctionData>> ();
         }
 
@@ -274,13 +261,6 @@ namespace EchelonScriptCompiler.Data {
             public Dictionary<IntPtr, ES_AstNode> PointerAstMap { get; protected set; }
 
             public IMemoryManager MemoryManager => environment.memManager;
-
-            public PooledList<Pointer<ES_TypeInfo>> TypesList => environment.typesList;
-
-            public ArrayPointer<Pointer<ES_TypeInfo>> BuiltinTypesList {
-                get => environment.builtinTypesList;
-                set => environment.builtinTypesList = value;
-            }
 
             public ES_TypeInfo* TypeVoid {
                 get => environment.typeVoid;
@@ -673,7 +653,7 @@ namespace EchelonScriptCompiler.Data {
 
             public ES_FunctionPrototypeData* GetOrAddFunctionType (ES_TypeInfo* returnType, ReadOnlySpan<ES_FunctionPrototypeArgData> args, bool doAdd) {
                 var name = environment.GetFunctionTypeName (returnType, args);
-                var fqn = environment.GetFullyQualifiedName (ArrayPointer<byte>.Null, name);
+                var fqn = new ES_FullyQualifiedName (environment.GeneratedTypesNamespace, name);
 
                 var funcType = (ES_FunctionPrototypeData*) environment.GetFullyQualifiedType (fqn);
 
@@ -689,7 +669,7 @@ namespace EchelonScriptCompiler.Data {
                     *funcType = new ES_FunctionPrototypeData (
                         ES_AccessModifier.Public,
                         returnType, argsList,
-                        name, fqn, ArrayPointer<byte>.Null
+                        fqn, ArrayPointer<byte>.Null
                     );
                 }
 
@@ -742,6 +722,9 @@ namespace EchelonScriptCompiler.Data {
 
             protected virtual void DoDispose () {
                 if (!disposedValue) {
+                    foreach (var builderKVP in NamespaceBuilders)
+                        builderKVP.Value.Dispose ();
+
                     NamespaceBuilders?.Dispose ();
                     NamespaceBuilders = null!;
 
@@ -762,8 +745,6 @@ namespace EchelonScriptCompiler.Data {
 
         #region ================== Instance fields
 
-        protected PooledList<Pointer<ES_TypeInfo>> typesList;
-        protected ArrayPointer<Pointer<ES_TypeInfo>> builtinTypesList;
         protected IMemoryManager memManager;
         protected Dictionary<ArrayPointer<byte>, ES_NamespaceData> namespacesDict;
 
@@ -781,11 +762,10 @@ namespace EchelonScriptCompiler.Data {
 
         public UnmanagedIdentifierPool IdPool { get; protected set; }
 
-        public IReadOnlyPooledList<Pointer<ES_TypeInfo>> TypesList => typesList;
-
-        public ArrayPointer<Pointer<ES_TypeInfo>> BuiltinTypesList => builtinTypesList;
-
         public IReadOnlyDictionary<ArrayPointer<byte>, ES_NamespaceData> Namespaces => namespacesDict;
+
+        public ArrayPointer<byte> GlobalTypesNamespace { get; private set; }
+        public ArrayPointer<byte> GeneratedTypesNamespace { get; private set; }
 
         public ES_TypeInfo* TypeUnknownValue => typeUnknownValue;
         public ES_TypeInfo* TypeVoid => typeVoid;
@@ -801,16 +781,18 @@ namespace EchelonScriptCompiler.Data {
             namespacesDict = new Dictionary<ArrayPointer<byte>, ES_NamespaceData> ();
             IdPool = new UnmanagedIdentifierPool ();
 
-            typesList = new PooledList<Pointer<ES_TypeInfo>> ();
             memManager = new BasicMemoryManager ();
 
             backendData = null;
+
+            GlobalTypesNamespace = IdPool.GetIdentifier ("@globals");
+            GeneratedTypesNamespace = IdPool.GetIdentifier ("@generated");
 
             var unknTypeId = IdPool.GetIdentifier ("#UNKNOWN_TYPE");
             var unknType = memManager.GetMemory<ES_TypeInfo> ();
             *unknType = new ES_TypeInfo (
                 ES_TypeTag.UNKNOWN, ES_AccessModifier.Public, ArrayPointer<byte>.Null,
-                unknTypeId, GetFullyQualifiedName (ArrayPointer<byte>.Null, unknTypeId)
+                new ES_FullyQualifiedName (ArrayPointer<byte>.Null, unknTypeId)
             );
             typeUnknownValue = unknType;
         }
@@ -832,18 +814,6 @@ namespace EchelonScriptCompiler.Data {
         #region ================== Instance methods
 
         protected ArrayPointer<byte> GetFunctionTypeName (ES_TypeInfo* returnType, ReadOnlySpan<ES_FunctionPrototypeArgData> args) {
-            static PooledArray<char> SanitizeFQN (ReadOnlySpan<char> fqn) {
-                var argName = PooledArray<char>.GetArray (fqn.Length);
-
-                fqn.CopyTo (argName);
-
-                var namespaceSepIdx = argName.Span.IndexOf ("::");
-                Debug.Assert (namespaceSepIdx > -1);
-                argName.Span.Slice (namespaceSepIdx, 2).Fill ('@');
-
-                return argName;
-            }
-
             Debug.Assert (returnType != null);
 
             using var charList = new StructPooledList<char> (CL_ClearMode.Auto);
@@ -852,9 +822,11 @@ namespace EchelonScriptCompiler.Data {
 
             // Add the return type.
             charList.AddRange ("ret@");
-            using var retName = SanitizeFQN (returnType->FullyQualifiedNameString);
-            charList.AddRange (retName);
-            retName.Dispose ();
+            foreach (var c in returnType->Name.NamespaceName.Span)
+                charList.Add ((char) c);
+            charList.AddRange ("::");
+            foreach (var c in returnType->Name.TypeName.Span)
+                charList.Add ((char) c);
 
             // Add the arguments.
             bool firstArg = true;
@@ -874,8 +846,11 @@ namespace EchelonScriptCompiler.Data {
                     case ES_ArgumentType.Ref: charList.AddRange ("ref@"); break;
                 }
 
-                using var argName = SanitizeFQN (arg.ValueType->FullyQualifiedNameString);
-                charList.AddRange (argName);
+                foreach (var c in arg.ValueType->Name.NamespaceName.Span)
+                    charList.Add ((char) c);
+                charList.AddRange ("::");
+                foreach (var c in arg.ValueType->Name.TypeName.Span)
+                    charList.Add ((char) c);
             }
 
             charList.AddRange (">");
@@ -883,80 +858,22 @@ namespace EchelonScriptCompiler.Data {
             return IdPool.GetIdentifier (charList.Span);
         }
 
-        public ArrayPointer<byte> GetFullyQualifiedName (ArrayPointer<byte> namespaceName, ArrayPointer<byte> typeName) {
-            using var fqnArr = PooledArray<byte>.GetArray (namespaceName.Length + typeName.Length + 2);
-            var fqnSpan = fqnArr.Span;
-
-            int len = 0;
-
-            namespaceName.Span.CopyTo (fqnSpan.Slice (len, namespaceName.Length));
-            len += namespaceName.Length;
-
-            fqnSpan [len++] = (byte) ':';
-            fqnSpan [len++] = (byte) ':';
-
-            typeName.Span.CopyTo (fqnSpan.Slice (len, typeName.Length));
-
-            return IdPool.GetIdentifier (fqnSpan);
+        public ES_TypeInfo* GetFullyQualifiedType (ArrayPointer<byte> namespaceName, ArrayPointer<byte> typeName) {
+            return GetFullyQualifiedType (new ES_FullyQualifiedName (namespaceName, typeName));
         }
 
-        public ArrayPointer<byte> GetFullyQualifiedName (ArrayPointer<byte> namespaceName, ReadOnlySpan<ArrayPointer<byte>> typeName) {
-            Debug.Assert (typeName.Length > 0);
+        public ES_TypeInfo* GetFullyQualifiedType (ES_FullyQualifiedName fullyQualifiedName) {
+            var namespaceName = IdPool.GetIdentifier (fullyQualifiedName.NamespaceName.Span);
+            if (!Namespaces.TryGetValue (namespaceName, out var namespaceData))
+                return null;
 
-            int len = namespaceName.Length + 2 + (typeName.Length - 1); // Namespace name + "::" + "."s (if any)
-            for (int i = 0; i < typeName.Length; i++)
-                len += typeName [i].Length;
+            var typesList = namespaceData.Types;
 
-            using var fqnArr = PooledArray<byte>.GetArray (len);
-            var fqnSpan = fqnArr.Span;
-
-            len = 0;
-
-            // Namespace
-            namespaceName.Span.CopyTo (fqnSpan.Slice (len, namespaceName.Length));
-            len += namespaceName.Length;
-
-            // Namespace separator
-            fqnSpan [len++] = (byte) ':';
-            fqnSpan [len++] = (byte) ':';
-
-            // First type name
-            typeName [0].Span.CopyTo (fqnSpan.Slice (len, typeName [0].Length));
-            len += typeName [0].Length;
-
-            // Nested type names
-            for (int i = 1; i < typeName.Length; i++) {
-                fqnSpan [len++] = (byte) '.';
-
-                typeName [i].Span.CopyTo (fqnSpan.Slice (len, typeName [i].Length));
-                len += typeName [i].Length;
-            }
-
-            return IdPool.GetIdentifier (fqnSpan);
-        }
-
-        public ES_TypeInfo* GetFullyQualifiedType (ArrayPointer<byte> fullyQualifiedName) {
-            ReadOnlySpan<byte> namespaceSep = stackalloc byte [2] { (byte) ':', (byte) ':' };
-            int namespaceSepPos = fullyQualifiedName.Span.IndexOf (namespaceSep);
-
-            Debug.Assert (namespaceSepPos > -1, "The specified name must be fully qualified.");
-
-            ReadOnlySpan<Pointer<ES_TypeInfo>> typesSpan;
-            if (namespaceSepPos > 0) {
-                var namespaceName = IdPool.GetIdentifier (fullyQualifiedName.Span.Slice (0, namespaceSepPos));
-
-                if (!Namespaces.TryGetValue (namespaceName, out var namespaceData))
-                    return null;
-
-                typesSpan = namespaceData.TypeSpan;
-            } else
-                typesSpan = builtinTypesList.Span;
-
-            var typeName = IdPool.GetIdentifier (fullyQualifiedName.Span.Slice (namespaceSepPos + namespaceSep.Length));
-            foreach (var typePtr in typesSpan) {
+            var typeName = IdPool.GetIdentifier (fullyQualifiedName.TypeName.Span);
+            foreach (var typePtr in typesList) {
                 var type = typePtr.Address;
 
-                if (type->TypeName.Equals (typeName))
+                if (type->Name.TypeName.Equals (typeName))
                     return type;
             }
 
@@ -979,7 +896,6 @@ namespace EchelonScriptCompiler.Data {
                 backendData?.Dispose ();
                 namespacesDict.Clear ();
                 IdPool?.Dispose ();
-                typesList?.Dispose ();
                 memManager?.Dispose ();
 
                 disposedValue = true;

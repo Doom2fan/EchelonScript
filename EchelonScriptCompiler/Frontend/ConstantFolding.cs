@@ -490,8 +490,7 @@ namespace EchelonScriptCompiler.Frontend {
 
                 case ES_AstNewArrayExpression newArrayExpr: {
                     var intName = idPool.GetIdentifier (ES_PrimitiveTypes.GetIntName (ES_IntSize.Int32, false));
-                    var intFQN = Environment.GetFullyQualifiedName (ArrayPointer<byte>.Null, intName);
-                    var intType = Environment.GetFullyQualifiedType (intFQN);
+                    var intType = Environment.GetFullyQualifiedType (Environment.GlobalTypesNamespace, intName);
                     Debug.Assert (intType is not null && intType->TypeTag == ES_TypeTag.Int);
 
                     foreach (ref var rank in newArrayExpr.Ranks.AsSpan ()) {
@@ -644,9 +643,7 @@ namespace EchelonScriptCompiler.Frontend {
 
                     if (simpleBinaryExpr.ExpressionType.IsBitShift () && leftType.Type->TypeTag == ES_TypeTag.Int) {
                         var intName = ES_PrimitiveTypes.GetIntName (((ES_IntTypeData*) expectedType)->IntSize, true);
-
-                        var intFQN = Environment.GetFullyQualifiedName (ArrayPointer<byte>.Null, idPool.GetIdentifier (intName));
-                        expectedRightType = Environment.GetFullyQualifiedType (intFQN);
+                        expectedRightType = Environment.GetFullyQualifiedType (Environment.GlobalTypesNamespace, idPool.GetIdentifier (intName));
                     }
 
                     var rightType = FoldConstants_Expression (ref transUnit, symbols, src, ref simpleBinaryExpr.Right, expectedRightType);

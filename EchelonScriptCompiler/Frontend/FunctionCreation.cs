@@ -10,6 +10,7 @@
 using System;
 using System.Diagnostics;
 using ChronosLib.Pooled;
+using ChronosLib.Unmanaged;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Data.Types;
@@ -78,18 +79,27 @@ namespace EchelonScriptCompiler.Frontend {
             var idPool = Environment.IdPool;
 
             // Get the namespace and function names.
-            var namespaceName = namespaceBuilder.NamespaceData.NamespaceName;
             var funcName = Environment.IdPool.GetIdentifier (funcDef.Name.Text.Span);
 
             // Get the fully-qualified name.
-            ArrayPointer<byte> fullyQualifiedName;
-            if (parentType == null)
-                fullyQualifiedName = Environment.GetFullyQualifiedName (namespaceName, funcName);
-            else {
-                Span<ArrayPointer<byte>> parts = stackalloc ArrayPointer<byte> [2];
-                parts [0] = parentType->TypeName;
-                parts [1] = funcName;
-                fullyQualifiedName = Environment.GetFullyQualifiedName (namespaceName, funcName);
+            ES_FullyQualifiedName fullyQualifiedName;
+            if (parentType == null) {
+                var namespaceName = namespaceBuilder.NamespaceData.NamespaceName;
+                fullyQualifiedName = new ES_FullyQualifiedName (namespaceName, funcName);
+            } else {
+                using var namespaceBytes = UnmanagedArray<byte>.GetArray (parentType->Name.NamespaceName.Length + 2 + parentType->Name.TypeName.Length);
+                var span = namespaceBytes.Span;
+
+                parentType->Name.NamespaceName.Span.CopyTo (span);
+                span = span.Slice (parentType->Name.NamespaceName.Length);
+
+                span [0..2].Fill ((byte) ':');
+                span = span [2..^0];
+
+                parentType->Name.TypeName.Span.CopyTo (span);
+
+                var namespaceName = idPool.GetIdentifier (namespaceBytes.Span);
+                fullyQualifiedName = new ES_FullyQualifiedName (namespaceName, funcName);
             }
 
             // Handle the return type.
@@ -161,7 +171,7 @@ namespace EchelonScriptCompiler.Frontend {
                 var funcData = EnvironmentBuilder.MemoryManager.GetMemory<ES_FunctionData> ();
 
                 *funcData = new ES_FunctionData (
-                    funcName, fullyQualifiedName,
+                    fullyQualifiedName,
                     funcDef.AccessModifier, sourceUnit,
                     funcType, argDataMem, optArgNum
                 );

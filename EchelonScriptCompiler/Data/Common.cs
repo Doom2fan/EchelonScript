@@ -8,8 +8,10 @@
  */
 
 using System;
+using System.Text;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Frontend.Parser;
+using Microsoft.Toolkit.HighPerformance.Buffers;
 
 namespace EchelonScriptCompiler.Data {
     public unsafe struct ArrayPointer<T>
@@ -104,5 +106,32 @@ namespace EchelonScriptCompiler.Data {
         Virtual,
         Abstract,
         Override,
+    }
+
+    public readonly struct ES_FullyQualifiedName {
+        public readonly ArrayPointer<byte> NamespaceName;
+        public readonly ArrayPointer<byte> TypeName;
+
+        public string NamespaceNameString {
+            get => StringPool.Shared.GetOrAdd (NamespaceName.Span, Encoding.ASCII);
+        }
+        public string TypeNameString {
+            get => StringPool.Shared.GetOrAdd (TypeName.Span, Encoding.ASCII);
+        }
+
+        public ES_FullyQualifiedName (ArrayPointer<byte> namespaceName, ArrayPointer<byte> typeName) {
+            NamespaceName = namespaceName;
+            TypeName = typeName;
+        }
+
+        public string GetNameAsTypeString () {
+            Span<byte> bytes = stackalloc byte [NamespaceName.Length + TypeName.Length + 2];
+
+            NamespaceName.Span.CopyTo (bytes);
+            bytes.Slice (NamespaceName.Length, 2).Fill ((byte) ':');
+            TypeName.Span.CopyTo (bytes.Slice (NamespaceName.Length + 2));
+
+            return StringPool.Shared.GetOrAdd (bytes, Encoding.ASCII);
+        }
     }
 }

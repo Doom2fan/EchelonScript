@@ -43,11 +43,10 @@ namespace EchelonScriptCompiler.Data.Types {
             #region ================== Constructors
 
             internal Builder ([DisallowNull] ES_ClassData* data, ES_AccessModifier accessMod,
-                ArrayPointer<byte> typeName, ArrayPointer<byte> fullyQualifiedName,
-                ArrayPointer<byte> sourceUnit
+                ES_FullyQualifiedName fullyQualifiedName, ArrayPointer<byte> sourceUnit
             ) {
                 classData = data;
-                data->TypeInfo = new ES_TypeInfo (ES_TypeTag.Class, accessMod, sourceUnit, typeName, fullyQualifiedName);
+                data->TypeInfo = new ES_TypeInfo (ES_TypeTag.Class, accessMod, sourceUnit, fullyQualifiedName);
             }
 
             #endregion

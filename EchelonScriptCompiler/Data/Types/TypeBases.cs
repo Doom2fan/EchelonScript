@@ -40,11 +40,8 @@ namespace EchelonScriptCompiler.Data.Types {
         /// <summary>The type's access modifier.</summary>
         public readonly ES_AccessModifier AccessModifier;
 
-        /// <summary>The name of the type.</summary>
-        public readonly ArrayPointer<byte> TypeName;
-
         /// <summary>The fully qualified name of the type.</summary>
-        public readonly ArrayPointer<byte> FullyQualifiedName;
+        public readonly ES_FullyQualifiedName Name;
 
         /// <summary>The source translation unit of the type.</summary>
         public readonly ArrayPointer<byte> SourceUnit;
@@ -59,15 +56,14 @@ namespace EchelonScriptCompiler.Data.Types {
         public ES_TypeInfo (
             ES_TypeTag typeTag, ES_AccessModifier accessMod,
             ArrayPointer<byte> sourceUnit,
-            ArrayPointer<byte> name, ArrayPointer<byte> fullyQualifiedName
+            ES_FullyQualifiedName fullyQualifiedName
         ) {
             TypeTag = typeTag;
             RuntimeSize = -1;
 
             AccessModifier = accessMod;
 
-            TypeName = name;
-            FullyQualifiedName = fullyQualifiedName;
+            Name = fullyQualifiedName;
             SourceUnit = sourceUnit;
 
             MembersList = new ES_TypeMembers ();
@@ -78,20 +74,6 @@ namespace EchelonScriptCompiler.Data.Types {
         #region ================== Instance properties
 
         #region String utilities
-
-        /// <summary>The type's name as a string.</summary>
-        public string TypeNameString {
-            get {
-                return StringPool.Shared.GetOrAdd (TypeName.Span, Encoding.ASCII);
-            }
-        }
-
-        /// <summary>The type's fully qualified name as a string.</summary>
-        public string FullyQualifiedNameString {
-            get {
-                return StringPool.Shared.GetOrAdd (FullyQualifiedName.Span, Encoding.ASCII);
-            }
-        }
 
         /// <summary>The type's source unit's name as a string.</summary>
         public string SourceUnitString {

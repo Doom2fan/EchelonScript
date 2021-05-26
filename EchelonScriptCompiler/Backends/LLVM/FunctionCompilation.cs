@@ -43,7 +43,9 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
             // Add the return type.
             mangleChars.AddRange ("Ret");
-            mangleChars.AddRange (type->ReturnType->FullyQualifiedNameString);
+            mangleChars.AddRange (type->ReturnType->Name.NamespaceNameString);
+            mangleChars.AddRange ("__");
+            mangleChars.AddRange (type->ReturnType->Name.TypeNameString);
 
             // Add the arg types.
             foreach (var arg in type->ArgumentsList.Span) {
@@ -56,7 +58,9 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                     case ES_ArgumentType.Ref: mangleChars.AddRange ("ref"); break;
                 }
 
-                mangleChars.AddRange (arg.ValueType->FullyQualifiedNameString);
+                mangleChars.AddRange (arg.ValueType->Name.NamespaceNameString);
+                mangleChars.AddRange ("__");
+                mangleChars.AddRange (arg.ValueType->Name.TypeNameString);
             }
 
             return mangleChars.ToPooledArray ();
@@ -64,21 +68,16 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
         private PooledArray<char> MangleFunctionName ([DisallowNull] ES_FunctionData* func) {
             // Sample name: "System.Math__FMath.Sin"
-            const string fqnSeparator = "::";
-
             using var mangleChars = new StructPooledList<char> (CL_ClearMode.Auto);
 
-            var fqn = func->FullyQualifiedNameString.AsSpan ();
-            var fqnSepIdx = fqn.IndexOf (fqnSeparator);
-
             // The namespace.
-            mangleChars.AddRange (fqn [0..fqnSepIdx]);
+            mangleChars.AddRange (func->Name.NamespaceNameString);
 
             // The mangled namespace separator.
             mangleChars.AddRange ("__");
 
             // The function name.
-            mangleChars.AddRange (fqn [(fqnSepIdx + fqnSeparator.Length)..^0]);
+            mangleChars.AddRange (func->Name.TypeNameString);
 
             /*// Add the type's mangled name.
             mangleChars.AddRange ("_");

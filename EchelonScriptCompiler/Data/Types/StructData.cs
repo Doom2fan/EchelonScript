@@ -45,11 +45,10 @@ namespace EchelonScriptCompiler.Data.Types {
             #region ================== Constructors
 
             internal Builder ([DisallowNull] ES_StructData* data, ES_AccessModifier accessMod,
-                ArrayPointer<byte> typeName, ArrayPointer<byte> fullyQualifiedName,
-                ArrayPointer<byte> sourceUnit
+                ES_FullyQualifiedName fullyQualifiedName, ArrayPointer<byte> sourceUnit
             ) {
                 structData = data;
-                data->TypeInfo = new ES_TypeInfo (ES_TypeTag.Struct, accessMod, sourceUnit, typeName, fullyQualifiedName);
+                data->TypeInfo = new ES_TypeInfo (ES_TypeTag.Struct, accessMod, sourceUnit, fullyQualifiedName);
                 membersListBuilder = new ES_TypeMembers.Builder (&structData->TypeInfo.MembersList, &structData->TypeInfo);
             }
 

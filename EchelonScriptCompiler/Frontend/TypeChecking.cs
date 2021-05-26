@@ -217,12 +217,12 @@ namespace EchelonScriptCompiler.Frontend {
             if (!CheckTypes_MustBeCompat (destType, givenType, out isConstant)) {
                 if (CheckTypes_ExplicitCast (destType, givenType, out _, out _)) {
                     errorList.Add (ES_FrontendErrors.GenNoImplicitCast (
-                        destType->FullyQualifiedNameString, givenType->FullyQualifiedNameString,
+                        destType->Name.GetNameAsTypeString (), givenType->Name.GetNameAsTypeString (),
                         src, bounds
                     ));
                 } else {
                     errorList.Add (ES_FrontendErrors.GenNoCast (
-                        destType->FullyQualifiedNameString, givenType->FullyQualifiedNameString,
+                        destType->Name.GetNameAsTypeString (), givenType->Name.GetNameAsTypeString (),
                         src, bounds
                     ));
                 }
@@ -365,7 +365,7 @@ namespace EchelonScriptCompiler.Frontend {
 
                                 if (!CheckTypes_MustBeCompat (exprTypeData.Type, sectionTypeData.Type, out var sectionConst)) {
                                     errorList.Add (ES_FrontendErrors.GenNoCast (
-                                        exprTypeData.Type->FullyQualifiedNameString, sectionTypeData.Type->FullyQualifiedNameString,
+                                        exprTypeData.Type->Name.GetNameAsTypeString (), sectionTypeData.Type->Name.GetNameAsTypeString (),
                                         src, sectionTypeData.Expr.NodeBounds
                                     ));
                                 }
@@ -400,7 +400,7 @@ namespace EchelonScriptCompiler.Frontend {
                         CheckTypes_EnsureCompat (retType, exprData.Type, src, exprData.Expr.NodeBounds, out _);
                     } else if (retType->TypeTag != ES_TypeTag.Void) {
                         errorList.Add (ES_FrontendErrors.GenMissingReturnValue (
-                            retType->FullyQualifiedNameString, src, retStmt.NodeBounds
+                            retType->Name.GetNameAsTypeString (), src, retStmt.NodeBounds
                         ));
                     }
 
@@ -594,7 +594,7 @@ namespace EchelonScriptCompiler.Frontend {
 
                     if (!EnvironmentBuilder!.UnaryOpCompat (exprData.Type, unaryExpr.ExpressionType, out var finalType, out var opConst)) {
                         errorList.Add (ES_FrontendErrors.GenCantApplyUnaryOp (
-                            unaryExpr.OperatorToken.Text.GetPooledString (), exprData.Type->FullyQualifiedNameString,
+                            unaryExpr.OperatorToken.Text.GetPooledString (), exprData.Type->Name.GetNameAsTypeString (),
                             src, exprData.Expr.NodeBounds
                         ));
 
@@ -610,7 +610,7 @@ namespace EchelonScriptCompiler.Frontend {
 
                     if (!CheckTypes_ExplicitCast (destType, exprType.Type, out bool castRedundant, out var isConstant)) {
                         errorList.Add (ES_FrontendErrors.GenNoExplicitCast (
-                            destType->FullyQualifiedNameString, exprType.Type->FullyQualifiedNameString,
+                            destType->Name.GetNameAsTypeString (), exprType.Type->Name.GetNameAsTypeString (),
                             src, castExpr.NodeBounds
                         ));
 
@@ -636,7 +636,7 @@ namespace EchelonScriptCompiler.Frontend {
                     if (simpleBinaryExpr.ExpressionType.IsBitShift () && leftType.Type->TypeTag == ES_TypeTag.Int) {
                         var intName = ES_PrimitiveTypes.GetIntName (((ES_IntTypeData*) expectedType)->IntSize, true);
 
-                        var intFQN = Environment.GetFullyQualifiedName (ArrayPointer<byte>.Null, idPool.GetIdentifier (intName));
+                        var intFQN = new ES_FullyQualifiedName (Environment.GlobalTypesNamespace, idPool.GetIdentifier (intName));
                         expectedRightType= Environment.GetFullyQualifiedType (intFQN);
                     }
 
@@ -650,7 +650,7 @@ namespace EchelonScriptCompiler.Frontend {
                     if (!EnvironmentBuilder!.BinaryOpCompat (leftType.Type, rightType.Type, simpleBinaryExpr.ExpressionType, out var finalType, out var opConst)) {
                         errorList.Add (ES_FrontendErrors.GenCantApplyBinaryOp (
                             simpleBinaryExpr.OperatorToken.Text.GetPooledString (),
-                            leftType.Type->FullyQualifiedNameString, rightType.Type->FullyQualifiedNameString,
+                            leftType.Type->Name.GetNameAsTypeString (), rightType.Type->Name.GetNameAsTypeString (),
                             src, simpleBinaryExpr.NodeBounds
                         ));
 
@@ -708,7 +708,7 @@ namespace EchelonScriptCompiler.Frontend {
             } else {
                 if (funcExpr.TypeInfo is not null) {
                     errorList.Add (ES_FrontendErrors.GenCantInvokeType (
-                        funcExpr.TypeInfo->FullyQualifiedNameString, src, funcExpr.Expr.NodeBounds
+                        funcExpr.TypeInfo->Name.GetNameAsTypeString (), src, funcExpr.Expr.NodeBounds
                     ));
                     return new ExpressionData { Expr = funcCallExpr, Type = typeUnkn, Constant = false, Addressable = false };
                 } else if (funcExpr.Type is not null) {
@@ -723,13 +723,13 @@ namespace EchelonScriptCompiler.Frontend {
                     Debug.Fail ("???");
             }
 
-            var funcName = funcType->TypeInfo.TypeName;
+            var funcName = funcType->TypeInfo.Name.TypeName;
             int funcArgCount = funcType->ArgumentsList.Length;
             int callArgCount = funcCallExpr.Arguments.Length;
             int reqArgCount = 0;
 
             if (func is not null) {
-                funcName = func->FullyQualifiedName;
+                funcName = func->Name.TypeName;
                 reqArgCount = funcArgCount - func->OptionalArgsCount;
             } else
                 reqArgCount = funcArgCount;

@@ -9,13 +9,11 @@
 
 using System;
 using System.Diagnostics;
-using System.Text;
 using ChronosLib.Pooled;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Data.Types;
 using EchelonScriptCompiler.Utilities;
-using Microsoft.Toolkit.HighPerformance.Buffers;
 
 namespace EchelonScriptCompiler.Frontend {
     public unsafe partial class CompilerFrontend {
@@ -25,14 +23,15 @@ namespace EchelonScriptCompiler.Frontend {
             Debug.Assert (typeName.TypeName.Parts.Length > 0);
 
             if (typeName.Namespace is not null) {
-                var fqnChars = PooledArray<char>.GetArray (typeName.GetStringLength ());
-                typeName.ToString (fqnChars);
-                var fqnId = idPool.GetIdentifier (fqnChars.Span);
+                using var namespaceChars = typeName.Namespace.ToPooledChars ();
+                using var nameChars = typeName.TypeName.ToPooledChars ();
+                var namespaceId = idPool.GetIdentifier (namespaceChars);
+                var nameId = idPool.GetIdentifier (nameChars);
 
-                var type = Environment!.GetFullyQualifiedType (fqnId);
+                var type = Environment!.GetFullyQualifiedType (namespaceId, nameId);
 
                 if (type == null) {
-                    var err = ES_FrontendErrors.GenCantFindSymbol (fqnChars.Span.GetPooledString (), src, typeName.NodeBounds);
+                    var err = ES_FrontendErrors.GenCantFindSymbol (typeName.ToString (), src, typeName.NodeBounds);
                     errorList.Add (err);
 
                     return Environment.TypeUnknownValue;
@@ -170,8 +169,8 @@ namespace EchelonScriptCompiler.Frontend {
         }
 
         protected void ImportNamespaceSymbols (SymbolStack<FrontendSymbol> symbols, ES_NamespaceData namespaceData) {
-            foreach (var type in namespaceData.TypeSpan)
-                symbols.AddSymbol (type.Address->TypeName, NewSymbolType (type));
+            foreach (var type in namespaceData.Types)
+                symbols.AddSymbol (type.Address->Name.TypeName, NewSymbolType (type));
             foreach (var funcKVP in namespaceData.Functions)
                 symbols.AddSymbol (funcKVP.Key, NewSymbolFunction (funcKVP.Value));
         }
@@ -184,10 +183,10 @@ namespace EchelonScriptCompiler.Frontend {
                 return;
 
             if (import.ImportedNames is null || import.ImportedNames.Length == 0) {
-                foreach (var type in namespaceData.TypeSpan) {
-                    if (!symbols.AddSymbol (type.Address->TypeName, NewSymbolVariable (type))) {
+                foreach (var type in namespaceData.Types) {
+                    if (!symbols.AddSymbol (type.Address->Name.TypeName, NewSymbolVariable (type))) {
                         var err = ES_FrontendErrors.GenDuplicateSymbolDef (
-                            type.Address->TypeNameString,
+                            type.Address->Name.TypeNameString,
                             src, import.NamespaceName.NodeBounds
                         );
                         errorList.Add (err);
@@ -196,7 +195,7 @@ namespace EchelonScriptCompiler.Frontend {
                 foreach (var funcKVP in namespaceData.Functions) {
                     if (!symbols.AddSymbol (funcKVP.Key, NewSymbolFunction (funcKVP.Value))) {
                         var err = ES_FrontendErrors.GenDuplicateSymbolDef (
-                            StringPool.Shared.GetOrAdd (funcKVP.Value.Address->Name.Span, Encoding.ASCII),
+                            funcKVP.Value.Address->Name.TypeNameString,
                             src, import.NamespaceName.NodeBounds
                         );
                         errorList.Add (err);
@@ -210,8 +209,8 @@ namespace EchelonScriptCompiler.Frontend {
                     bool isDuplicate = false;
 
                     if (!symbolFound) {
-                        foreach (var typeData in namespaceData.TypeSpan) {
-                            if (typeData.Address->TypeName.Equals (name)) {
+                        foreach (var typeData in namespaceData.Types) {
+                            if (typeData.Address->Name.TypeName.Equals (name)) {
                                 isDuplicate = !symbols.AddSymbol (name, NewSymbolType (typeData));
                                 symbolFound = true;
                                 break;
@@ -284,7 +283,8 @@ namespace EchelonScriptCompiler.Frontend {
 
         protected void GatherGlobalImports (ref TranslationUnitData transUnit) {
             var idPool = Environment!.IdPool;
-            var namespaces = Environment!.Namespaces;
+            var namespaces = Environment.Namespaces;
+            var globalTypesList = EnvironmentBuilder!.GetOrCreateNamespace (Environment.GlobalTypesNamespace).NamespaceData.Types;
 
             foreach (ref var astUnit in transUnit.AstUnits.Span) {
                 var ast = astUnit.Ast;
@@ -293,8 +293,8 @@ namespace EchelonScriptCompiler.Frontend {
 
                 // Add built-in symbols
                 symbols.Push ();
-                foreach (var type in Environment!.BuiltinTypesList.Span)
-                    symbols.AddSymbol (type.Address->TypeName, NewSymbolType (type));
+                foreach (var type in globalTypesList)
+                    symbols.AddSymbol (type.Address->Name.TypeName, NewSymbolType (type));
 
                 // Add imported symbols
                 symbols.Push ();
@@ -399,7 +399,7 @@ namespace EchelonScriptCompiler.Frontend {
                     }
 
                     if (interfaceInList) {
-                        var interfaceFqnStr = type->FullyQualifiedNameString;
+                        var interfaceFqnStr = type->Name.GetNameAsTypeString ();
                         errorList.Add (ES_FrontendErrors.GenRepeatedInterfaceInList (interfaceFqnStr, srcCode.Span, inheritId.NodeBounds));
                         continue;
                     }

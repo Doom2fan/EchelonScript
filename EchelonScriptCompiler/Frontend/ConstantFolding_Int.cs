@@ -125,8 +125,7 @@ namespace EchelonScriptCompiler.Frontend {
                 unsigned = false;
 
             var typeName = Environment!.IdPool.GetIdentifier (ES_PrimitiveTypes.GetIntName (size, unsigned.Value));
-            var typeFqn = Environment.GetFullyQualifiedName (ArrayPointer<byte>.Null, typeName);
-            var intType = Environment.GetFullyQualifiedType (typeFqn);
+            var intType = Environment.GetFullyQualifiedType (Environment.GlobalTypesNamespace, typeName);
 
             Debug.Assert (intType is not null);
             Debug.Assert (intType->TypeTag == ES_TypeTag.Int);
