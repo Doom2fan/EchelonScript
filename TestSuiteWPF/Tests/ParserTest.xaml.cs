@@ -168,8 +168,6 @@ namespace TestSuiteWPF.Tests {
 
                     var modifiersList = AddNodeToTree ("Access modifiers", thisItem);
                     AddNodeToTree (structDef.AccessModifier.ToString (), modifiersList);
-                    if (structDef.Static)
-                        AddNodeToTree ("Static", modifiersList);
 
                     if (structDef.InterfacesList != null && structDef.InterfacesList.Length > 0) {
                         var inheritanceList = AddNodeToTree ("Interfaces list", thisItem);

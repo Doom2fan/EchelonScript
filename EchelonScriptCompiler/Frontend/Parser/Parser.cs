@@ -1993,7 +1993,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                 tokenizer.NextToken ();
 
             if (structModifiers.Static == true)
-                errorsList.Add (ES_FrontendErrors.GenInvalidModifier ("static", nameTkPair.tk));
+                errorsList.Add (new EchelonScriptErrorMessage (nameTkPair.tk, ES_FrontendErrors.StaticOnStruct));
             if (structModifiers.Const == true)
                 errorsList.Add (ES_FrontendErrors.GenInvalidModifier ("const", nameTkPair.tk));
 
@@ -2008,11 +2008,6 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             structModifiers.Const = false;
             structModifiers.VirtualnessModifier = ES_VirtualnessModifier.None;
 
-            // Error out if this is a static struct and it has an inheritance list.
-            var colonTkPair = tokenizer.PeekNextToken ();
-            if (structModifiers.Static == true && colonTkPair.tk.Type == EchelonScriptTokenType.Colon)
-                errorsList.Add (new EchelonScriptErrorMessage (colonTkPair.tk, ES_FrontendErrors.InheritanceOnStaticStruct));
-
             // Parse the inheritance list.
             var interfacesList = ParseInheritanceList ();
             if (interfacesList == null)
@@ -2026,7 +2021,6 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                 structModifiers.DocComment,
 
                 structModifiers.AccessModifier!.Value,
-                structModifiers.Static!.Value,
 
                 nameTkPair.tk,
                 interfacesList,

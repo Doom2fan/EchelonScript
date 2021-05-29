@@ -65,8 +65,8 @@ namespace EchelonScriptCompiler.Frontend {
         public const string InvalidAccessModForNamespaceContent = "Elements defined in a namespace cannot be declared as private, protected, or protected internal.";
         public const string NamespaceMissingBrace = "Unexpected keyword \"namespace\". Missing '}'?";
 
+        public const string StaticOnStruct = "Structs cannot be static.";
         public const string InheritanceOnStaticClass = "Static classes cannot inherit from other classes or implement interfaces.";
-        public const string InheritanceOnStaticStruct = "Static structs cannot implement interfaces.";
 
         public const string NoVarDefsInThisContext = "Variable definitions are not allowed in this context.";
         public const string NoImportsInThisContext = "Import statements are not allowed in this context.";

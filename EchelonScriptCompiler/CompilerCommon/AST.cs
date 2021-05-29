@@ -434,17 +434,15 @@ namespace EchelonScriptCompiler.CompilerCommon {
         protected ES_AstNodeBounds bounds;
 
         public EchelonScriptToken? DocComment;
-        public bool Static;
 
         public ES_AstTypeDeclaration_TypeName [] InterfacesList;
 
         public ES_AstStructDefinition (
-            EchelonScriptToken? docCom, ES_AccessModifier accessMod, bool staticMod,
+            EchelonScriptToken? docCom, ES_AccessModifier accessMod,
             EchelonScriptToken name, ES_AstTypeDeclaration_TypeName [] interfaces, ES_AstNode? [] contents,
             EchelonScriptToken startToken, EchelonScriptToken endToken
         ) : base (accessMod, contents) {
             DocComment = docCom;
-            Static = staticMod;
 
             Name = name;
             InterfacesList = interfaces;
