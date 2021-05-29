@@ -23,12 +23,18 @@ namespace EchelonScriptCompiler.Data.Types {
 
     [StructLayout (LayoutKind.Sequential, Pack = 1)]
     public unsafe struct ES_MemberData {
+        public readonly ES_AccessModifier AccessModifier;
         public readonly ES_MemberType MemberType;
         public readonly ES_MemberFlags Flags;
         public readonly ArrayPointer<byte> Name;
         public readonly ArrayPointer<byte> SourceUnit;
 
-        public ES_MemberData (ES_MemberType type, ES_MemberFlags flags, ArrayPointer<byte> name, ArrayPointer<byte> srcUnit) {
+        public ES_MemberData (
+            ES_AccessModifier accessMod,
+            ES_MemberType type, ES_MemberFlags flags,
+            ArrayPointer<byte> name, ArrayPointer<byte> srcUnit
+        ) {
+            AccessModifier = accessMod;
             MemberType = type;
             Flags = flags;
             Name = name;
@@ -43,10 +49,10 @@ namespace EchelonScriptCompiler.Data.Types {
         public readonly ES_TypeInfo* Type;
 
         public ES_MemberData_Variable (
-            ArrayPointer<byte> name, ArrayPointer<byte> srcUnit,
+            ArrayPointer<byte> name, ArrayPointer<byte> srcUnit, ES_AccessModifier accessMod,
             ES_MemberFlags flags, int offset, ES_TypeInfo* type
         ) {
-            Info = new ES_MemberData (ES_MemberType.Field, flags, name, srcUnit);
+            Info = new ES_MemberData (accessMod, ES_MemberType.Field, flags, name, srcUnit);
             Offset = offset;
             Type = type;
         }
@@ -62,7 +68,7 @@ namespace EchelonScriptCompiler.Data.Types {
             ES_AccessModifier accessMod, ArrayPointer<byte> srcUnit,
             ES_FunctionPrototypeData* funcType, ArrayPointer<ES_FunctionArgData> args, int optArgCount
         ) {
-            Info = new ES_MemberData (ES_MemberType.Field, flags, fqn.TypeName, srcUnit);
+            Info = new ES_MemberData (accessMod, ES_MemberType.Field, flags, fqn.TypeName, srcUnit);
             FunctionData = new ES_FunctionData (
                 fqn, accessMod, srcUnit,
                 funcType, args, optArgCount
@@ -90,7 +96,7 @@ namespace EchelonScriptCompiler.Data.Types {
             public ES_TypeMembers* MembersData => membersData;
 
             /// <summary>The members list of this type.</summary>
-            private ArrayPointer<Pointer<ES_MemberData>> MembersList {
+            public ArrayPointer<Pointer<ES_MemberData>> MembersList {
                 get => membersData->membersList;
                 set => membersData->membersList = value;
             }
@@ -116,7 +122,7 @@ namespace EchelonScriptCompiler.Data.Types {
         #region ================== Instance properties
 
         /// <summary>The members list of this type.</summary>
-        private ArrayPointer<Pointer<ES_MemberData>> MembersList => membersList;
+        public ArrayPointer<Pointer<ES_MemberData>> MembersList => membersList;
 
         #endregion
     }

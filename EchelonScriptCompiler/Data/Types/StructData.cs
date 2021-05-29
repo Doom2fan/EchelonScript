@@ -35,7 +35,7 @@ namespace EchelonScriptCompiler.Data.Types {
             }
 
             /// <summary>The members list of this struct.</summary>
-            public ES_TypeMembers MembersList => structData->TypeInfo.MembersList;
+            public ES_TypeMembers* MembersList => &structData->TypeInfo.MembersList;
 
             /// <summary>The builder for the members list of this struct.</summary>
             public ES_TypeMembers.Builder MembersListBuilder => membersListBuilder;
