@@ -104,6 +104,31 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                     break;
                 }
 
+                case ES_TypeTag.Struct: {
+                    uint fieldCount = 0;
+
+                    foreach (var memberAddr in varType->MembersList.MembersList.Span) {
+                        var memberPtr = memberAddr.Address;
+
+                        if (memberPtr->MemberType != ES_MemberType.Field)
+                            continue;
+
+                        if (memberPtr->Flags.HasFlag (ES_MemberFlags.Static))
+                            continue;
+
+                        var memberVarPtr = (ES_MemberData_Variable*) memberPtr;
+                        var memberVarType = memberVarPtr->Type;
+
+                        var memberVarValue = builderRef.BuildStructGEP (variable, fieldCount, "memberInitTmp");
+                        InitializeVariable (memberVarType, memberVarValue);
+
+                        fieldCount++;
+                    }
+
+
+                    break;
+                }
+
                 default:
                     throw new NotImplementedException ("Variable type not implemented.");
             }

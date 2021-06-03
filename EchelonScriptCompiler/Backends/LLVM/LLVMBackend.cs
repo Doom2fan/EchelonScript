@@ -382,6 +382,33 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             using var symbols = new SymbolStack<Symbol> (new Symbol ());
             var idPool = env.IdPool;
 
+            // Pre-emit the types so we don't get errors when trying to use them later.
+            foreach (var namespaceKVP in env.Namespaces) {
+                var namespaceData = namespaceKVP.Value;
+
+                foreach (var typeAddr in namespaceData.Types) {
+                    var typePtr = typeAddr.Address;
+
+                    switch (typePtr->TypeTag) {
+                        case ES_TypeTag.Struct:
+                            GetOrGenerateStruct ((ES_StructData*) typePtr, out _);
+                            break;
+
+                        case ES_TypeTag.Void:
+                        case ES_TypeTag.Bool:
+                        case ES_TypeTag.Int:
+                        case ES_TypeTag.Float:
+                        case ES_TypeTag.Function:
+                        case ES_TypeTag.Const:
+                        case ES_TypeTag.Immutable:
+                            break;
+
+                        default:
+                            throw new NotImplementedException ("Type not implemented yet.");
+                    }
+                }
+            }
+
             // Pre-emit the function prototypes/headers so we don't get errors when trying to get
             // them for calls later.
             // TODO: Handle functions in types!
@@ -390,6 +417,55 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
                 foreach (var funcKVP in namespaceData.Functions)
                     GetOrGenerateFunction (namespaceData, null, funcKVP.Key, out _, out _);
+            }
+
+            // Emit the type bodies. (Needs to be done before function bodies)
+            foreach (ref var transUnit in transUnits) {
+                BeginTranslationUnit (ref transUnit);
+
+                foreach (ref var astUnit in transUnit.AstUnits.Span) {
+                    if (!astUnit.Ast.Valid)
+                        throw new CompilationException (ES_BackendErrors.FrontendError);
+
+                    var src = astUnit.Ast.Source.Span;
+                    PopulateSymbolsFromFrontend (symbols, ref astUnit, out var astStackCount);
+
+                    foreach (var nmDef in astUnit.Ast.Namespaces) {
+                        symbols.Push ();
+
+                        var namespaceBuilder = GetNamespace (nmDef.NamespaceName);
+                        ImportNamespaceSymbols (symbols, namespaceBuilder);
+
+                        foreach (var def in nmDef.Contents) {
+                            switch (def) {
+                                case ES_AstClassDefinition classDef:
+                                    throw new NotImplementedException ("[TODO] Classes not implemented yet.");
+
+                                case ES_AstStructDefinition structDef: {
+                                    var structId = idPool.GetIdentifier (structDef.Name.Text.Span);
+                                    var structBuilder = namespaceBuilder.GetStruct (structId);
+                                    Debug.Assert (structBuilder is not null);
+                                    var structPtr = structBuilder.StructData;
+
+                                    GenerateCode_Struct (ref transUnit, ref astUnit, symbols, src, structDef, structPtr);
+
+                                    break;
+                                }
+
+                                case ES_AstEnumDefinition enumDef:
+                                case ES_AstFunctionDefinition funcDef:
+                                    break;
+                            }
+                        }
+
+                        symbols.Pop ();
+                    }
+
+                    for (; astStackCount > 0; astStackCount--)
+                        symbols.Pop ();
+                }
+
+                EndTranslationUnit ();
             }
 
             // Generate the code for the function bodies.
@@ -415,8 +491,10 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                             switch (def) {
                                 case ES_AstClassDefinition classDef:
                                     throw new NotImplementedException ("[TODO] Classes not implemented yet.");
+
                                 case ES_AstStructDefinition structDef:
-                                    throw new NotImplementedException ("[TODO] Structs not implemented yet.");
+                                    break;
+
                                 case ES_AstEnumDefinition enumDef:
                                     throw new NotImplementedException ("[TODO] Enums not implemented yet.");
 
