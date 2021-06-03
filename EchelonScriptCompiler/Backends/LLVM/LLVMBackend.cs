@@ -391,9 +391,11 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             Debug.Assert (envBuilder is not null);
 
             using var symbols = new SymbolStack<Symbol> (new Symbol ());
+            var idPool = env.IdPool;
 
             // Pre-emit the function prototypes/headers so we don't get errors when trying to get
             // them for calls later.
+            // TODO: Handle functions in types!
             foreach (var namespaceKVP in env.Namespaces) {
                 var namespaceData = namespaceKVP.Value;
 
@@ -401,9 +403,8 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                     GetOrGenerateFunction (namespaceData, null, funcKVP.Key, out _, out _);
             }
 
+            // Generate the code for the function bodies.
             // TODO: Handle functions in types!
-
-            // Generate the code.
             foreach (ref var transUnit in transUnits) {
                 BeginTranslationUnit (ref transUnit);
 
@@ -412,41 +413,14 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                         throw new CompilationException (ES_BackendErrors.FrontendError);
 
                     var src = astUnit.Ast.Source.Span;
-                    int astStackCount = 0;
-
-                    // Copy the AST unit's symbols
-                    foreach (var scope in astUnit.Symbols) {
-                        symbols.Push ();
-                        astStackCount++;
-
-                        foreach (var symbolKVP in scope) {
-                            var symbolName = symbolKVP.Key;
-                            var symbol = symbolKVP.Value;
-
-                            switch (symbol.Tag) {
-                                case FrontendSymbolType.Type:
-                                    symbols.AddSymbol (symbolName, new Symbol (symbol.MatchType ()));
-                                    break;
-
-                                case FrontendSymbolType.Function:
-                                    symbols.AddSymbol (symbolName, new Symbol (symbol.MatchFunction ()));
-                                    break;
-
-                                case FrontendSymbolType.Variable:
-                                    throw new NotImplementedException ("?");
-                            }
-                        }
-                    }
-
-                    symbols.Push ();
+                    PopulateSymbolsFromFrontend (symbols, ref astUnit, out var astStackCount);
 
                     foreach (var nmDef in astUnit.Ast.Namespaces) {
-                        using var namespaceNameChars = nmDef.NamespaceName.ToPooledChars ();
-                        var namespaceData = GetNamespace (src, astUnit.Ast.NodeBounds, namespaceNameChars);
+                        symbols.Push ();
 
-                        Debug.Assert (namespaceData is not null);
-
-                        ImportNamespaceSymbols (symbols, namespaceData);
+                        var namespaceBuilder = GetNamespace (nmDef.NamespaceName);
+                        var namespaceData = namespaceBuilder.NamespaceData;
+                        ImportNamespaceSymbols (symbols, namespaceBuilder);
 
                         foreach (var def in nmDef.Contents) {
                             switch (def) {
@@ -463,9 +437,9 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                                 }
                             }
                         }
-                    }
 
-                    symbols.Pop ();
+                        symbols.Pop ();
+                    }
 
                     for (; astStackCount > 0; astStackCount--)
                         symbols.Pop ();
@@ -511,8 +485,13 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                     }
                 }
 
+                case ES_TypeTag.Struct: {
+                    GetOrGenerateStruct ((ES_StructData*) type, out var ret, true);
+                    Debug.Assert (ret != null);
+                    return ret;
+                }
+
                 case ES_TypeTag.Function:
-                case ES_TypeTag.Struct:
                 case ES_TypeTag.Class:
                 case ES_TypeTag.Enum:
                 case ES_TypeTag.Interface:
@@ -560,45 +539,44 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
         #region AST/Language utils
 
-        private ES_NamespaceData? GetNamespace (ReadOnlySpan<char> src, ES_AstNodeBounds nodeBounds, ReadOnlySpan<char> namespaceStr) {
-            var namespaceName = env!.IdPool.GetIdentifier (namespaceStr);
-
-            if (!env.Namespaces.TryGetValue (namespaceName, out var namespaceData)) {
-                errorList.Add (new EchelonScriptErrorMessage (src, nodeBounds, ES_BackendErrors.FrontendError));
-                return null;
-            }
-
-            return namespaceData;
+        private ES_NamespaceData.Builder GetNamespace (ES_AstDottableIdentifier namespaceName) {
+            using var namespaceNameChars = namespaceName.ToPooledChars ();
+            return GetNamespace (namespaceNameChars);
         }
 
-        private void ImportNamespaceSymbols (SymbolStack<Symbol> symbols, ES_NamespaceData namespaceData) {
+        private ES_NamespaceData.Builder GetNamespace (ReadOnlySpan<char> namespaceStr) {
+            var namespaceName = env!.IdPool.GetIdentifier (namespaceStr);
+
+            if (!envBuilder!.NamespaceBuilders.TryGetValue (namespaceName, out var namespaceBuilder))
+                throw new CompilationException (ES_BackendErrors.FrontendError);
+
+            return namespaceBuilder;
+        }
+
+        private void ImportNamespaceSymbols (SymbolStack<Symbol> symbols, ES_NamespaceData.Builder namespaceBuilder) {
+            var namespaceData = namespaceBuilder.NamespaceData;
+
             foreach (var type in namespaceData.Types)
                 symbols.AddSymbol (type.Address->Name.TypeName, new Symbol (type));
             foreach (var funcKVP in namespaceData.Functions)
                 symbols.AddSymbol (funcKVP.Key, new Symbol (funcKVP.Value));
         }
 
-        private void AST_HandleImport (SymbolStack<Symbol> symbols, ReadOnlySpan<char> src, ES_AstImportStatement import) {
-            using var nmNameString = import.NamespaceName.ToPooledChars ();
-            var namespaceData = GetNamespace (src, import.NamespaceName.NodeBounds, nmNameString);
+        private void AST_HandleImport (SymbolStack<Symbol> symbols, ES_AstImportStatement import) {
+            var namespaceBuilder = GetNamespace (import.NamespaceName);
+            var namespaceData = namespaceBuilder.NamespaceData;
 
             if (namespaceData is null)
                 return;
 
             if (import.ImportedNames is null || import.ImportedNames.Length == 0) {
                 foreach (var type in namespaceData.Types) {
-                    if (!symbols.AddSymbol (type.Address->Name.TypeName, new Symbol (type))) {
-                        errorList.Add (new EchelonScriptErrorMessage (
-                            src, import.NamespaceName.NodeBounds, ES_BackendErrors.FrontendError
-                        ));
-                    }
+                    if (!symbols.AddSymbol (type.Address->Name.TypeName, new Symbol (type)))
+                        throw new CompilationException (ES_BackendErrors.FrontendError);
                 }
                 foreach (var funcKVP in namespaceData.Functions) {
-                    if (!symbols.AddSymbol (funcKVP.Key, new Symbol (funcKVP.Value))) {
-                        errorList.Add (new EchelonScriptErrorMessage (
-                            src, import.NamespaceName.NodeBounds, ES_BackendErrors.FrontendError
-                        ));
-                    }
+                    if (!symbols.AddSymbol (funcKVP.Key, new Symbol (funcKVP.Value)))
+                        throw new CompilationException (ES_BackendErrors.FrontendError);
                 }
             } else {
                 foreach (var importTk in import.ImportedNames) {
@@ -628,47 +606,19 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                     }
 
                     if (!symbolFound || isDuplicate)
-                        errorList.Add (new EchelonScriptErrorMessage (importTk, ES_BackendErrors.FrontendError));
+                        throw new CompilationException (ES_BackendErrors.FrontendError);
                 }
             }
         }
 
-        private void AST_HandleAlias (SymbolStack<Symbol> symbols, ReadOnlySpan<char> src, ES_AstTypeAlias alias) {
+        private void AST_HandleAlias (SymbolStack<Symbol> symbols, ES_AstTypeAlias alias) {
             var aliasName = alias.AliasName.Text.Span;
             var aliasId = env!.IdPool.GetIdentifier (aliasName);
-
-            if (alias.OriginalName is ES_AstTypeDeclaration_TypeName typeName) {
-                ES_FunctionData* func = null;
-
-                using var origNameChars = typeName.TypeName.ToPooledChars ();
-                var origName = env.IdPool.GetIdentifier (origNameChars);
-                origNameChars.Dispose ();
-
-                if (typeName.Namespace is not null) {
-                    using var namespaceName = typeName.Namespace!.ToPooledChars ();
-                    var namespaceData = GetNamespace (src, typeName.Namespace.NodeBounds, namespaceName);
-
-                    if (namespaceData is not null && namespaceData.Functions.TryGetValue (origName, out var newFunc))
-                        func = newFunc;
-                } else {
-                    var symbol = symbols.GetSymbol (origName);
-
-                    if (symbol.Tag == SymbolType.Function)
-                        func = symbol.MatchFunction ();
-                }
-
-                if (func != null) {
-                    if (!symbols.AddSymbol (aliasId, new Symbol (func)))
-                        errorList.Add (new EchelonScriptErrorMessage (alias.AliasName, ES_BackendErrors.FrontendError));
-
-                    return;
-                }
-            }
 
             var origType = GetTypeRef (alias.OriginalName);
 
             if (!symbols.AddSymbol (aliasId, new Symbol (origType)))
-                errorList.Add (new EchelonScriptErrorMessage (alias.AliasName, ES_BackendErrors.FrontendError));
+                throw new CompilationException (ES_BackendErrors.FrontendError);
         }
 
         private ES_TypeInfo* GetTypeRef (ES_AstTypeDeclaration? typeDecl) {
@@ -677,12 +627,43 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             var typeRef = typeDecl as ES_AstTypeDeclaration_TypeReference;
             Debug.Assert (typeRef is not null);
 
+            if (typeRef is null)
+                throw new CompilationException (ES_BackendErrors.FrontendError);
+
             return typeRef.Reference;
         }
 
         #endregion
 
         #region Misc utils
+
+        private void PopulateSymbolsFromFrontend (SymbolStack<Symbol> symbols, ref AstUnitData astUnit, out int astStackCount) {
+            astStackCount = 0;
+
+            // Copy the AST unit's symbols
+            foreach (var scope in astUnit.Symbols) {
+                symbols.Push ();
+                astStackCount++;
+
+                foreach (var symbolKVP in scope) {
+                    var symbolName = symbolKVP.Key;
+                    var symbol = symbolKVP.Value;
+
+                    switch (symbol.Tag) {
+                        case FrontendSymbolType.Type:
+                            symbols.AddSymbol (symbolName, new Symbol (symbol.MatchType ()));
+                            break;
+
+                        case FrontendSymbolType.Function:
+                            symbols.AddSymbol (symbolName, new Symbol (symbol.MatchFunction ()));
+                            break;
+
+                        case FrontendSymbolType.Variable:
+                            throw new NotImplementedException ("?");
+                    }
+                }
+            }
+        }
 
         private void AddVariable (SymbolStack<Symbol> stack, ArrayPointer<byte> name, VariableData data) {
             stack.AddSymbol (name, new Symbol (data));

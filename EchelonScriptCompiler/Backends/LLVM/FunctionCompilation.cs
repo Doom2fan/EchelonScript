@@ -287,11 +287,11 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 #region Symbol definition
 
                 case ES_AstImportStatement importStmt:
-                    AST_HandleImport (symbols, src, importStmt);
+                    AST_HandleImport (symbols, importStmt);
                     return new StatementData { AlwaysReturns = false };
 
                 case ES_AstTypeAlias aliasStmt:
-                    AST_HandleAlias (symbols, src, aliasStmt);
+                    AST_HandleAlias (symbols, aliasStmt);
                     return new StatementData { AlwaysReturns = false };
 
                 case ES_AstLocalVarDefinition varDef: {
