@@ -88,15 +88,19 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
         }
 
         private void InitializeVariable (ES_TypeInfo* varType, LLVMValueRef variable) {
+            Debug.Assert (variable.IsPointer ());
+
             switch (varType->TypeTag) {
                 case ES_TypeTag.Bool:
                 case ES_TypeTag.Int: {
-                    builderRef.BuildStore (LLVMValueRef.CreateConstInt (variable.TypeOf, 0), variable);
+                    var val = LLVMValueRef.CreateConstInt (variable.TypeOf.ElementType, 0);
+                    builderRef.BuildStore (val, variable);
                     break;
                 }
 
                 case ES_TypeTag.Float: {
-                    builderRef.BuildStore (LLVMValueRef.CreateConstReal (variable.TypeOf, 0), variable);
+                    var val = LLVMValueRef.CreateConstReal (variable.TypeOf.ElementType, 0);
+                    builderRef.BuildStore (val, variable);
                     break;
                 }
 

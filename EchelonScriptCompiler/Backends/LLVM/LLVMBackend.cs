@@ -77,17 +77,6 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
         #endregion
     }
 
-    internal static class LLVMExtensions {
-        public static void AddIncoming (this LLVMValueRef phi, LLVMValueRef value, LLVMBasicBlockRef block) {
-            Span<LLVMValueRef> phiValue = stackalloc LLVMValueRef [1];
-            Span<LLVMBasicBlockRef> phiBlock = stackalloc LLVMBasicBlockRef [1];
-
-            phiValue [0] = value;
-            phiBlock [0] = block;
-            phi.AddIncoming (phiValue, phiBlock, 1);
-        }
-    }
-
     public unsafe sealed partial class LLVMCompilerBackend : ICompilerBackend, IDisposable {
         #region ================== Enums
 
@@ -529,7 +518,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
         }
 
         private LLVMValueRef GetLLVMValue (LLVMValueRef val) {
-            if (val.IsAAllocaInst != null)
+            if (val.IsPointer ())
                 return builderRef.BuildLoad (val);
 
             return val;

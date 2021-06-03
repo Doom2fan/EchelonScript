@@ -225,7 +225,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                     if (!envBuilder!.BinaryOpCompat (lhs.Type, rhs.Type, simpleBinaryExpr.ExpressionType, out _, out _))
                         throw new CompilationException (ES_BackendErrors.FrontendError);
 
-                    if (simpleBinaryExpr.ExpressionType.IsAssignment () && (!lhs.Addressable || lhs.Value.IsAAllocaInst == null))
+                    if (simpleBinaryExpr.ExpressionType.IsAssignment () && (!lhs.Addressable || !lhs.Value.IsPointer ()))
                         throw new CompilationException (ES_BackendErrors.FrontendError);
 
                     var ret = GenerateCode_BinaryExpr (lhs, rhs, simpleBinaryExpr.ExpressionType);
@@ -313,7 +313,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
         }
 
         private ExpressionData GenerateCode_IncDecExpression (ExpressionData val, bool decrement, bool postfix) {
-            if (!val.Addressable || val.Type is null || val.Value == null || val.Value.IsAAllocaInst == null)
+            if (!val.Addressable || val.Type is null || val.Value == null || !val.Value.IsPointer ())
                 throw new CompilationException (ES_BackendErrors.FrontendError);
 
             LLVMValueRef outVal;
@@ -386,7 +386,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             bool isAssignment = exprOp.IsAssignment ();
             var originalLHS = lhs.Value;
 
-            Debug.Assert (!isAssignment || originalLHS.IsAAllocaInst != null);
+            Debug.Assert (!isAssignment || originalLHS.IsPointer ());
 
             lhs.Value = GetLLVMValue (lhs.Value);
             rhs.Value = GetLLVMValue (rhs.Value);
@@ -538,7 +538,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             bool isAssignment = exprOp.IsAssignment ();
             var originalLHS = lhs.Value;
 
-            Debug.Assert (!isAssignment || originalLHS.IsAAllocaInst != null);
+            Debug.Assert (!isAssignment || originalLHS.IsPointer ());
 
             lhs.Value = GetLLVMValue (lhs.Value);
             rhs.Value = GetLLVMValue (rhs.Value);
@@ -592,7 +592,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             bool isAssignment = exprOp.IsAssignment ();
             var originalLHS = lhs.Value;
 
-            Debug.Assert (!isAssignment || originalLHS.IsAAllocaInst != null);
+            Debug.Assert (!isAssignment || originalLHS.IsPointer ());
 
             lhs.Value = GetLLVMValue (lhs.Value);
             rhs.Value = GetLLVMValue (rhs.Value);
@@ -679,7 +679,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             bool isAssignment = exprOp.IsAssignment ();
             var originalLHS = lhs.Value;
 
-            Debug.Assert (!isAssignment || originalLHS.IsAAllocaInst != null);
+            Debug.Assert (!isAssignment || originalLHS.IsPointer ());
 
             lhs.Value = GetLLVMValue (lhs.Value);
             rhs.Value = GetLLVMValue (rhs.Value);
