@@ -415,12 +415,99 @@ namespace EchelonScriptCompiler.Frontend {
                 }
             }
 
-            interfacesListMem = EnvironmentBuilder!.MemoryManager.GetArray<Pointer<ES_InterfaceData>> (interfacesList.Count);
-            interfacesList.CopyTo (interfacesListMem.Span);
+            if (interfacesList.Count > 0) {
+                interfacesListMem = EnvironmentBuilder!.MemoryManager.GetArray<Pointer<ES_InterfaceData>> (interfacesList.Count);
+                interfacesList.CopyTo (interfacesListMem.Span);
+            } else
+                interfacesListMem = ArrayPointer<Pointer<ES_InterfaceData>>.Null;
         }
 
-        protected void ResolveAggregate (ref TranslationUnitData transUnit, ref AstUnitData astUnit, ES_AstAggregateDefinition typeDef) {
-            //throw new Exception ();
+        protected unsafe void ResolveAggregate (ref TranslationUnitData transUnit, ref AstUnitData astUnit, ES_TypeMembers.Builder membersBuilder, ES_AstAggregateDefinition typeDef, bool isClass) {
+            static bool IsNameUsed (ArrayPointer<byte> id, ReadOnlySpan<ES_MemberData_Variable> vars, ReadOnlySpan<ES_MemberData_Function> funcs) {
+                foreach (var memberVar in vars) {
+                    if (memberVar.Info.Name.Equals (id))
+                        return true;
+                }
+
+                foreach (var memberFunc in funcs) {
+                    if (memberFunc.Info.Name.Equals (id))
+                        return true;
+                }
+
+                return false;
+            }
+
+            var srcCode = astUnit.Ast.Source.Span;
+            var idPool = Environment!.IdPool;
+            var symbols = astUnit.Symbols;
+
+            using var varsList = new StructPooledList<ES_MemberData_Variable> (CL_ClearMode.Auto);
+            using var funcsList = new StructPooledList<ES_MemberData_Function> (CL_ClearMode.Auto);
+
+            foreach (var content in typeDef.Contents) {
+                switch (content) {
+                    case ES_AstMemberVarDefinition varDef: {
+                        Debug.Assert (varDef.ValueType is not null);
+
+                        varDef.ValueType = GenerateASTTypeRef (ref transUnit, symbols, srcCode, varDef.ValueType);
+                        if (varDef.InitializationExpression is not null)
+                            GatherTypes_Expression (ref transUnit, symbols, srcCode, varDef.InitializationExpression);
+
+                        var varId = idPool.GetIdentifier (varDef.Name.Text.Span);
+                        var varType = GetTypeRef (varDef.ValueType);
+                        var flags = (ES_MemberFlags) 0;
+
+                        if (varDef.Static)
+                            flags |= ES_MemberFlags.Static;
+
+                        if (IsNameUsed (varId, varsList.Span, funcsList.Span)) {
+                            errorList.Add (ES_FrontendErrors.GenDuplicateSymbolDef (
+                                varDef.Name.Text.GetPooledString (), varDef.Name
+                            ));
+                        }
+
+                        varsList.Add (new ES_MemberData_Variable (varId, transUnit.Name, varDef.AccessModifier, flags, -1, varType));
+
+                        break;
+                    }
+
+                    case ES_AstFunctionDefinition funcDef:
+                        throw new NotImplementedException ("[TODO] Member functions not implemented yet.");
+
+                    default:
+                        throw new NotImplementedException ("Node type not implemented.");
+                }
+            }
+
+            var varsSize = varsList.Count * sizeof (ES_MemberData_Variable);
+            var funcsSize = funcsList.Count * sizeof (ES_MemberData_Function);
+
+            var memArea = EnvironmentBuilder!.MemoryManager.GetMemory (varsSize + funcsSize);
+            var membersList = EnvironmentBuilder!.MemoryManager.GetArray<Pointer<ES_MemberData>> (varsList.Count + funcsList.Count);
+
+            var varsSpan = new ArrayPointer<ES_MemberData_Variable> ((ES_MemberData_Variable*) memArea, varsList.Count);
+            var funcsSpan = new ArrayPointer<ES_MemberData_Function> ((ES_MemberData_Function*) (memArea + varsSize), funcsList.Count);
+
+            int membersCount = 0;
+            int idx = 0;
+            foreach (var memberVar in varsList) {
+                varsSpan.Span [idx] = memberVar;
+                membersList.Span [membersCount] = (ES_MemberData*) (varsSpan.Elements + idx);
+
+                membersCount++;
+                idx++;
+            }
+
+            idx = 0;
+            foreach (var memberFunc in funcsList) {
+                funcsSpan.Span [idx] = memberFunc;
+                membersList.Span [idx] = (ES_MemberData*) (funcsSpan.Elements + idx);
+
+                membersCount++;
+                idx++;
+            }
+
+            membersBuilder.MembersList = membersList;
         }
 
         protected void GatherTypes_Class (ref TranslationUnitData transUnit, ref AstUnitData astUnit, ES_AstClassDefinition classDef, ES_ClassData.Builder builder) {
@@ -439,19 +526,10 @@ namespace EchelonScriptCompiler.Frontend {
         }
 
         protected void GatherTypes_Struct (ref TranslationUnitData transUnit, ref AstUnitData astUnit, ES_AstStructDefinition structDef, ES_StructData.Builder builder) {
-            if (builder.StructData->TypeInfo.RuntimeSize > -1)
-                return;
-
-            var srcCode = astUnit.Ast.Source;
-            var idPool = Environment!.IdPool;
-            ref var symbols = ref astUnit.Symbols;
-
-            GatherTypes_InheritanceList (ref transUnit, ref astUnit, structDef.InterfacesList, true, out var interfacesList, out _);
+            GatherTypes_InheritanceList (ref transUnit, ref astUnit, structDef.InterfacesList, false, out var interfacesList, out _);
             builder.InterfacesList = interfacesList;
 
-            ResolveAggregate (ref transUnit, ref astUnit, structDef);
-
-            throw new NotImplementedException ("[TODO] Structs not implemented yet.");
+            ResolveAggregate (ref transUnit, ref astUnit, builder.MembersListBuilder, structDef, false);
         }
 
         protected void GatherTypes_Enum (ref TranslationUnitData transUnit, ref AstUnitData astUnit, ES_AstEnumDefinition enumDef, ES_EnumData.Builder builder) {

@@ -44,8 +44,8 @@ namespace EchelonScriptCompiler.Frontend {
                                 var structBuilder = namespaceBuilder.GetStruct (typeName);
                                 Debug.Assert (structBuilder is not null);
 
-                                //FoldConstants_Struct (ref transUnit, ref astUnit, structDef, structBuilder);
-                                throw new NotImplementedException ("[TODO] Structs not implemented yet.");
+                                FoldConstants_Struct (ref transUnit, ref astUnit, structDef);
+                                break;
                             }
 
                             case ES_AstEnumDefinition enumDef: {
@@ -67,6 +67,30 @@ namespace EchelonScriptCompiler.Frontend {
                     }
 
                     astUnit.Symbols.Pop ();
+                }
+            }
+        }
+
+        protected void FoldConstants_Struct (ref TranslationUnitData transUnit, ref AstUnitData astUnit, ES_AstStructDefinition structDef) {
+            var srcCode = astUnit.Ast.Source.Span;
+            var symbols = astUnit.Symbols;
+
+            foreach (var member in structDef.Contents) {
+                switch (member) {
+                    case ES_AstMemberVarDefinition varDef: {
+                        var varType = GetTypeRef (varDef.ValueType);
+
+                        if (varDef.InitializationExpression is not null)
+                            FoldConstants_Expression (ref transUnit, symbols, srcCode, ref varDef.InitializationExpression, varType);
+
+                        break;
+                    }
+
+                    case ES_AstFunctionDefinition funcDef:
+                        throw new NotImplementedException ("[TODO] Member functions not implemented yet.");
+
+                    default:
+                        throw new NotImplementedException ("Node type not implemented.");
                 }
             }
         }

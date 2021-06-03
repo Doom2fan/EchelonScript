@@ -165,10 +165,9 @@ namespace EchelonScriptCompiler.Frontend {
         public const string ArgTypeCantUseDefExpr = "Argument \"{arg}\" with keyword \"{argType}\" cannot have a default value.";
 
         public const string InvalidInheritance = "Cannot inherit from type \"{0}\".";
-
         public const string MultipleBaseClasses = "Classes cannot have multiple base classes.";
-
         public const string RepeatedInterfaceInList = "Interface \"{0}\" is already in the interfaces list.";
+        public const string DefValOutsideClass = "Only classes may contain default initializers.";
 
         public const string ConstantExprExpected = "A constant value is expected.";
 

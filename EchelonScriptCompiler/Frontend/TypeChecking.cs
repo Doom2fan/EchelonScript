@@ -69,8 +69,8 @@ namespace EchelonScriptCompiler.Frontend {
                                 var structBuilder = namespaceBuilder.GetStruct (typeName);
                                 Debug.Assert (structBuilder is not null);
 
-                                //CheckTypes_Struct (ref transUnit, ref astUnit, structDef, structBuilder);
-                                throw new NotImplementedException ("[TODO] Structs not implemented yet.");
+                                CheckTypes_Struct (ref transUnit, ref astUnit, structDef, structBuilder);
+                                break;
                             }
 
                             case ES_AstEnumDefinition enumDef: {
@@ -94,6 +94,59 @@ namespace EchelonScriptCompiler.Frontend {
                     astUnit.Symbols.Pop ();
                 }
             }
+        }
+
+        protected void CheckTypes_Aggregate (
+            ref TranslationUnitData transUnit, ref AstUnitData astUnit,
+            ES_TypeMembers.Builder membersBuilder, ES_AstAggregateDefinition typeDef, bool isClass
+        ) {
+            var srcCode = astUnit.Ast.Source.Span;
+            var idPool = Environment!.IdPool;
+            var symbols = astUnit.Symbols;
+
+            foreach (var content in typeDef.Contents) {
+                switch (content) {
+                    case ES_AstMemberVarDefinition varDef: {
+                        Debug.Assert (varDef.ValueType is not null);
+
+                        var varId = idPool.GetIdentifier (varDef.Name.Text.Span);
+                        var varType = GetTypeRef (varDef.ValueType);
+                        var flags = (ES_MemberFlags) 0;
+
+                        if (varDef.Static)
+                            flags |= ES_MemberFlags.Static;
+
+                        if (varDef.InitializationExpression is not null) {
+                            CheckTypes_Expression (ref transUnit, symbols, srcCode, varDef.InitializationExpression, varType);
+
+                            if (!isClass && !varDef.Static)
+                                errorList.Add (new EchelonScriptErrorMessage (varDef.Name, ES_FrontendErrors.DefValOutsideClass));
+                        }
+
+                        break;
+                    }
+
+                    case ES_AstFunctionDefinition funcDef:
+                        throw new NotImplementedException ("[TODO] Member functions not implemented yet.");
+
+                    default:
+                        throw new NotImplementedException ("Node type not implemented.");
+                }
+            }
+        }
+
+        protected void CheckTypes_EnsureInterfaces (
+            ref TranslationUnitData transUnit, ref AstUnitData astUnit,
+            ReadOnlySpan<Pointer<ES_InterfaceData>> interfaces, ES_TypeMembers* members
+        ) {
+            if (interfaces.Length > 0)
+                throw new NotImplementedException ("[TODO] Interfaces not implemented yet.");
+        }
+
+        protected void CheckTypes_Struct (ref TranslationUnitData transUnit, ref AstUnitData astUnit, ES_AstStructDefinition structDef, ES_StructData.Builder structBuilder) {
+            CheckTypes_Aggregate (ref transUnit, ref astUnit, structBuilder.MembersListBuilder, structDef, false);
+
+            CheckTypes_EnsureInterfaces (ref transUnit, ref astUnit, structBuilder.InterfacesList.Span, structBuilder.MembersList);
         }
 
         protected void CheckTypes_Function (ref TranslationUnitData transUnit, ref AstUnitData astUnit, ES_AstFunctionDefinition funcDef) {

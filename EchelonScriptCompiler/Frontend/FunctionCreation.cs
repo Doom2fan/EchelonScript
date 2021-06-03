@@ -51,7 +51,7 @@ namespace EchelonScriptCompiler.Frontend {
                             case ES_AstClassDefinition classDef:
                                 throw new NotImplementedException ("[TODO] Classes not implemented yet.");
                             case ES_AstStructDefinition structDef:
-                                throw new NotImplementedException ("[TODO] Structs not implemented yet.");
+                                break;
 
                             // These are ignored.
                             case ES_AstEnumDefinition enumDef:
