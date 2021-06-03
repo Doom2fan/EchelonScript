@@ -14,6 +14,7 @@ using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Data.Types;
 using EchelonScriptCompiler.Frontend;
+using EchelonScriptCompiler.Utilities;
 using LLVMSharp.Interop;
 
 namespace EchelonScriptCompiler.Backends.LLVMBackend {
@@ -178,7 +179,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 }
 
                 case ES_AstMemberAccessExpression memberAccessExpr:
-                    throw new NotImplementedException ("[TODO] Member access not implemented yet.");
+                    return GenerateCode_Expression_MemberAccess (ref transUnit, symbols, src, memberAccessExpr, expectedType);
 
                 #endregion
 
@@ -851,6 +852,86 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
         }
 
         #endregion
+
+        private ExpressionData GenerateCode_Expression_MemberAccess (
+            ref TranslationUnitData transUnit, SymbolStack<Symbol> symbols, ReadOnlySpan<char> src,
+            ES_AstMemberAccessExpression expr, ES_TypeInfo* expectedType
+        ) {
+            Debug.Assert (env is not null);
+            Debug.Assert (expr.Member is not null);
+
+            var idPool = env.IdPool;
+            var typeUnkn = env.TypeUnknownValue;
+
+            var parentExpr = GenerateCode_Expression (ref transUnit, symbols, src, expr.Parent, typeUnkn);
+            var memberId = idPool.GetIdentifier (expr.Member.Value.Text.Span);
+
+            if (parentExpr.Type is not null) {
+                var type = parentExpr.Type;
+
+                switch (type->TypeTag) {
+                    case ES_TypeTag.Struct:
+                        return GenerateCode_Expression_MemberAccess_Struct (src, expr, ref parentExpr, memberId);
+
+                    case ES_TypeTag.UNKNOWN:
+                        throw new CompilationException (ES_BackendErrors.FrontendError);
+
+                    default:
+                        throw new NotImplementedException ("Type not implemented yet.");
+                }
+            } else if (parentExpr.TypeInfo is not null)
+                throw new NotImplementedException ("[TODO] Static type member access not implemented yet.");
+            else if (parentExpr.Function is not null)
+                throw new NotImplementedException ("Not supported. (yet?)");
+            else
+                throw new CompilationException ("<<Unknown expression type in GenerateCode_Expression_MemberAccess>>");
+        }
+
+        private ExpressionData GenerateCode_Expression_MemberAccess_Struct (
+            ReadOnlySpan<char> src, ES_AstMemberAccessExpression expr,
+            ref ExpressionData parentExpr, ArrayPointer<byte> memberId
+        ) {
+            Debug.Assert (parentExpr.Type is not null);
+            Debug.Assert (parentExpr.Value != null);
+
+            Debug.Assert (parentExpr.Value.IsPointer ());
+
+            var type = parentExpr.Type;
+            var membersArr = type->MembersList.MembersList;
+
+            uint fieldCount = 0;
+            foreach (var memberAddr in membersArr.Span) {
+                var memberPtr = memberAddr.Address;
+
+                if (memberPtr->MemberType == ES_MemberType.Field)
+                    fieldCount++;
+
+                if (!memberPtr->Name.Equals (memberId))
+                    continue;
+
+                switch (memberPtr->MemberType) {
+                    case ES_MemberType.Field: {
+                        var memberVar = (ES_MemberData_Variable*) memberPtr;
+                        bool addressable = true;
+
+                        if (memberVar->Info.Flags.HasFlag (ES_MemberFlags.Static))
+                            throw new CompilationException (ES_BackendErrors.FrontendError);
+
+                        var val = builderRef.BuildStructGEP (parentExpr.Value, fieldCount - 1, "memberAccessTmp");
+
+                        return new ExpressionData { Expr = expr, Type = memberVar->Type, Value = val, Constant = false, Addressable = addressable };
+                    }
+
+                    case ES_MemberType.Function:
+                        throw new NotImplementedException ("[TODO] Member function access not implemented yet.");
+
+                    default:
+                        throw new NotImplementedException ("Member type not implemented yet.");
+                }
+            }
+
+            throw new CompilationException (ES_BackendErrors.FrontendError);
+        }
 
         private ExpressionData GenerateCode_Expression_FunctionCall (
             ref TranslationUnitData transUnit, SymbolStack<Symbol> symbols, ReadOnlySpan<char> src,
