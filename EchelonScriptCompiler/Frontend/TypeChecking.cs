@@ -120,7 +120,7 @@ namespace EchelonScriptCompiler.Frontend {
                             CheckTypes_Expression (ref transUnit, symbols, srcCode, varDef.InitializationExpression, varType);
 
                             if (!isClass && !varDef.Static)
-                                errorList.Add (new EchelonScriptErrorMessage (varDef.Name, ES_FrontendErrors.DefValOutsideClass));
+                                errorList.Add (new EchelonScriptErrorMessage (varDef.Name, ES_FrontendErrors.InstDefValOutsideClass));
                         }
 
                         break;
