@@ -184,6 +184,10 @@ namespace EchelonScriptCompiler.Frontend {
         public const string CantApplyUnaryOp = "\"{op}\" cannot be applied to operand of type \"{expr}\".";
         public const string CannotAssignExpr = "The expression is not assignable.";
 
+        public const string MemberDoesntExist = "The type \"{typeName}\" has no member named \"{memberName}\".";
+        public const string StaticAccessOnInst = "The member \"{memberName}\" cannot be accessed through an instance; use \"{typeName}.{memberName}\" instead.";
+        public const string InstAccessOnStatic = "The member \"{memberName}\" is not static; it must be accessed through an instance.";
+
         public const string UnexpectedReturnValue = "Unexpected return value.";
         public const string MissingReturnValue = "A return value of or convertible to type \"{retType}\" is required.";
         public const string MissingReturnStatement = "Not all code paths return a value.";
@@ -332,6 +336,19 @@ namespace EchelonScriptCompiler.Frontend {
         public static EchelonScriptErrorMessage GenCantApplyUnaryOp (string op, string expr, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
             var errorMessage = CantApplyBinaryOp.Replace ("{op}", op).Replace ("{expr}", expr);
             return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
+        }
+
+        public static EchelonScriptErrorMessage GenMemberDoesntExist (string typeName, string memberName, EchelonScriptToken errorToken) {
+            var errorMessage = MemberDoesntExist.Replace ("{typeName}", typeName).Replace ("{memberName}", memberName);
+            return new EchelonScriptErrorMessage (errorToken, errorMessage);
+        }
+        public static EchelonScriptErrorMessage GenStaticAccessOnInst (string typeName, string memberName, EchelonScriptToken errorToken) {
+            var errorMessage = StaticAccessOnInst.Replace ("{typeName}", typeName).Replace ("{memberName}", memberName);
+            return new EchelonScriptErrorMessage (errorToken, errorMessage);
+        }
+        public static EchelonScriptErrorMessage GenInstAccessOnStatic (string memberName, EchelonScriptToken errorToken) {
+            var errorMessage = InstAccessOnStatic.Replace ("{memberName}", memberName);
+            return new EchelonScriptErrorMessage (errorToken, errorMessage);
         }
 
         public static EchelonScriptErrorMessage GenMissingReturnValue (string retType, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {

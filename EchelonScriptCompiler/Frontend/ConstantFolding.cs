@@ -607,8 +607,15 @@ namespace EchelonScriptCompiler.Frontend {
                     }
                 }
 
-                case ES_AstMemberAccessExpression memberAccessExpr:
-                    throw new NotImplementedException ("[TODO] Member access not implemented yet.");
+                case ES_AstMemberAccessExpression memberAccessExpr: {
+                    Debug.Assert (memberAccessExpr.Member is not null);
+
+                    var parenExpr = FoldConstants_Expression (ref transUnit, symbols, src, ref memberAccessExpr.Parent, null);
+
+                    // [TODO]: Allow constant references to be folded.
+
+                    return new ExpressionData { Expr = expr, Type = typeUnkn, Constant = false, };
+                }
 
                 #endregion
 
