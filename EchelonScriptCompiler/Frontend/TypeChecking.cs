@@ -117,10 +117,17 @@ namespace EchelonScriptCompiler.Frontend {
                             flags |= ES_MemberFlags.Static;
 
                         if (varDef.InitializationExpression is not null) {
-                            CheckTypes_Expression (ref transUnit, symbols, srcCode, varDef.InitializationExpression, varType);
-
                             if (!isClass && !varDef.Static)
                                 errorList.Add (new EchelonScriptErrorMessage (varDef.Name, ES_FrontendErrors.InstDefValOutsideClass));
+
+                            var defExpr = CheckTypes_Expression (ref transUnit, symbols, srcCode, varDef.InitializationExpression, varType);
+                            bool compat = CheckTypes_EnsureCompat (varType, defExpr.Type, srcCode, defExpr.Expr.NodeBounds, out bool castIsConstant);
+
+                            if (!defExpr.Constant || (compat && !castIsConstant)) {
+                                errorList.Add (new EchelonScriptErrorMessage (
+                                    srcCode, defExpr.Expr.NodeBounds, ES_FrontendErrors.ConstantExprExpected
+                                ));
+                            }
                         }
 
                         break;
