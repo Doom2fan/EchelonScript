@@ -14,7 +14,6 @@ using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Data.Types;
 using EchelonScriptCompiler.Frontend;
-using EchelonScriptCompiler.Utilities;
 using LLVMSharp.Interop;
 
 namespace EchelonScriptCompiler.Backends.LLVMBackend {
@@ -879,9 +878,20 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                     default:
                         throw new NotImplementedException ("Type not implemented yet.");
                 }
-            } else if (parentExpr.TypeInfo is not null)
-                throw new NotImplementedException ("[TODO] Static type member access not implemented yet.");
-            else if (parentExpr.Function is not null)
+            } else if (parentExpr.TypeInfo is not null) {
+                var type = parentExpr.TypeInfo;
+
+                switch (type->TypeTag) {
+                    case ES_TypeTag.Struct:
+                        return GenerateCode_Expression_MemberAccessStatic_Aggregate (src, expr, type, memberId);
+
+                    case ES_TypeTag.UNKNOWN:
+                        throw new CompilationException (ES_BackendErrors.FrontendError);
+
+                    default:
+                        throw new NotImplementedException ("Type not implemented yet.");
+                }
+            } else if (parentExpr.Function is not null)
                 throw new NotImplementedException ("Not supported. (yet?)");
             else
                 throw new CompilationException ("<<Unknown expression type in GenerateCode_Expression_MemberAccess>>");
@@ -918,6 +928,45 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                             throw new CompilationException (ES_BackendErrors.FrontendError);
 
                         var val = builderRef.BuildStructGEP (parentExpr.Value, fieldCount - 1, "memberAccessTmp");
+
+                        return new ExpressionData { Expr = expr, Type = memberVar->Type, Value = val, Constant = false, Addressable = addressable };
+                    }
+
+                    case ES_MemberType.Function:
+                        throw new NotImplementedException ("[TODO] Member function access not implemented yet.");
+
+                    default:
+                        throw new NotImplementedException ("Member type not implemented yet.");
+                }
+            }
+
+            throw new CompilationException (ES_BackendErrors.FrontendError);
+        }
+
+        private ExpressionData GenerateCode_Expression_MemberAccessStatic_Aggregate (
+            ReadOnlySpan<char> src, ES_AstMemberAccessExpression expr,
+            ES_TypeInfo* type, ArrayPointer<byte> memberId
+        ) {
+            Debug.Assert (type is not null);
+
+            var membersArr = type->MembersList.MembersList;
+
+            foreach (var memberAddr in membersArr.Span) {
+                var memberPtr = memberAddr.Address;
+
+                if (!memberPtr->Name.Equals (memberId))
+                    continue;
+
+                switch (memberPtr->MemberType) {
+                    case ES_MemberType.Field: {
+                        var memberVar = (ES_MemberData_Variable*) memberPtr;
+                        bool addressable = true;
+
+                        if (!memberVar->Info.Flags.HasFlag (ES_MemberFlags.Static))
+                            throw new CompilationException (ES_BackendErrors.FrontendError);
+
+                        using var varName = MangleStaticVarName (type, memberVar->Info.Name);
+                        var val = moduleRef.GetNamedGlobal (varName);
 
                         return new ExpressionData { Expr = expr, Type = memberVar->Type, Value = val, Constant = false, Addressable = addressable };
                     }
