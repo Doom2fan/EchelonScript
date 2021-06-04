@@ -437,6 +437,16 @@ namespace EchelonScriptCompiler.Frontend {
                 return false;
             }
 
+            static ES_MemberData* FindMember (ArrayPointer<byte> id, ReadOnlySpan<Pointer<ES_MemberData>> members) {
+                foreach (var member in members) {
+                    if (member.Address->Name.Equals (id))
+                        return member.Address;
+                }
+
+                Debug.Fail ("This should never be reached.");
+                return null;
+            }
+
             var srcCode = astUnit.Ast.Source.Span;
             var idPool = Environment!.IdPool;
             var symbols = astUnit.Symbols;
@@ -488,6 +498,7 @@ namespace EchelonScriptCompiler.Frontend {
             var varsSpan = new ArrayPointer<ES_MemberData_Variable> ((ES_MemberData_Variable*) memArea, varsList.Count);
             var funcsSpan = new ArrayPointer<ES_MemberData_Function> ((ES_MemberData_Function*) (memArea + varsSize), funcsList.Count);
 
+            // Copy the member data structs to their final memory location and set the pointers to said memory location.
             int membersCount = 0;
             int idx = 0;
             foreach (var memberVar in varsList) {
@@ -505,6 +516,26 @@ namespace EchelonScriptCompiler.Frontend {
 
                 membersCount++;
                 idx++;
+            }
+
+            // Add the AST nodes to the Pointer->AST map.
+            foreach (var content in typeDef.Contents) {
+                switch (content) {
+                    case ES_AstMemberVarDefinition varDef: {
+                        var varPtr = FindMember (idPool.GetIdentifier (varDef.Name.Text.Span), membersList.Span);
+                        EnvironmentBuilder.PointerAstMap.Add ((IntPtr) varPtr, varDef);
+                        break;
+                    }
+
+                    case ES_AstFunctionDefinition funcDef: {
+                        var funcPtr = FindMember (idPool.GetIdentifier (funcDef.Name.Text.Span), membersList.Span);
+                        EnvironmentBuilder.PointerAstMap.Add ((IntPtr) funcPtr, funcDef);
+                        break;
+                    }
+
+                    default:
+                        throw new NotImplementedException ("Node type not implemented.");
+                }
             }
 
             membersBuilder.MembersList = membersList;
