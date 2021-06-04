@@ -9,7 +9,6 @@
 
 using System;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using ChronosLib.Pooled;
 using EchelonScriptCompiler.CompilerCommon;
@@ -36,55 +35,6 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
         public struct StatementData {
             public bool AlwaysReturns;
-        }
-
-        private PooledArray<char> MangleFunctionType (ES_FunctionPrototypeData* type) {
-            using var mangleChars = new StructPooledList<char> (CL_ClearMode.Auto);
-
-            // Add the return type.
-            mangleChars.AddRange ("Ret");
-            mangleChars.AddRange (type->ReturnType->Name.NamespaceNameString);
-            mangleChars.AddRange ("__");
-            mangleChars.AddRange (type->ReturnType->Name.TypeNameString);
-
-            // Add the arg types.
-            foreach (var arg in type->ArgumentsList.Span) {
-                mangleChars.AddRange ("_");
-
-                switch (arg.ArgType) {
-                    case ES_ArgumentType.Normal: break;
-                    case ES_ArgumentType.In: break;
-                    case ES_ArgumentType.Out: mangleChars.AddRange ("out"); break;
-                    case ES_ArgumentType.Ref: mangleChars.AddRange ("ref"); break;
-                }
-
-                mangleChars.AddRange (arg.ValueType->Name.NamespaceNameString);
-                mangleChars.AddRange ("__");
-                mangleChars.AddRange (arg.ValueType->Name.TypeNameString);
-            }
-
-            return mangleChars.ToPooledArray ();
-        }
-
-        private PooledArray<char> MangleFunctionName ([DisallowNull] ES_FunctionData* func) {
-            // Sample name: "System.Math__FMath.Sin"
-            using var mangleChars = new StructPooledList<char> (CL_ClearMode.Auto);
-
-            // The namespace.
-            mangleChars.AddRange (func->Name.NamespaceNameString);
-
-            // The mangled namespace separator.
-            mangleChars.AddRange ("__");
-
-            // The function name.
-            mangleChars.AddRange (func->Name.TypeNameString);
-
-            /*// Add the type's mangled name.
-            mangleChars.AddRange ("_");
-            using var typeMangle = MangleFunctionType (func->FunctionType);
-            mangleChars.AddRange (typeMangle);*/
-
-            return mangleChars.ToPooledArray ();
         }
 
         private LLVMValueRef GetDefaultValue (ES_TypeInfo* varType) {

@@ -382,6 +382,8 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             using var symbols = new SymbolStack<Symbol> (new Symbol ());
             var idPool = env.IdPool;
 
+            EmitGlobalConstructor ();
+
             // Pre-emit the types so we don't get errors when trying to use them later.
             foreach (var namespaceKVP in env.Namespaces) {
                 var namespaceData = namespaceKVP.Value;
@@ -515,7 +517,34 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 EndTranslationUnit ();
             }
 
+            EndGlobalConstructor ();
+
             return true;
+        }
+
+        private void EmitGlobalConstructor () {
+            var globalConsType = LLVMTypeRef.CreateFunction (contextRef.VoidType, Array.Empty<LLVMTypeRef> ());
+            var globalCons = GetGlobalConstructor (true);
+
+            Span<LLVMValueRef> values = stackalloc LLVMValueRef [3] {
+                LLVMValueRef.CreateConstInt (contextRef.Int32Type, 65535, true),
+                globalCons,
+                LLVMValueRef.CreateConstNull (LLVMTypeRef.CreatePointer (contextRef.Int8Type, 0))
+            };
+            var globalCtorsValue = LLVMValueRef.CreateConstStruct (values, false);
+
+            var globalCtorsVar = moduleRef.AddGlobal (LLVMTypeRef.CreateArray (globalCtorsValue.TypeOf, 1), "llvm.global_ctors");
+            globalCtorsVar.Linkage = LLVMLinkage.LLVMAppendingLinkage;
+            globalCtorsVar.Section = ".ctor";
+
+            globalCtorsVar.Initializer = LLVMValueRef.CreateConstArray (globalCtorsValue.TypeOf, new Span<LLVMValueRef> (&globalCtorsValue, 1));
+        }
+
+        private void EndGlobalConstructor () {
+            var globalCons = GetGlobalConstructor ();
+
+            builderRef.PositionAtEnd (globalCons.EntryBasicBlock);
+            builderRef.BuildRetVoid ();
         }
 
         #endregion
@@ -734,6 +763,20 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
         private void AddVariable (SymbolStack<Symbol> stack, ArrayPointer<byte> name, VariableData data) {
             stack.AddSymbol (name, new Symbol (data));
+        }
+
+        private LLVMValueRef GetGlobalConstructor (bool create = false) {
+            const string globalConsName = "__globalConstructor";
+
+            var globalCons = moduleRef.GetNamedFunction (globalConsName);
+
+            if (globalCons == null && create) {
+                var globalConsType = LLVMTypeRef.CreateFunction (contextRef.VoidType, Array.Empty<LLVMTypeRef> ());
+                globalCons = moduleRef.AddFunction (globalConsName, globalConsType);
+                globalCons.AppendBasicBlock ("entry");
+            }
+
+            return globalCons;
         }
 
         private void CheckDisposed () {
