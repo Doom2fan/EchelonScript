@@ -913,7 +913,9 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             foreach (var memberAddr in membersArr.Span) {
                 var memberPtr = memberAddr.Address;
 
-                if (memberPtr->MemberType == ES_MemberType.Field)
+                bool isStatic = memberPtr->Flags.HasFlag (ES_MemberFlags.Static);
+
+                if (memberPtr->MemberType == ES_MemberType.Field && !isStatic)
                     fieldCount++;
 
                 if (!memberPtr->Name.Equals (memberId))
@@ -924,7 +926,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                         var memberVar = (ES_MemberData_Variable*) memberPtr;
                         bool addressable = true;
 
-                        if (memberVar->Info.Flags.HasFlag (ES_MemberFlags.Static))
+                        if (isStatic)
                             throw new CompilationException (ES_BackendErrors.FrontendError);
 
                         var val = builderRef.BuildStructGEP (parentExpr.Value, fieldCount - 1, "memberAccessTmp");
