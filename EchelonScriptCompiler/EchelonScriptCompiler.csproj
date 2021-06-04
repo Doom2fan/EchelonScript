@@ -16,8 +16,8 @@
 
   <ItemGroup>
     <PackageReference Include="Collections.Pooled" Version="2.0.0-preview.27" />
-    <PackageReference Include="LibLLVM" Version="11.0.0" />
-    <PackageReference Include="LLVMSharp" Version="11.0.0-beta" />
+    <PackageReference Include="LibLLVM" Version="12.0.0" />
+    <PackageReference Include="LLVMSharp" Version="12.0.0-beta1" />
     <PackageReference Include="Microsoft.Toolkit.HighPerformance" Version="7.0.0-preview5" />
   </ItemGroup>
 
