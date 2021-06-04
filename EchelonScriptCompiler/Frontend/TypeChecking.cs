@@ -761,7 +761,7 @@ namespace EchelonScriptCompiler.Frontend {
             var idPool = Environment.IdPool;
             var typeUnkn = Environment.TypeUnknownValue;
 
-            var parentExpr = CheckTypes_Expression (ref transUnit, symbols, src, expr.Parent, typeUnkn);
+            var parentExpr = CheckTypes_Expression (ref transUnit, symbols, src, expr.Parent, null);
             var memberId = idPool.GetIdentifier (expr.Member.Value.Text.Span);
 
             if (parentExpr.Type is not null) {

@@ -863,7 +863,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             var idPool = env.IdPool;
             var typeUnkn = env.TypeUnknownValue;
 
-            var parentExpr = GenerateCode_Expression (ref transUnit, symbols, src, expr.Parent, typeUnkn);
+            var parentExpr = GenerateCode_Expression (ref transUnit, symbols, src, expr.Parent, null);
             var memberId = idPool.GetIdentifier (expr.Member.Value.Text.Span);
 
             if (parentExpr.Type is not null) {
