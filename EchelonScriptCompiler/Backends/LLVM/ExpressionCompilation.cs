@@ -976,7 +976,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             if (callArgCount > funcArgCount)
                 throw new CompilationException (ES_BackendErrors.FrontendError);
 
-            var mangledName = MangleFunctionName (func);
+            using var mangledName = MangleFunctionName (func);
             var funcDef = moduleRef.GetNamedFunction (mangledName);
 
             Debug.Assert (funcDef != null);
