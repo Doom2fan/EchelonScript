@@ -781,9 +781,24 @@ namespace EchelonScriptCompiler.Frontend {
                     default:
                         throw new NotImplementedException ("Type not implemented yet.");
                 }
-            } else if (parentExpr.TypeInfo is not null)
-                throw new NotImplementedException ("[TODO] Static type member access not implemented yet.");
-            else if (parentExpr.Function is not null)
+            } else if (parentExpr.TypeInfo is not null) {
+                var type = parentExpr.TypeInfo;
+
+                switch (type->TypeTag) {
+                    case ES_TypeTag.UNKNOWN:
+                        return new ExpressionData { Expr = expr, Type = typeUnkn, Constant = false, Addressable = false };
+
+                    case ES_TypeTag.Struct: {
+                        return CheckTypes_Expression_MemberAccessStatic_Aggregate (
+                            ref transUnit, symbols, src,
+                            expr, type, memberId, expectedType
+                        );
+                    }
+
+                    default:
+                        throw new NotImplementedException ("Type not implemented yet.");
+                }
+            } else if (parentExpr.Function is not null)
                 throw new NotImplementedException ("Not supported. (yet?)");
             else
                 throw new CompilationException ("<<Unknown expression type in CheckTypes_Expression_MemberAccess>>");
@@ -823,6 +838,54 @@ namespace EchelonScriptCompiler.Frontend {
 
                     case ES_MemberType.Function:
                         throw new NotImplementedException ("[TODO] Member function access not implemented yet.");
+
+                    default:
+                        throw new NotImplementedException ("Member type not implemented yet.");
+                }
+            }
+
+            errorList.Add (ES_FrontendErrors.GenMemberDoesntExist (
+                type->Name.GetNameAsTypeString (),
+                expr.Member.Value.Text.GetPooledString (),
+                expr.Member.Value
+            ));
+
+            return new ExpressionData { Expr = expr, Type = typeUnkn, Constant = false, Addressable = false };
+        }
+
+        protected ExpressionData CheckTypes_Expression_MemberAccessStatic_Aggregate (
+            ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, ReadOnlySpan<char> src,
+            ES_AstMemberAccessExpression expr, ES_TypeInfo* type, ArrayPointer<byte> memberId, ES_TypeInfo* expectedType
+        ) {
+            Debug.Assert (Environment is not null);
+            Debug.Assert (expr.Member is not null);
+
+            var typeUnkn = Environment.TypeUnknownValue;
+            var membersArr = type->MembersList.MembersList;
+
+            foreach (var memberAddr in membersArr.Span) {
+                var memberPtr = memberAddr.Address;
+
+                if (!memberPtr->Name.Equals (memberId))
+                    continue;
+
+                switch (memberPtr->MemberType) {
+                    case ES_MemberType.Field: {
+                        var memberVar = (ES_MemberData_Variable*) memberPtr;
+                        bool addressable = true;
+
+                        if (!memberVar->Info.Flags.HasFlag (ES_MemberFlags.Static)) {
+                            errorList.Add (ES_FrontendErrors.GenInstAccessOnStatic (
+                                expr.Member.Value.Text.GetPooledString (),
+                                expr.Member.Value
+                            ));
+                        }
+
+                        return new ExpressionData { Expr = expr, Type = memberVar->Type, Constant = false, Addressable = addressable };
+                    }
+
+                    case ES_MemberType.Function:
+                        throw new NotImplementedException ("[TODO] Static member function access not implemented yet.");
 
                     default:
                         throw new NotImplementedException ("Member type not implemented yet.");
