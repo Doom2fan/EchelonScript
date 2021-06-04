@@ -87,25 +87,17 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             return mangleChars.ToPooledArray ();
         }
 
-        private void InitializeVariable (ES_TypeInfo* varType, LLVMValueRef variable) {
-            Debug.Assert (variable.IsPointer ());
-
+        private LLVMValueRef GetDefaultValue (ES_TypeInfo* varType) {
             switch (varType->TypeTag) {
                 case ES_TypeTag.Bool:
-                case ES_TypeTag.Int: {
-                    var val = LLVMValueRef.CreateConstInt (variable.TypeOf.ElementType, 0);
-                    builderRef.BuildStore (val, variable);
-                    break;
-                }
+                case ES_TypeTag.Int:
+                    return LLVMValueRef.CreateConstInt (GetLLVMType (varType), 0);
 
-                case ES_TypeTag.Float: {
-                    var val = LLVMValueRef.CreateConstReal (variable.TypeOf.ElementType, 0);
-                    builderRef.BuildStore (val, variable);
-                    break;
-                }
+                case ES_TypeTag.Float:
+                    return LLVMValueRef.CreateConstReal (GetLLVMType (varType), 0);
 
                 case ES_TypeTag.Struct: {
-                    uint fieldCount = 0;
+                    using var fields = new StructPooledList<LLVMValueRef> (CL_ClearMode.Auto);
 
                     foreach (var memberAddr in varType->MembersList.MembersList.Span) {
                         var memberPtr = memberAddr.Address;
@@ -119,14 +111,11 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                         var memberVarPtr = (ES_MemberData_Variable*) memberPtr;
                         var memberVarType = memberVarPtr->Type;
 
-                        var memberVarValue = builderRef.BuildStructGEP (variable, fieldCount, "memberInitTmp");
-                        InitializeVariable (memberVarType, memberVarValue);
-
-                        fieldCount++;
+                        var varValue = GetDefaultValue (memberVarType);
+                        fields.Add (varValue);
                     }
 
-
-                    break;
+                    return LLVMValueRef.CreateConstNamedStruct (GetLLVMType (varType), fields.Span);
                 }
 
                 default:
@@ -365,10 +354,14 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                         if (!symbols.AddSymbol (varNameId, new Symbol (varData)))
                             throw new CompilationException (ES_BackendErrors.FrontendError);
 
+                        LLVMValueRef initVal;
+
                         if (hasInit)
-                            builderRef.BuildStore (GetLLVMValue (initExprData.Value), varData.LLVMValue);
+                            initVal = GetLLVMValue (initExprData.Value);
                         else
-                            InitializeVariable (varData.Type, varData.LLVMValue);
+                            initVal = GetDefaultValue (varData.Type);
+
+                        builderRef.BuildStore (initVal, varData.LLVMValue);
                     }
 
                     return new StatementData { AlwaysReturns = false };
