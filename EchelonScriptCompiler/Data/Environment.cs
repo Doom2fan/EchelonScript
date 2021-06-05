@@ -864,9 +864,12 @@ namespace EchelonScriptCompiler.Data {
             charList.AddRange ("ret@");
             foreach (var c in returnType->Name.NamespaceName.Span)
                 charList.Add ((char) c);
+
             charList.AddRange ("::");
             foreach (var c in returnType->Name.TypeName.Span)
                 charList.Add ((char) c);
+
+            charList.AddRange (", ");
 
             // Add the arguments.
             bool firstArg = true;
