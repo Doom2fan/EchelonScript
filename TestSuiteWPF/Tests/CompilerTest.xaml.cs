@@ -10,6 +10,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Text;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -20,6 +21,7 @@ using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Data.Types;
 using EchelonScriptCompiler.Frontend;
 using ICSharpCode.AvalonEdit.Document;
+using Microsoft.Toolkit.HighPerformance.Buffers;
 
 namespace TestSuiteWPF.Tests {
     /// <summary>
@@ -183,6 +185,9 @@ namespace TestSuiteWPF.Tests {
                 foreach (var typeDataPtr in namespaceData.Types)
                     AddTypeToTree (typeDataPtr.Address, namespaceNode);
 
+                foreach (var funcKVP in namespaceData.Functions)
+                    AddFunctionToTree (funcKVP.Value.Address, namespaceNode);
+
                 if (!frontendOnly && namespaceData.Functions.TryGetValue (idMain, out var func)) {
                     var funcType = func.Address->FunctionType;
 
@@ -257,21 +262,21 @@ namespace TestSuiteWPF.Tests {
             string typeType = null;
 
             switch (typeData->TypeTag) {
-                case ES_TypeTag.Void:   typeType = "Void";  break;
-                case ES_TypeTag.Bool:   typeType = "Bool";  break;
-                case ES_TypeTag.Int:    typeType = "Int";   break;
-                case ES_TypeTag.Float:  typeType = "Float"; break;
+                case ES_TypeTag.Void: typeType = "Void"; break;
+                case ES_TypeTag.Bool: typeType = "Bool"; break;
+                case ES_TypeTag.Int: typeType = "Int"; break;
+                case ES_TypeTag.Float: typeType = "Float"; break;
 
-                case ES_TypeTag.Function:   typeType = "Function";  break;
-                case ES_TypeTag.Struct:     typeType = "Struct";    break;
-                case ES_TypeTag.Class:      typeType = "Class";     break;
-                case ES_TypeTag.Enum:       typeType = "Enum";      break;
-                case ES_TypeTag.Interface:  typeType = "Interface"; break;
+                case ES_TypeTag.Function: typeType = "Prototype"; break;
+                case ES_TypeTag.Struct: typeType = "Struct"; break;
+                case ES_TypeTag.Class: typeType = "Class"; break;
+                case ES_TypeTag.Enum: typeType = "Enum"; break;
+                case ES_TypeTag.Interface: typeType = "Interface"; break;
 
-                case ES_TypeTag.Reference:  typeType = "Reference"; break;
-                case ES_TypeTag.Const:      typeType = "Const";     break;
-                case ES_TypeTag.Immutable:  typeType = "Immutable"; break;
-                case ES_TypeTag.Array:      typeType = "Array";     break;
+                case ES_TypeTag.Reference: typeType = "Reference"; break;
+                case ES_TypeTag.Const: typeType = "Const"; break;
+                case ES_TypeTag.Immutable: typeType = "Immutable"; break;
+                case ES_TypeTag.Array: typeType = "Array"; break;
 
                 default: typeType = "[UNRECOGNIZED]"; break;
             }
@@ -283,13 +288,9 @@ namespace TestSuiteWPF.Tests {
             AddNodeToTree ($"Source unit: {typeData->SourceUnitString}", typeNode);
 
             if (typeData->TypeTag == ES_TypeTag.Function) {
-                return;
                 var funcData = (ES_FunctionPrototypeData*) typeData;
 
-                if (funcData->ReturnType != null)
-                    AddNodeToTree ($"Return type: {funcData->ReturnType->Name.GetNameAsTypeString ()}", typeNode);
-                else
-                    AddNodeToTree ($"Return type: void", typeNode);
+                AddNodeToTree ($"Return type: {funcData->ReturnType->Name.GetNameAsTypeString ()}", typeNode);
 
                 var argsListNode = AddNodeToTree ($"Arguments list", typeNode);
                 foreach (var arg in funcData->ArgumentsList.Span) {
@@ -303,6 +304,39 @@ namespace TestSuiteWPF.Tests {
 
                     AddNodeToTree ($"{argType} {argTypeName}", argsListNode);
                 }
+            }
+        }
+
+        private unsafe void AddFunctionToTree (ES_FunctionData* functionData, TreeViewItem parentItem) {
+            var typeNode = AddNodeToTree ($"Function {functionData->Name.TypeNameString}", parentItem);
+
+            AddNodeToTree ($"Fully qualified name: {functionData->Name.GetNameAsTypeString ()}", typeNode);
+            AddNodeToTree ($"Source unit: {functionData->SourceUnitString}", typeNode);
+
+            var protoData = functionData->FunctionType;
+            AddNodeToTree ($"Return type: {protoData->ReturnType->Name.GetNameAsTypeString ()}", typeNode);
+
+            var argsListNode = AddNodeToTree ($"Arguments list", typeNode);
+            var reqArgsCount = protoData->ArgumentsList.Length - functionData->OptionalArgsCount;
+            for (int i = 0; i < protoData->ArgumentsList.Length; i++) {
+                var argProto = protoData->ArgumentsList.Span [i];
+                var argData = functionData->Arguments.Span [i];
+
+                var argType = string.Empty;
+                var argTypeName = "[NULL]";
+                var argName = StringPool.Shared.GetOrAdd (argData.Name.Span, Encoding.ASCII);
+                var argDef = string.Empty;
+
+                if (argProto.ArgType != ES_ArgumentType.Normal)
+                    argType = $"{argProto.ArgType} ";
+
+                if (argProto.ValueType != null)
+                    argTypeName = argProto.ValueType->Name.GetNameAsTypeString ();
+
+                if (i >= reqArgsCount)
+                    argDef = " = [...]";
+
+                AddNodeToTree ($"{argType}{argName} {argTypeName}{argDef}", argsListNode);
             }
         }
 
