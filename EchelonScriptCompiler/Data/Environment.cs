@@ -738,10 +738,6 @@ namespace EchelonScriptCompiler.Data {
                 return arrType;
             }
 
-            public ES_TypeInfo* CreateArrayType (ES_TypeInfo* elementType, ReadOnlySpan<int> dimensionsSizes) {
-                throw new NotImplementedException ("[TODO] Arrays not implemented yet.");
-            }
-
             #endregion
 
             protected void CheckDisposed () {
