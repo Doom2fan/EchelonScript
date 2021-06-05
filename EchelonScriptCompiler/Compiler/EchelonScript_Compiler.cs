@@ -44,7 +44,7 @@ namespace EchelonScriptCompiler {
 
         #region ================== Constructors
 
-        public EchelonScript_Compiler () {
+        protected EchelonScript_Compiler () {
             errorsList = new List<EchelonScriptErrorMessage> ();
             warningsList = new List<EchelonScriptErrorMessage> ();
             infoList = new List<EchelonScriptErrorMessage> ();
@@ -54,6 +54,14 @@ namespace EchelonScriptCompiler {
             backend = null;
 
             disposeBackend = false;
+        }
+
+        public static EchelonScript_Compiler Create () {
+            var comp = new EchelonScript_Compiler ();
+
+            comp.backend = null;
+
+            return comp;
         }
 
         public static EchelonScript_Compiler Create<TBackend> ()
