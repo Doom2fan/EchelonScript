@@ -671,6 +671,9 @@ namespace EchelonScriptCompiler.Data {
                         returnType, argsList,
                         fqn, ArrayPointer<byte>.Null
                     );
+
+                    var namespaceData = GetOrCreateNamespace (environment.GeneratedTypesNamespace).NamespaceData;
+                    namespaceData.Types.Add (&funcType->TypeInfo);
                 }
 
                 return funcType;
