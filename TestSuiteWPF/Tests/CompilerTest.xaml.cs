@@ -25,7 +25,7 @@ namespace TestSuiteWPF.Tests {
     /// <summary>
     /// Interaction logic for CompilerTest.xaml
     /// </summary>
-    public partial class CompilerTest : UserControl {
+    public partial class CompilerTestBase : UserControl {
         protected enum MessageType {
             Error,
             Warning,
@@ -61,18 +61,20 @@ namespace TestSuiteWPF.Tests {
 
         System.Globalization.CultureInfo cultureInfo;
 
+        protected bool frontendOnly;
         protected EchelonScript_Compiler compiler;
 
         #endregion
 
         #region ================== Constructors
 
-        public CompilerTest () {
+        protected CompilerTestBase (bool noBackend) {
+            frontendOnly = noBackend;
+
             InitializeComponent ();
 
             textMarkerService = new TextMarkerService (codeText);
 
-            compiler = EchelonScript_Compiler.Create<LLVMCompilerBackend> ();
             errList = new ObservableCollection<CompilerMessage> ();
 
             errorsList.ItemsSource = errList;
@@ -181,7 +183,7 @@ namespace TestSuiteWPF.Tests {
                 foreach (var typeDataPtr in namespaceData.Types)
                     AddTypeToTree (typeDataPtr.Address, namespaceNode);
 
-                if (namespaceData.Functions.TryGetValue (idMain, out var func)) {
+                if (!frontendOnly && namespaceData.Functions.TryGetValue (idMain, out var func)) {
                     var funcType = func.Address->FunctionType;
 
                     if (funcType->ReturnType->TypeTag == ES_TypeTag.Void && funcType->ArgumentsList.Length == 0) {
@@ -189,7 +191,7 @@ namespace TestSuiteWPF.Tests {
                     }
                 }
 
-                if (namespaceData.Functions.TryGetValue (idTestI32, out func)) {
+                if (!frontendOnly && namespaceData.Functions.TryGetValue (idTestI32, out func)) {
                     var funcType = func.Address->FunctionType;
 
                     bool matchSig = false;
@@ -215,7 +217,7 @@ namespace TestSuiteWPF.Tests {
                         errList.Add (new CompilerMessage ("lol", new EchelonScriptErrorMessage ($"{testI32Name} didn't match signature.", 0, 0, 0, 0)));
                 }
 
-                if (namespaceData.Functions.TryGetValue (idTestF32, out func)) {
+                if (!frontendOnly && namespaceData.Functions.TryGetValue (idTestF32, out func)) {
                     var funcType = func.Address->FunctionType;
 
                     bool matchSig = false;
@@ -255,12 +257,21 @@ namespace TestSuiteWPF.Tests {
             string typeType = null;
 
             switch (typeData->TypeTag) {
-                case ES_TypeTag.Class: typeType = "Class"; break;
-                case ES_TypeTag.Struct: typeType = "Struct"; break;
-                case ES_TypeTag.Interface: typeType = "Interface"; break;
-                case ES_TypeTag.Array: typeType = "Array"; break;
-                case ES_TypeTag.Reference: typeType = "Reference"; break;
-                case ES_TypeTag.Function: typeType = "Function"; break;
+                case ES_TypeTag.Void:   typeType = "Void";  break;
+                case ES_TypeTag.Bool:   typeType = "Bool";  break;
+                case ES_TypeTag.Int:    typeType = "Int";   break;
+                case ES_TypeTag.Float:  typeType = "Float"; break;
+
+                case ES_TypeTag.Function:   typeType = "Function";  break;
+                case ES_TypeTag.Struct:     typeType = "Struct";    break;
+                case ES_TypeTag.Class:      typeType = "Class";     break;
+                case ES_TypeTag.Enum:       typeType = "Enum";      break;
+                case ES_TypeTag.Interface:  typeType = "Interface"; break;
+
+                case ES_TypeTag.Reference:  typeType = "Reference"; break;
+                case ES_TypeTag.Const:      typeType = "Const";     break;
+                case ES_TypeTag.Immutable:  typeType = "Immutable"; break;
+                case ES_TypeTag.Array:      typeType = "Array";     break;
 
                 default: typeType = "[UNRECOGNIZED]"; break;
             }
@@ -316,5 +327,17 @@ namespace TestSuiteWPF.Tests {
         }
 
         #endregion
+    }
+
+    public class FrontendTest : CompilerTestBase {
+        public FrontendTest () : base (true) {
+            compiler = EchelonScript_Compiler.Create ();
+        }
+    }
+
+    public class CompilerTestLLVM : CompilerTestBase {
+        public CompilerTestLLVM () : base (false) {
+            compiler = EchelonScript_Compiler.Create<LLVMCompilerBackend> ();
+        }
     }
 }

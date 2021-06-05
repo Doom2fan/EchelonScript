@@ -31,9 +31,6 @@
     <Compile Update="Tests\CompilerTest.xaml.cs">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Update="Tests\FrontendTest.xaml.cs">
-      <SubType>Code</SubType>
-    </Compile>
     <Compile Update="Tests\ParserTest.xaml.cs">
       <SubType>Code</SubType>
     </Compile>
@@ -41,10 +38,6 @@
 
   <ItemGroup>
     <Page Update="Tests\CompilerTest.xaml">
-      <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
-      <SubType>Designer</SubType>
-    </Page>
-    <Page Update="Tests\FrontendTest.xaml">
       <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
       <SubType>Designer</SubType>
     </Page>
