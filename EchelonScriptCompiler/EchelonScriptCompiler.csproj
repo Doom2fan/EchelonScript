@@ -19,6 +19,7 @@
     <PackageReference Include="LibLLVM" Version="12.0.0" />
     <PackageReference Include="LLVMSharp" Version="12.0.0-beta1" />
     <PackageReference Include="Microsoft.Toolkit.HighPerformance" Version="7.0.0-preview5" />
+    <PackageReference Include="TerraFX.Interop.Mimalloc" Version="1.6.0-beta1" />
   </ItemGroup>
 
   <ItemGroup>

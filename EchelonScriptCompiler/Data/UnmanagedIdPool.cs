@@ -17,6 +17,7 @@ using System.Text;
 using ChronosLib.Pooled;
 using Collections.Pooled;
 using Microsoft.Toolkit.HighPerformance;
+using static TerraFX.Interop.Mimalloc;
 
 namespace EchelonScriptCompiler.Data {
     public class UnmanagedIdentifierComparer : IComparer<ArrayPointer<byte>> {
@@ -190,7 +191,7 @@ namespace EchelonScriptCompiler.Data {
 
             if (selectedAreaIdx == -1) {
                 int size = (int) (Math.Ceiling (length / (float) BaseBlockSize) * BaseBlockSize);
-                var memPtr = (byte*) Marshal.AllocHGlobal (size);
+                var memPtr = (byte*) mi_malloc ((nuint) size);
                 var newMemoryArea = new MemoryArea<byte> (memPtr, size);
 
                 bytesMemoryAreas.Add (newMemoryArea);
@@ -260,7 +261,7 @@ namespace EchelonScriptCompiler.Data {
                         ret = singleId;
                     else {
                         var arrPtr = new ArrayPointer<ArrayPointer<byte>> {
-                            Elements = (ArrayPointer<byte>*) Marshal.AllocHGlobal (sizeof (ArrayPointer<byte>) * 2),
+                            Elements = (ArrayPointer<byte>*) mi_malloc ((nuint) (sizeof (ArrayPointer<byte>) * 2)),
                             Length = 2,
                         };
 
@@ -289,7 +290,7 @@ namespace EchelonScriptCompiler.Data {
                     if (ret == null) {
                         int newLen = idsArr.Length + 1;
                         var newArrPtr = new ArrayPointer<ArrayPointer<byte>> {
-                            Elements = (ArrayPointer<byte>*) Marshal.AllocHGlobal (sizeof (ArrayPointer<byte>) * newLen),
+                            Elements = (ArrayPointer<byte>*) mi_malloc ((nuint) (sizeof (ArrayPointer<byte>) * newLen)),
                             Length = newLen,
                         };
 
@@ -300,7 +301,7 @@ namespace EchelonScriptCompiler.Data {
                         newArrPtrSpan [^0] = idBytes;
 
                         idData = new IdData (hashCode, newArrPtr);
-                        Marshal.FreeHGlobal (new IntPtr (idsArr.Elements));
+                        mi_free (idsArr.Elements);
 
                         ret = idBytes;
                     }
@@ -347,12 +348,12 @@ namespace EchelonScriptCompiler.Data {
             if (!disposedValue) {
                 foreach (var idData in idsList) {
                     if (idData.Type == IdData.DataType.IdArray)
-                        Marshal.FreeHGlobal (new IntPtr (idData.GetArray ().Elements));
+                        mi_free (idData.GetArray ().Elements);
                 }
 
                 // Memory areas
                 foreach (var memArea in bytesMemoryAreas)
-                    Marshal.FreeHGlobal (new IntPtr (memArea.MemArea));
+                    mi_free (memArea.MemArea);
                 bytesMemoryAreas.Dispose ();
                 idsList.Dispose ();
 
