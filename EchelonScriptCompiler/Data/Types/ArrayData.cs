@@ -25,6 +25,7 @@ namespace EchelonScriptCompiler.Data.Types {
 
         public ES_ArrayTypeData (ES_FullyQualifiedName fullyQualifiedName, ES_TypeInfo* elemType, int dims) {
             TypeInfo = new ES_TypeInfo (ES_TypeTag.Array, ES_AccessModifier.Public, ArrayPointer<byte>.Null, fullyQualifiedName);
+            TypeInfo.RuntimeSize = sizeof (void*) + sizeof (int);
 
             elementType = elemType;
             dimCount = dims;
