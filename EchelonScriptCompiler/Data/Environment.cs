@@ -682,7 +682,41 @@ namespace EchelonScriptCompiler.Data {
             #region Derived type creation
 
             public ES_TypeInfo* CreateReferenceType (ES_TypeInfo* baseType) {
-                throw new NotImplementedException ("[TODO] References not implemented yet.");
+                // Format sample: "@generated::NamespaceName__TypeName&"
+                var baseFQN = baseType->Name;
+
+                using var idBase = UnmanagedArray<byte>.GetArray (baseFQN.NamespaceName.Length + baseFQN.TypeName.Length + 3);
+                var idBaseSpan = idBase.Span;
+
+                int idx = 0;
+
+                baseFQN.NamespaceName.Span.CopyTo (idBaseSpan);
+                idx += baseFQN.NamespaceName.Length;
+
+                idBaseSpan.Slice (idx, 2).Fill ((byte) '_');
+                idx += 2;
+
+                baseFQN.TypeName.Span.CopyTo (idBaseSpan.Slice (idx));
+                idx += baseFQN.TypeName.Length;
+
+                idBaseSpan [idx++] = (byte) '&';
+
+                var refId = environment.IdPool.GetIdentifier (idBase);
+                var refFQN = new ES_FullyQualifiedName (environment.GeneratedTypesNamespace, refId);
+
+                var refType = environment.GetFullyQualifiedType (refFQN);
+
+                if (refType is not null) {
+                    Debug.Assert (refType->TypeTag == ES_TypeTag.Reference);
+                    return refType;
+                }
+
+                refType = (ES_TypeInfo*) environment.memManager.GetMemory<ES_ReferenceData> ();
+                *((ES_ReferenceData*) refType) = new ES_ReferenceData (refFQN, baseType);
+
+                GetOrCreateNamespace (environment.GeneratedTypesNamespace).NamespaceData.Types.Add (refType);
+
+                return refType;
             }
 
             public ES_TypeInfo* CreateNullableType (ES_TypeInfo* baseType) {

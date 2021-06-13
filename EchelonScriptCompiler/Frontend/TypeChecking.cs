@@ -293,6 +293,13 @@ namespace EchelonScriptCompiler.Frontend {
             return true;
         }
 
+        protected ES_TypeInfo* CheckTypes_Dereference (ES_TypeInfo* refType) {
+            Debug.Assert (refType->TypeTag == ES_TypeTag.Reference);
+
+            var refTypeData = (ES_ReferenceData*) refType;
+            return refTypeData->PointedType;
+        }
+
         protected StatementData CheckTypes_Statement (
             ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, ReadOnlySpan<char> src,
             ES_TypeInfo* retType, ES_AstStatement stmt
@@ -766,6 +773,9 @@ namespace EchelonScriptCompiler.Frontend {
 
             if (parentExpr.Type is not null) {
                 var type = parentExpr.Type;
+
+                if (type->TypeTag == ES_TypeTag.Reference)
+                    type = CheckTypes_Dereference (type);
 
                 switch (type->TypeTag) {
                     case ES_TypeTag.UNKNOWN:

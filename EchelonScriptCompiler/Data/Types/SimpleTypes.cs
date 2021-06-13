@@ -102,11 +102,10 @@ namespace EchelonScriptCompiler.Data.Types {
         #region ================== Constructors
 
         public ES_ReferenceData (
-            ES_AccessModifier accessMod, ArrayPointer<byte> sourceUnit, ES_FullyQualifiedName fullyQualifiedName,
-            ES_TypeInfo* pointedType
+            ES_FullyQualifiedName fullyQualifiedName, ES_TypeInfo* pointedType
         ) {
-            TypeInfo = new ES_TypeInfo (ES_TypeTag.Reference, accessMod, sourceUnit, fullyQualifiedName);
-            TypeInfo.RuntimeSize = sizeof (IntPtr);
+            TypeInfo = new ES_TypeInfo (ES_TypeTag.Reference, ES_AccessModifier.Public, ArrayPointer<byte>.Null, fullyQualifiedName);
+            TypeInfo.RuntimeSize = sizeof (void*);
 
             PointedType = pointedType;
         }
