@@ -1717,6 +1717,25 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                             } else
                                 goto ParseFunctionOrVariable;
 
+                        case ES_Keywords.This:
+                            ParseAggregate_SetDocComment (ref currentModifiers, tkPair.doc);
+
+                            bool isStatic = defaultModifiers.Static == true || baseModifiers.Static == true || currentModifiers.Static == true;
+
+                            if (isStatic && (baseModifiers.AccessModifier.HasValue || currentModifiers.AccessModifier.HasValue)) {
+                                errorsList.Add (new EchelonScriptErrorMessage (
+                                    tkPair.tk, ES_FrontendErrors.NoAccessModsOnStaticConstructors
+                                ));
+                            }
+
+                            currentModifiers.CopyDefaultsToUndefined (baseModifiers);
+                            currentModifiers.CopyDefaultsToUndefined (defaultModifiers);
+
+                            contents.Add (ParseConstructor (currentModifiers));
+
+                            currentModifiers.ResetToNull ();
+                            break;
+
                         case ES_Keywords.Immutable:
                             goto ParseFunctionOrVariable;
 
@@ -1895,6 +1914,65 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                 return new ES_AstNode? [] { ParseFunction (modifiers, typeDecl, true) };
             else
                 return ParseMemberVar (modifiers, typeDecl);
+        }
+
+        protected ES_AstConstructorDefinition ParseConstructor (ES_AggregateModifiers consModifiers) {
+            // Check if all the modifiers are defined/set. (If not, someone forgot to fill them with the defaults.)
+            if (consModifiers.AnyUndefined ())
+                throw new ArgumentException ("Modifiers set contains undefined values.", nameof (consModifiers));
+
+            var startTk = tokenizer.NextToken ();
+            Debug.Assert (EnsureToken (startTk.tk, EchelonScriptTokenType.Identifier, ES_Keywords.This) == EnsureTokenResult.Correct);
+
+            if (consModifiers.VirtualnessModifier == ES_VirtualnessModifier.Abstract)
+                errorsList.Add (ES_FrontendErrors.GenInvalidModifier ("abstract", startTk.tk));
+            else if (consModifiers.VirtualnessModifier == ES_VirtualnessModifier.Virtual)
+                errorsList.Add (ES_FrontendErrors.GenInvalidModifier ("virtual", startTk.tk));
+            else if (consModifiers.VirtualnessModifier == ES_VirtualnessModifier.Override)
+                errorsList.Add (ES_FrontendErrors.GenInvalidModifier ("override", startTk.tk));
+
+            bool isStatic = consModifiers.Static!.Value;
+
+            var argumentsList = ParseArgumentsDefinitionList ();
+
+            if (isStatic && argumentsList.Length > 0)
+                errorsList.Add (new EchelonScriptErrorMessage (startTk.tk, ES_FrontendErrors.NoArgsOnStaticConstructors));
+
+            bool exprBody;
+            ES_AstStatement? statements;
+            EchelonScriptToken endTk;
+            if (tokenizer.PeekNextToken ().tk.Type == EchelonScriptTokenType.LambdaArrow) {
+                tokenizer.NextToken ();
+
+                var expr = ParseExpression ();
+
+                endTk = tokenizer.PeekNextToken ().tk;
+
+                ParseSemicolon (out _);
+
+                statements = new ES_AstExpressionStatement (expr, endTk);
+
+                exprBody = true;
+            } else {
+                statements = ParseStatementsBlock (out endTk);
+                exprBody = false;
+            }
+
+            var functionDef = new ES_AstConstructorDefinition (
+                consModifiers.AccessModifier!.Value,
+                consModifiers.DocComment,
+
+                isStatic,
+
+                startTk.tk,
+                argumentsList,
+
+                exprBody,
+                statements,
+                endTk
+            );
+
+            return functionDef;
         }
 
         protected ES_AstClassDefinition ParseClass (ES_AggregateModifiers classModifiers) {

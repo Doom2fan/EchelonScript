@@ -73,6 +73,7 @@ namespace EchelonScriptCompiler.Frontend {
         public const string Var = "var";
         public const string New = "new";
         public const string Cast = "cast";
+        public const string This = "this";
 
         public const string Void = "void";
         public const string Const = "const";

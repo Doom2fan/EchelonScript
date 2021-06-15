@@ -59,6 +59,9 @@ namespace EchelonScriptCompiler.Frontend {
         public const string ElementAlreadyStatic = "Element already declared as static.";
         public const string ConstOnlyOnFunctions = "The const keyword can only be applied to functions.";
 
+        public const string NoArgsOnStaticConstructors = "Static constructors cannot have arguments.";
+        public const string NoAccessModsOnStaticConstructors = "Static constructors cannot have access modifiers.";
+
         public const string ImportAfterNamespace = "Import declarations must come before any namespaces.";
         public const string AliasAfterNamespace = "Type alias declarations must come before any namespaces.";
 

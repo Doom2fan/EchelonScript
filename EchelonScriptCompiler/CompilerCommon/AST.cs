@@ -485,6 +485,44 @@ namespace EchelonScriptCompiler.CompilerCommon {
         }
     }
 
+    public class ES_AstConstructorDefinition : ES_AstNode {
+        public override ES_AstNodeBounds NodeBounds => bounds;
+        protected ES_AstNodeBounds bounds;
+
+        public ES_AccessModifier AccessModifier;
+        public EchelonScriptToken? DocComment;
+
+        public bool Static;
+
+        public EchelonScriptToken ThisToken;
+
+        public ES_AstFunctionArgumentDefinition [] ArgumentsList;
+
+        public bool ExpressionBody;
+        public ES_AstStatement? Statement;
+
+        public ES_AstConstructorDefinition (
+            ES_AccessModifier accessMod, EchelonScriptToken? docCom, bool staticMod, EchelonScriptToken startTk,
+            ES_AstFunctionArgumentDefinition [] argsList,
+            bool exprBody, ES_AstStatement? statements,
+            EchelonScriptToken closeBraceTk
+        ) : base (1) {
+            AccessModifier = accessMod;
+            DocComment = docCom;
+
+            Static = staticMod;
+
+            ThisToken = startTk;
+
+            ArgumentsList = argsList;
+
+            ExpressionBody = exprBody;
+            Statement = statements;
+
+            bounds = new ES_AstNodeBounds (ThisToken.TextStartPos, closeBraceTk.TextEndPos);
+        }
+    }
+
     #endregion
 
     public class ES_AstEnumDefinition : ES_AstNode {

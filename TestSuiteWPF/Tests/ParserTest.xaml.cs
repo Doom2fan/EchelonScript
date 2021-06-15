@@ -217,6 +217,34 @@ namespace TestSuiteWPF.Tests {
                     break;
                 }
 
+                case ES_AstConstructorDefinition consDef: {
+                    var thisItem = AddNodeToTree (!consDef.Static ? "Constructor" : "Static constructor", parentItem);
+                    thisItem.Tag = consDef.ThisToken;
+
+                    var modifiersList = AddNodeToTree ("Access modifiers", thisItem);
+                    AddNodeToTree (consDef.AccessModifier.ToString (), modifiersList);
+
+                    if (consDef.DocComment != null) {
+                        var docComNode = AddNodeToTree ("Documentation comment", thisItem);
+                        docComNode.Tag = consDef.DocComment.Value;
+                        AddNodeToTree (consDef.DocComment.Value.Text.Span.ToString (), docComNode);
+                    }
+
+                    var argsList = AddNodeToTree ("Arguments list", thisItem);
+                    var statements = AddNodeToTree ("Body", thisItem);
+
+                    AddArgumentsListToTree (consDef.ArgumentsList, argsList);
+
+                    var curStatement = consDef.Statement;
+                    while (curStatement is not null) {
+                        AddAstNodeToTree (curStatement, statements);
+
+                        curStatement = curStatement.Endpoint;
+                    }
+
+                    break;
+                }
+
                 #endregion
 
                 case ES_AstEnumDefinition enumDef: {
@@ -270,33 +298,7 @@ namespace TestSuiteWPF.Tests {
                     var argsList = AddNodeToTree ("Arguments list", thisItem);
                     var statements = AddNodeToTree ("Body", thisItem);
 
-                    foreach (var arg in funcDef.ArgumentsList) {
-                        string text;
-
-                        switch (arg.ArgType) {
-                            case ES_ArgumentType.Normal:
-                                text = $"{arg.ValueType} {arg.Name.Text}";
-                                break;
-                            case ES_ArgumentType.Ref:
-                                text = $"ref {arg.ValueType} {arg.Name.Text}";
-                                break;
-                            case ES_ArgumentType.In:
-                                text = $"in {arg.ValueType} {arg.Name.Text}";
-                                break;
-                            case ES_ArgumentType.Out:
-                                text = $"out {arg.ValueType} {arg.Name.Text}";
-                                break;
-
-                            default:
-                                throw new NotImplementedException ();
-                        }
-
-                        var argItem = AddNodeToTree (text, argsList);
-                        argItem.Tag = arg.Name;
-
-                        if (arg.DefaultExpression != null)
-                            AddAstNodeToTree (arg.DefaultExpression, argItem);
-                    }
+                    AddArgumentsListToTree (funcDef.ArgumentsList, argsList);
 
                     var curStatement = funcDef.Statement;
                     while (curStatement is not null) {
@@ -852,6 +854,36 @@ namespace TestSuiteWPF.Tests {
 
                 default:
                     throw new NotImplementedException ();
+            }
+        }
+
+        private void AddArgumentsListToTree (ES_AstFunctionArgumentDefinition [] argsList, TreeViewItem parentItem) {
+            foreach (var arg in argsList) {
+                string text;
+
+                switch (arg.ArgType) {
+                    case ES_ArgumentType.Normal:
+                        text = $"{arg.ValueType} {arg.Name.Text}";
+                        break;
+                    case ES_ArgumentType.Ref:
+                        text = $"ref {arg.ValueType} {arg.Name.Text}";
+                        break;
+                    case ES_ArgumentType.In:
+                        text = $"in {arg.ValueType} {arg.Name.Text}";
+                        break;
+                    case ES_ArgumentType.Out:
+                        text = $"out {arg.ValueType} {arg.Name.Text}";
+                        break;
+
+                    default:
+                        throw new NotImplementedException ();
+                }
+
+                var argItem = AddNodeToTree (text, parentItem);
+                argItem.Tag = arg.Name;
+
+                if (arg.DefaultExpression != null)
+                    AddAstNodeToTree (arg.DefaultExpression, argItem);
             }
         }
 
