@@ -337,7 +337,7 @@ namespace EchelonScriptCompiler.Frontend {
             return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
         }
         public static EchelonScriptErrorMessage GenCantApplyUnaryOp (string op, string expr, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
-            var errorMessage = CantApplyBinaryOp.Replace ("{op}", op).Replace ("{expr}", expr);
+            var errorMessage = CantApplyUnaryOp.Replace ("{op}", op).Replace ("{expr}", expr);
             return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
         }
 
