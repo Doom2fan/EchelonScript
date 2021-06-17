@@ -370,6 +370,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
         private ExpressionData GenerateCode_BinaryExpr_IntInt (ExpressionData lhs, ExpressionData rhs, SimpleBinaryExprType exprOp) {
             var boolType = env!.TypeBool;
 
+            // Validate the types and op.
             Debug.Assert (lhs.Type->TypeTag == ES_TypeTag.Int);
             Debug.Assert (rhs.Type->TypeTag == ES_TypeTag.Int);
 
@@ -388,6 +389,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
             Debug.Assert (!isAssignment || originalLHS.IsPointer ());
 
+            // Dereference pointers.
             lhs.Value = GetLLVMValue (lhs.Value);
             rhs.Value = GetLLVMValue (rhs.Value);
 
@@ -532,6 +534,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
         private ExpressionData GenerateCode_BinaryExpr_BoolBool (ExpressionData lhs, ExpressionData rhs, SimpleBinaryExprType exprOp) {
             var boolType = env!.TypeBool;
 
+            // Validate the types and op.
             Debug.Assert (lhs.Type->TypeTag == ES_TypeTag.Bool);
             Debug.Assert (rhs.Type->TypeTag == ES_TypeTag.Bool);
 
@@ -540,6 +543,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
             Debug.Assert (!isAssignment || originalLHS.IsPointer ());
 
+            // Dereference pointers.
             lhs.Value = GetLLVMValue (lhs.Value);
             rhs.Value = GetLLVMValue (rhs.Value);
 
@@ -583,6 +587,8 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
         private ExpressionData GenerateCode_BinaryExpr_FloatFloat (ExpressionData lhs, ExpressionData rhs, SimpleBinaryExprType exprOp) {
             Debug.Assert (env is not null);
+
+            // Validate the types and op.
             Debug.Assert (lhs.Type->TypeTag == ES_TypeTag.Float);
             Debug.Assert (rhs.Type->TypeTag == ES_TypeTag.Float);
 
@@ -594,6 +600,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
             Debug.Assert (!isAssignment || originalLHS.IsPointer ());
 
+            // Dereference pointers.
             lhs.Value = GetLLVMValue (lhs.Value);
             rhs.Value = GetLLVMValue (rhs.Value);
 
@@ -670,6 +677,8 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
         private ExpressionData GenerateCode_BinaryExpr_FloatInt (ExpressionData lhs, ExpressionData rhs, SimpleBinaryExprType exprOp) {
             Debug.Assert (env is not null);
+
+            // Validate the types and op.
             Debug.Assert (lhs.Type->TypeTag == ES_TypeTag.Float);
             Debug.Assert (rhs.Type->TypeTag == ES_TypeTag.Int);
 
@@ -681,6 +690,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
             Debug.Assert (!isAssignment || originalLHS.IsPointer ());
 
+            // Dereference pointers.
             lhs.Value = GetLLVMValue (lhs.Value);
             rhs.Value = GetLLVMValue (rhs.Value);
 
@@ -810,8 +820,6 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
         private ExpressionData GenerateCode_UnaryExpr_Bool (ExpressionData inner, SimpleUnaryExprType exprOp) {
             Debug.Assert (inner.Type->TypeTag == ES_TypeTag.Bool);
 
-            var innerInt = (ES_IntTypeData*) inner.Type;
-
             inner.Value = GetLLVMValue (inner.Value);
 
             LLVMValueRef value;
@@ -829,8 +837,6 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
         private ExpressionData GenerateCode_UnaryExpr_Float (ExpressionData inner, SimpleUnaryExprType exprOp) {
             Debug.Assert (inner.Type->TypeTag == ES_TypeTag.Float);
-
-            var innerInt = (ES_IntTypeData*) inner.Type;
 
             inner.Value = GetLLVMValue (inner.Value);
 
