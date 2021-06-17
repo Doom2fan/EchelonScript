@@ -279,14 +279,11 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
             funcPassManagerRef.AddVerifierPass ();
 
-            // "Memory to registers" pass. Mandatory.
+            // Convert stack values to registers.
             funcPassManagerRef.AddPromoteMemoryToRegisterPass ();
 
             // Do simple "peephole" optimizations.
             funcPassManagerRef.AddInstructionCombiningPass ();
-
-            // Reassociate expressions.
-            funcPassManagerRef.AddReassociatePass ();
 
             // Eliminate common subexpressions.
             funcPassManagerRef.AddGVNPass ();
@@ -294,8 +291,23 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             // Simplify the control flow graph. (Deleting unreachable blocks, etc)
             funcPassManagerRef.AddCFGSimplificationPass ();
 
+            // Do simple "peephole" optimizations. [Again]
+            funcPassManagerRef.AddInstructionCombiningPass ();
+
+            // Reassociate expressions.
+            funcPassManagerRef.AddReassociatePass ();
+
             // Inline functions.
             funcPassManagerRef.AddFunctionInliningPass ();
+
+            // Remove dead memory store instructions.
+            funcPassManagerRef.AddDeadStoreEliminationPass ();
+
+            // Unroll loops.
+            funcPassManagerRef.AddLoopUnrollPass ();
+
+            // Convert stack values to registers.
+            funcPassManagerRef.AddPromoteMemoryToRegisterPass ();
         }
 
         #endregion
