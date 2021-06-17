@@ -843,6 +843,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             AddSimpleUnaryExpr (ExpressionPrecedence.Unary, EchelonScriptTokenType.Minus, SimpleUnaryExprType.Negative);
             AddSimpleUnaryExpr (ExpressionPrecedence.Unary, EchelonScriptTokenType.Bang, SimpleUnaryExprType.LogicalNot);
             AddSimpleUnaryExpr (ExpressionPrecedence.Unary, EchelonScriptTokenType.Tilde, SimpleUnaryExprType.BitNot);
+            AddSimpleUnaryExpr (ExpressionPrecedence.Unary, EchelonScriptTokenType.Asterisk, SimpleUnaryExprType.Dereference);
             AddPrefixParselet (EchelonScriptTokenType.PlusPlus, incDecParselet);
             AddPrefixParselet (EchelonScriptTokenType.MinusMinus, incDecParselet);
             AddPrefixParselet (EchelonScriptTokenType.Identifier, new CastExpressionParselet ());

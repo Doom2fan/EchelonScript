@@ -597,6 +597,7 @@ namespace EchelonScriptCompiler.Data {
                         }
                     }
 
+                    case SimpleUnaryExprType.Dereference:
                     case SimpleUnaryExprType.LogicalNot:
                         finalType = environment.TypeUnknownValue;
                         isConst = false;
@@ -619,6 +620,7 @@ namespace EchelonScriptCompiler.Data {
                     case SimpleUnaryExprType.Positive:
                     case SimpleUnaryExprType.Negative:
                     case SimpleUnaryExprType.BitNot:
+                    case SimpleUnaryExprType.Dereference:
                         finalType = environment.TypeUnknownValue;
                         isConst = false;
                         return false;
@@ -640,6 +642,7 @@ namespace EchelonScriptCompiler.Data {
 
                     case SimpleUnaryExprType.LogicalNot:
                     case SimpleUnaryExprType.BitNot:
+                    case SimpleUnaryExprType.Dereference:
                         finalType = environment.TypeUnknownValue;
                         isConst = false;
                         return false;

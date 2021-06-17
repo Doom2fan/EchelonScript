@@ -1025,6 +1025,7 @@ namespace EchelonScriptCompiler.CompilerCommon {
         Negative,
         LogicalNot,
         BitNot,
+        Dereference,
     }
 
     public static class ES_AstExtensions {
