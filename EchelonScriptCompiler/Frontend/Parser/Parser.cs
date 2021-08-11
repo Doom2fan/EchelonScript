@@ -12,10 +12,10 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Reflection;
 using ChronosLib.Pooled;
+using CommunityToolkit.HighPerformance.Buffers;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Data.Types;
-using Microsoft.Toolkit.HighPerformance.Buffers;
 
 namespace EchelonScriptCompiler.Frontend.Parser {
     public struct ES_AggregateModifiers {

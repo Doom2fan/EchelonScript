@@ -13,6 +13,7 @@ using System.Text;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using ChronosLib.Pooled;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Data.Types;
@@ -595,7 +596,7 @@ namespace TestSuiteWPF.Tests {
                     var thisItem = AddNodeToTree ("Member access", parentItem);
                     AddAstNodeToTree (memberAccessExpr.Parent, thisItem);
                     if (memberAccessExpr.Member is not null)
-                        AddNodeToTree (memberAccessExpr.Member.Value.Text.GetPooledString (), thisItem);
+                        AddNodeToTree (memberAccessExpr.Member.Value.Text.Span.GetPooledString (), thisItem);
                     else
                         AddNodeToTree ("[NULL]", thisItem);
 

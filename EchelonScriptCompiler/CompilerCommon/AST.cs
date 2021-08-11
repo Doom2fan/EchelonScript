@@ -12,7 +12,6 @@ using System.Diagnostics;
 using ChronosLib.Pooled;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Data.Types;
-using EchelonScriptCompiler.Utilities;
 
 namespace EchelonScriptCompiler.CompilerCommon {
     public struct ES_AstNodeBounds {

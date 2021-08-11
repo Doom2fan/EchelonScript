@@ -12,11 +12,10 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Text;
 using ChronosLib.Pooled;
 using Collections.Pooled;
-using Microsoft.Toolkit.HighPerformance;
+using CommunityToolkit.HighPerformance;
 using static TerraFX.Interop.Mimalloc;
 
 namespace EchelonScriptCompiler.Data {

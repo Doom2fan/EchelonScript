@@ -21,7 +21,7 @@ using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Data.Types;
 using EchelonScriptCompiler.Frontend;
 using ICSharpCode.AvalonEdit.Document;
-using Microsoft.Toolkit.HighPerformance.Buffers;
+using CommunityToolkit.HighPerformance.Buffers;
 
 namespace TestSuiteWPF.Tests {
     /// <summary>

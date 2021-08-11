@@ -15,12 +15,12 @@ using System.Text;
 using ChronosLib.Pooled;
 using ChronosLib.Unmanaged;
 using Collections.Pooled;
+using CommunityToolkit.HighPerformance.Buffers;
 using EchelonScriptCompiler.Backends;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data.Types;
 using EchelonScriptCompiler.Frontend;
 using EchelonScriptCompiler.Utilities;
-using Microsoft.Toolkit.HighPerformance.Buffers;
 
 namespace EchelonScriptCompiler.Data {
     public unsafe class ES_NamespaceData {

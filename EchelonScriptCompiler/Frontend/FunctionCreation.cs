@@ -132,7 +132,7 @@ namespace EchelonScriptCompiler.Frontend {
                 if (arg.DefaultExpression is not null) {
                     if (arg.ArgType == ES_ArgumentType.Out || arg.ArgType== ES_ArgumentType.Ref) {
                         errorList.Add (ES_FrontendErrors.GenArgTypeCantUseDefExpr (
-                            arg.Name.Text.GetPooledString (), arg.ArgType.ToString (), arg.Name
+                            arg.Name.Text.Span.GetPooledString (), arg.ArgType.ToString (), arg.Name
                         ));
                     }
 

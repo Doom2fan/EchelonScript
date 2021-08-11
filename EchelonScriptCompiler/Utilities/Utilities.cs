@@ -11,7 +11,6 @@ using System;
 using System.Runtime.InteropServices;
 using ChronosLib.Unmanaged;
 using EchelonScriptCompiler.Data;
-using Microsoft.Toolkit.HighPerformance.Buffers;
 
 namespace EchelonScriptCompiler.Utilities {
     [StructLayout(LayoutKind.Sequential)]
@@ -37,22 +36,6 @@ namespace EchelonScriptCompiler.Utilities {
     }
 
     public static class ES_Utils {
-        public static string GetPooledString (this Span<char> chars) {
-            return StringPool.Shared.GetOrAdd (chars);
-        }
-
-        public static string GetPooledString (this ReadOnlySpan<char> chars) {
-            return StringPool.Shared.GetOrAdd (chars);
-        }
-
-        public static string GetPooledString (this Memory<char> chars) {
-            return StringPool.Shared.GetOrAdd (chars.Span);
-        }
-
-        public static string GetPooledString (this ReadOnlyMemory<char> chars) {
-            return StringPool.Shared.GetOrAdd (chars.Span);
-        }
-
         public unsafe static ArrayPointer<T> GetArray<T> (this IMemoryManager manager, int count)
             where T : unmanaged {
             if (count < 1)

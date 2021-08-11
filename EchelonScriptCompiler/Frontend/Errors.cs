@@ -8,10 +8,10 @@
  */
 
 using System;
+using CommunityToolkit.HighPerformance.Buffers;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Data.Types;
-using Microsoft.Toolkit.HighPerformance.Buffers;
 
 namespace EchelonScriptCompiler.Frontend {
     public static class ES_FrontendErrors {

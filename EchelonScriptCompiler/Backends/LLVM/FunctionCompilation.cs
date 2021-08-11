@@ -11,12 +11,12 @@ using System;
 using System.Diagnostics;
 using System.Text;
 using ChronosLib.Pooled;
+using CommunityToolkit.HighPerformance.Buffers;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Data.Types;
 using EchelonScriptCompiler.Frontend;
 using LLVMSharp.Interop;
-using Microsoft.Toolkit.HighPerformance.Buffers;
 
 namespace EchelonScriptCompiler.Backends.LLVMBackend {
     public unsafe sealed partial class LLVMCompilerBackend {

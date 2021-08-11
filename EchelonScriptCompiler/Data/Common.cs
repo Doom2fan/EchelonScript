@@ -9,9 +9,9 @@
 
 using System;
 using System.Text;
+using CommunityToolkit.HighPerformance.Buffers;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Frontend.Parser;
-using Microsoft.Toolkit.HighPerformance.Buffers;
 
 namespace EchelonScriptCompiler.Data {
     public unsafe struct ArrayPointer<T>

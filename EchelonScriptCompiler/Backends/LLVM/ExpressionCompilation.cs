@@ -9,6 +9,7 @@
 
 using System;
 using System.Diagnostics;
+using ChronosLib.Pooled;
 using ChronosLib.Unmanaged;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data;

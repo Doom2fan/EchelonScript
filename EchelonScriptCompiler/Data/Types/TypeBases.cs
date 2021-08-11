@@ -8,7 +8,7 @@
  */
 
 using System.Text;
-using Microsoft.Toolkit.HighPerformance.Buffers;
+using CommunityToolkit.HighPerformance.Buffers;
 
 namespace EchelonScriptCompiler.Data.Types {
     public enum ES_TypeTag : int {

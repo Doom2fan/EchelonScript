@@ -229,7 +229,7 @@ namespace EchelonScriptCompiler.Frontend {
                     }
 
                     if (!symbolFound)
-                        errorList.Add (ES_FrontendErrors.GenCantFindSymbol (importTk.Text.GetPooledString (), importTk));
+                        errorList.Add (ES_FrontendErrors.GenCantFindSymbol (importTk.Text.Span.GetPooledString (), importTk));
 
                     if (isDuplicate) {
                         errorList.Add (ES_FrontendErrors.GenDuplicateSymbolDef (
@@ -472,7 +472,7 @@ namespace EchelonScriptCompiler.Frontend {
 
                         if (IsNameUsed (varId, varsList.Span, funcsList.Span)) {
                             errorList.Add (ES_FrontendErrors.GenDuplicateSymbolDef (
-                                varDef.Name.Text.GetPooledString (), varDef.Name
+                                varDef.Name.Text.Span.GetPooledString (), varDef.Name
                             ));
                         }
 

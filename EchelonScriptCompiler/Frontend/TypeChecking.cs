@@ -10,11 +10,12 @@
 using System;
 using System.Diagnostics;
 using System.Text;
+using ChronosLib.Pooled;
+using CommunityToolkit.HighPerformance.Buffers;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Data.Types;
 using EchelonScriptCompiler.Utilities;
-using Microsoft.Toolkit.HighPerformance.Buffers;
 
 namespace EchelonScriptCompiler.Frontend {
     public unsafe partial class CompilerFrontend {
@@ -610,7 +611,7 @@ namespace EchelonScriptCompiler.Frontend {
                         case FrontendSymbolType.Type: {
                             if (expectedType is not null) {
                                 errorList.Add (ES_FrontendErrors.GenInvalidExprTerm (
-                                    nameExpr.Value.Text.GetPooledString (),
+                                    nameExpr.Value.Text.Span.GetPooledString (),
                                     nameExpr.Value
                                 ));
 
@@ -661,7 +662,7 @@ namespace EchelonScriptCompiler.Frontend {
 
                     if (!EnvironmentBuilder!.UnaryOpCompat (exprData.Type, unaryExpr.ExpressionType, out var finalType, out var opConst)) {
                         errorList.Add (ES_FrontendErrors.GenCantApplyUnaryOp (
-                            unaryExpr.OperatorToken.Text.GetPooledString (), exprData.Type->Name.GetNameAsTypeString (),
+                            unaryExpr.OperatorToken.Text.Span.GetPooledString (), exprData.Type->Name.GetNameAsTypeString (),
                             src, exprData.Expr.NodeBounds
                         ));
 
@@ -704,7 +705,7 @@ namespace EchelonScriptCompiler.Frontend {
                         var intName = ES_PrimitiveTypes.GetIntName (((ES_IntTypeData*) expectedType)->IntSize, true);
 
                         var intFQN = new ES_FullyQualifiedName (Environment.GlobalTypesNamespace, idPool.GetIdentifier (intName));
-                        expectedRightType= Environment.GetFullyQualifiedType (intFQN);
+                        expectedRightType = Environment.GetFullyQualifiedType (intFQN);
                     }
 
                     var rightType = CheckTypes_Expression (ref transUnit, symbols, src, simpleBinaryExpr.Right, expectedRightType);
@@ -716,7 +717,7 @@ namespace EchelonScriptCompiler.Frontend {
 
                     if (!EnvironmentBuilder!.BinaryOpCompat (leftType.Type, rightType.Type, simpleBinaryExpr.ExpressionType, out var finalType, out var opConst)) {
                         errorList.Add (ES_FrontendErrors.GenCantApplyBinaryOp (
-                            simpleBinaryExpr.OperatorToken.Text.GetPooledString (),
+                            simpleBinaryExpr.OperatorToken.Text.Span.GetPooledString (),
                             leftType.Type->Name.GetNameAsTypeString (), rightType.Type->Name.GetNameAsTypeString (),
                             src, simpleBinaryExpr.NodeBounds
                         ));
@@ -838,7 +839,7 @@ namespace EchelonScriptCompiler.Frontend {
                         if (memberVar->Info.Flags.HasFlag (ES_MemberFlags.Static)) {
                             errorList.Add (ES_FrontendErrors.GenStaticAccessOnInst (
                                 type->Name.GetNameAsTypeString (),
-                                expr.Member.Value.Text.GetPooledString (),
+                                expr.Member.Value.Text.Span.GetPooledString (),
                                 expr.Member.Value
                             ));
                         }
@@ -856,7 +857,7 @@ namespace EchelonScriptCompiler.Frontend {
 
             errorList.Add (ES_FrontendErrors.GenMemberDoesntExist (
                 type->Name.GetNameAsTypeString (),
-                expr.Member.Value.Text.GetPooledString (),
+                expr.Member.Value.Text.Span.GetPooledString (),
                 expr.Member.Value
             ));
 
@@ -886,7 +887,7 @@ namespace EchelonScriptCompiler.Frontend {
 
                         if (!memberVar->Info.Flags.HasFlag (ES_MemberFlags.Static)) {
                             errorList.Add (ES_FrontendErrors.GenInstAccessOnStatic (
-                                expr.Member.Value.Text.GetPooledString (),
+                                expr.Member.Value.Text.Span.GetPooledString (),
                                 expr.Member.Value
                             ));
                         }
@@ -904,7 +905,7 @@ namespace EchelonScriptCompiler.Frontend {
 
             errorList.Add (ES_FrontendErrors.GenMemberDoesntExist (
                 type->Name.GetNameAsTypeString (),
-                expr.Member.Value.Text.GetPooledString (),
+                expr.Member.Value.Text.Span.GetPooledString (),
                 expr.Member.Value
             ));
 
