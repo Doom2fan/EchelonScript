@@ -26,6 +26,18 @@ namespace EchelonScriptCompiler.Frontend {
             public ES_FunctionData* Function;
             public bool Constant;
             public bool Addressable;
+
+            public bool TypeIsPointer (ES_TypeInfo* baseType = null) {
+                if (Type is null)
+                    return false;
+
+                if (Type->TypeTag != ES_TypeTag.Reference)
+                    return false;
+
+                var refType = (ES_ReferenceData*) Type;
+
+                return (baseType is null || refType->PointedType == baseType);
+            }
         }
 
         public struct StatementData {
@@ -294,8 +306,13 @@ namespace EchelonScriptCompiler.Frontend {
             return true;
         }
 
+        protected ES_FunctionData* CheckTypes_FindConstructor (ES_TypeInfo* objType, ReadOnlySpan<ES_FunctionPrototypeArgData> arguments) {
+            return null;
+        }
+
         protected ES_TypeInfo* CheckTypes_Dereference (ES_TypeInfo* refType) {
-            Debug.Assert (refType->TypeTag == ES_TypeTag.Reference);
+            if (refType->TypeTag != ES_TypeTag.Reference)
+                return refType;
 
             var refTypeData = (ES_ReferenceData*) refType;
             return refTypeData->PointedType;
@@ -554,14 +571,8 @@ namespace EchelonScriptCompiler.Frontend {
                     }*/
                 }
 
-                case ES_AstNewObjectExpression newObjExpr: {
-                    throw new NotImplementedException ("[TODO] 'new' object expressions not implemented yet.");
-                    /*if (newExpr.TypeDeclaration is not null)
-                        newExpr.TypeDeclaration = GenerateASTTypeRef (ref transUnit, symbols, src, newExpr.TypeDeclaration);
-
-                    foreach (var args in newExpr.Arguments)
-                        CheckTypes_Expression (ref transUnit, symbols, src, args.ValueExpression);*/
-                }
+                case ES_AstNewObjectExpression newObjExpr:
+                    return CheckTypes_Expression_NewObject (ref transUnit, symbols, src, newObjExpr, expectedType);
 
                 case ES_AstNewArrayExpression newArrayExpr: {
                     var elemType = GetTypeRef (newArrayExpr.ElementType);
@@ -669,7 +680,12 @@ namespace EchelonScriptCompiler.Frontend {
                         return new ExpressionData { Expr = expr, Type = typeUnkn, Constant = opConst, Addressable = false };
                     }
 
-                    return new ExpressionData { Expr = expr, Type = finalType, Constant = opConst, Addressable = false };
+                    bool isAddressable = false;
+
+                    if (exprData.Type->TypeTag == ES_TypeTag.Reference && unaryExpr.ExpressionType == SimpleUnaryExprType.Dereference)
+                        isAddressable = true;
+
+                    return new ExpressionData { Expr = expr, Type = finalType, Constant = opConst, Addressable = isAddressable };
                 }
 
                 case ES_AstCastExpression castExpr: {
@@ -759,6 +775,53 @@ namespace EchelonScriptCompiler.Frontend {
             }
         }
 
+        protected ExpressionData CheckTypes_Expression_NewObject (
+            ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, ReadOnlySpan<char> src,
+            ES_AstNewObjectExpression newObjExpr, ES_TypeInfo* expectedType
+        ) {
+            var typeUnkn = Environment!.TypeUnknownValue;
+
+            var objType = GetTypeRef (newObjExpr.TypeDeclaration);
+            var refType = EnvironmentBuilder!.CreateReferenceType (objType);
+            var retType = refType;
+
+            bool argErrorFound = false;
+
+            // Get the arg types.
+            int argIdx = 0;
+            Span<ES_FunctionPrototypeArgData> argsList = stackalloc ES_FunctionPrototypeArgData [newObjExpr.Arguments.Length];
+            foreach (var arg in newObjExpr.Arguments) {
+                var argValueExpr = CheckTypes_Expression (ref transUnit, symbols, src, arg.ValueExpression, typeUnkn);
+
+                var argType = arg.ArgType;
+                var argValueType = argValueExpr.Type;
+
+                if (argValueExpr.Type is null || argValueExpr.Type->TypeTag == ES_TypeTag.UNKNOWN)
+                    argErrorFound = true;
+
+                var argProtoData = new ES_FunctionPrototypeArgData (argType, argValueType);
+
+                argsList [argIdx++] = argProtoData;
+            }
+
+            if (argErrorFound)
+                return new ExpressionData { Expr = newObjExpr, Type = typeUnkn, Constant = false, Addressable = false };
+
+            // Get the constructor.
+            var constructor = CheckTypes_FindConstructor (objType, argsList);
+
+            // Error out if the constructor is null.
+            if (constructor is null && newObjExpr.Arguments.Length > 0) {
+                errorList.Add (ES_FrontendErrors.GenNoSuchConstructor (
+                    objType->Name.GetNameAsTypeString (), Environment.GetFunctionSignatureString (argsList),
+                    src, newObjExpr.NodeBounds
+                ));
+                retType = typeUnkn;
+            }
+
+            return new ExpressionData { Expr = newObjExpr, Type = retType, Constant = false, Addressable = false };
+        }
+
         protected ExpressionData CheckTypes_Expression_MemberAccess (
             ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, ReadOnlySpan<char> src,
             ES_AstMemberAccessExpression expr, ES_TypeInfo* expectedType
@@ -775,8 +838,7 @@ namespace EchelonScriptCompiler.Frontend {
             if (parentExpr.Type is not null) {
                 var type = parentExpr.Type;
 
-                if (type->TypeTag == ES_TypeTag.Reference)
-                    type = CheckTypes_Dereference (type);
+                type = CheckTypes_Dereference (type);
 
                 switch (type->TypeTag) {
                     case ES_TypeTag.UNKNOWN:

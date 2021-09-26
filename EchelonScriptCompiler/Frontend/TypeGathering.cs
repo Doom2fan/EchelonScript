@@ -492,8 +492,11 @@ namespace EchelonScriptCompiler.Frontend {
             var varsSize = varsList.Count * sizeof (ES_MemberData_Variable);
             var funcsSize = funcsList.Count * sizeof (ES_MemberData_Function);
 
-            var memArea = EnvironmentBuilder!.MemoryManager.GetMemory (varsSize + funcsSize);
+            IntPtr memArea = IntPtr.Zero;
             var membersList = EnvironmentBuilder!.MemoryManager.GetArray<Pointer<ES_MemberData>> (varsList.Count + funcsList.Count);
+
+            if (varsSize + funcsSize > 0)
+                memArea = EnvironmentBuilder!.MemoryManager.GetMemory (varsSize + funcsSize);
 
             var varsSpan = new ArrayPointer<ES_MemberData_Variable> ((ES_MemberData_Variable*) memArea, varsList.Count);
             var funcsSpan = new ArrayPointer<ES_MemberData_Function> ((ES_MemberData_Function*) (memArea + varsSize), funcsList.Count);

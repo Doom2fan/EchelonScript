@@ -14,6 +14,7 @@ using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Data.Types;
 using EchelonScriptCompiler.Frontend;
+using EchelonScriptCompiler.Immix_GC;
 using LLVMSharp.Interop;
 
 namespace EchelonScriptCompiler.Backends.LLVMBackend {
@@ -182,6 +183,9 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
         private EchelonScriptEnvironment.Builder? envBuilder;
 
         private LLVMModuleRef moduleRef;
+        private LLVMExecutionEngineRef execEngine;
+
+        private LLVMTypeRef intPtrType;
 
         #endregion
 
@@ -243,6 +247,12 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
                 EndEnvironment ();
             } catch {
+                if (execEngine != null) {
+                    execEngine.Dispose ();
+                    execEngine = null;
+                    moduleRef = null;
+                }
+
                 if (moduleRef != null) {
                     moduleRef.Dispose ();
                     moduleRef = null;
@@ -323,7 +333,24 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             env = environment;
             envBuilder = builder;
 
+            // Create the LLVM module.
             moduleRef = contextRef.CreateModuleWithName (System.IO.Path.GetRandomFileName ());
+
+            // Create the execution engine.
+            var compilerOpts = new LLVMMCJITCompilerOptions ();
+            LLVM.InitializeMCJITCompilerOptions (&compilerOpts, (UIntPtr) sizeof (LLVMMCJITCompilerOptions));
+            compilerOpts.OptLevel = 0;
+            compilerOpts.NoFramePointerElim = 1;
+
+            if (!moduleRef.TryCreateMCJITCompiler (out execEngine, ref compilerOpts, out var msg))
+                throw new CompilationException ($"{Error_LLVMError}\n${msg}");
+
+            // Get the pointer-size int type.
+            intPtrType = contextRef.GetIntPtrType (execEngine.TargetData);
+
+            // Create and map the GC functions.
+            delegate* unmanaged [Cdecl] <ES_TypeInfo*, void*> objAllocFuncPtr = &ImmixGC.AllocObject;
+            execEngine.AddGlobalMapping (GenerateCode_GetAllocObjFunc (), (IntPtr) objAllocFuncPtr);
         }
 
         private void EndEnvironment () {
@@ -342,14 +369,6 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
             string irText = moduleRef.PrintToString ();
 
-            var compilerOpts = new LLVMMCJITCompilerOptions ();
-            LLVM.InitializeMCJITCompilerOptions (&compilerOpts, (UIntPtr) sizeof (LLVMMCJITCompilerOptions));
-            compilerOpts.OptLevel = 0;
-            compilerOpts.NoFramePointerElim = 1;
-
-            if (!moduleRef.TryCreateMCJITCompiler (out var engine, ref compilerOpts, out msg))
-                throw new CompilationException ($"{Error_LLVMError}\n${msg}");
-
             foreach (var namespaceData in env!.Namespaces.Values) {
                 foreach (var type in namespaceData.Types) {
                     // TODO: Handle types.
@@ -362,13 +381,13 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                     using var funcNameMangled = MangleFunctionName (func);
                     var funcDef = moduleRef.GetNamedFunction (funcNameMangled);
 
-                    var asd = engine.FindFunction (funcNameMangled);
-
-                    *func = new ES_FunctionData (*func, (void*) engine.GetPointerToGlobal (funcDef));
+                    *func = new ES_FunctionData (*func, (void*) execEngine.GetPointerToGlobal (funcDef));
                 }
             }
 
-            envBuilder.BackendData = new LLVMBackendData (engine, moduleRef);
+            envBuilder.BackendData = new LLVMBackendData (execEngine, moduleRef);
+            intPtrType = null;
+            execEngine = null;
             moduleRef = null;
 
             env = null;
@@ -413,6 +432,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                         case ES_TypeTag.Int:
                         case ES_TypeTag.Float:
                         case ES_TypeTag.Function:
+                        case ES_TypeTag.Reference:
                         case ES_TypeTag.Const:
                         case ES_TypeTag.Immutable:
                             break;
@@ -599,11 +619,16 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                     return ret;
                 }
 
+                case ES_TypeTag.Reference: {
+                    var refType = (ES_ReferenceData*) type;
+                    var pointedLLVMType = GetLLVMType (refType->PointedType);
+                    return LLVMTypeRef.CreatePointer (pointedLLVMType, 0);
+                }
+
                 case ES_TypeTag.Function:
                 case ES_TypeTag.Class:
                 case ES_TypeTag.Enum:
                 case ES_TypeTag.Interface:
-                case ES_TypeTag.Reference:
                 case ES_TypeTag.Const:
                 case ES_TypeTag.Immutable:
                 case ES_TypeTag.Array:
@@ -637,7 +662,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
         }
 
         private LLVMValueRef GetLLVMValue (LLVMValueRef val) {
-            if (val.IsPointer ())
+            if (val.IsNonRefPointer ())
                 return builderRef.BuildLoad (val);
 
             return val;

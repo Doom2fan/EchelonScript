@@ -339,6 +339,9 @@ namespace EchelonScriptCompiler.Data {
                 if (lhsType->TypeTag == ES_TypeTag.Float && rhsType->TypeTag == ES_TypeTag.Int)
                     return BinaryOpCompat_FloatInt (lhsType, rhsType, exprType, out finalType, out isConst);
 
+                if (lhsType->TypeTag == ES_TypeTag.Reference && rhsType->TypeTag == ES_TypeTag.Reference)
+                    return BinaryOpCompat_RefRef (lhsType, rhsType, exprType, out finalType, out isConst);
+
                 isConst = false;
                 return false;
             }
@@ -551,6 +554,33 @@ namespace EchelonScriptCompiler.Data {
                 return true;
             }
 
+            private bool BinaryOpCompat_RefRef (ES_TypeInfo* lhsType, ES_TypeInfo* rhsType, SimpleBinaryExprType exprType, out ES_TypeInfo* finalType, out bool isConst) {
+                Debug.Assert (lhsType->TypeTag == ES_TypeTag.Reference);
+                Debug.Assert (rhsType->TypeTag == ES_TypeTag.Reference);
+
+                finalType = environment.TypeUnknownValue;
+                isConst = false;
+
+                if (lhsType != rhsType)
+                    return false;
+
+                switch (exprType) {
+                    case SimpleBinaryExprType.Assign:
+                        finalType = lhsType;
+                        break;
+
+                    case SimpleBinaryExprType.Equals:
+                    case SimpleBinaryExprType.NotEquals:
+                        finalType = TypeBool;
+                        break;
+
+                    default:
+                        return false;
+                }
+
+                return true;
+            }
+
             #endregion
 
             #region UnaryOpCompat
@@ -565,6 +595,9 @@ namespace EchelonScriptCompiler.Data {
 
                     case ES_TypeTag.Float:
                         return UnaryOpCompat_Float (exprType, op, out finalType, out isConst);
+
+                    case ES_TypeTag.Reference:
+                        return UnaryOpCompat_Ref (exprType, op, out finalType, out isConst);
 
                     default:
                         finalType = environment.TypeUnknownValue;
@@ -643,6 +676,30 @@ namespace EchelonScriptCompiler.Data {
                     case SimpleUnaryExprType.LogicalNot:
                     case SimpleUnaryExprType.BitNot:
                     case SimpleUnaryExprType.Dereference:
+                        finalType = environment.TypeUnknownValue;
+                        isConst = false;
+                        return false;
+
+                    default:
+                        throw new NotImplementedException ("Operation not implemented.");
+                }
+            }
+
+            private bool UnaryOpCompat_Ref (ES_TypeInfo* exprType, SimpleUnaryExprType op, out ES_TypeInfo* finalType, out bool isConst) {
+                Debug.Assert (exprType->TypeTag == ES_TypeTag.Reference);
+
+                var refType = (ES_ReferenceData*) exprType;
+
+                switch (op) {
+                    case SimpleUnaryExprType.Dereference:
+                        finalType = refType->PointedType;
+                        isConst = false;
+                        return true;
+
+                    case SimpleUnaryExprType.Positive:
+                    case SimpleUnaryExprType.Negative:
+                    case SimpleUnaryExprType.LogicalNot:
+                    case SimpleUnaryExprType.BitNot:
                         finalType = environment.TypeUnknownValue;
                         isConst = false;
                         return false;
@@ -954,6 +1011,35 @@ namespace EchelonScriptCompiler.Data {
             }
 
             return null;
+        }
+
+        public string GetFunctionSignatureString (ReadOnlySpan<ES_FunctionPrototypeArgData> argsList) {
+            using var chars = new StructPooledList<char> (CL_ClearMode.Auto);
+
+            chars.EnsureCapacity (2);
+
+            chars.Add ('(');
+
+            bool firstArg = true;
+            foreach (var arg in argsList) {
+                if (!firstArg)
+                    chars.AddRange (", ");
+                else
+                    firstArg = false;
+
+                switch (arg.ArgType) {
+                    case ES_ArgumentType.Normal: break;
+                    case ES_ArgumentType.In: chars.AddRange ("in "); break;
+                    case ES_ArgumentType.Out: chars.AddRange ("out "); break;
+                    case ES_ArgumentType.Ref: chars.AddRange ("ref "); break;
+                }
+
+                chars.AddRange (arg.ValueType->Name.GetNameAsTypeString ());
+            }
+
+            chars.Add (')');
+
+            return StringPool.Shared.GetOrAdd (chars.Span);
         }
 
         #endregion

@@ -46,6 +46,9 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 case ES_TypeTag.Float:
                     return LLVMValueRef.CreateConstReal (GetLLVMType (varType), 0);
 
+                case ES_TypeTag.Reference:
+                    return LLVMValueRef.CreateConstPointerNull (GetLLVMType (varType));
+
                 case ES_TypeTag.Struct: {
                     using var fields = new StructPooledList<LLVMValueRef> (CL_ClearMode.Auto);
 

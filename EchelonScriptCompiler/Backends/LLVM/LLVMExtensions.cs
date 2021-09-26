@@ -38,5 +38,20 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
             return val.TypeOf.IsPointerType ();
         }
+
+        public static bool IsNonRefPointer (this LLVMValueRef val) {
+            Debug.Assert (val != null);
+            Debug.Assert (val.TypeOf != null);
+
+            if (!val.TypeOf.IsPointerType ())
+                return false;
+
+            return (
+                val.IsAAllocaInst != null ||
+                val.IsAGetElementPtrInst != null ||
+                val.IsAGlobalValue != null ||
+                val.IsALoadInst != null
+            );
+        }
     }
 }

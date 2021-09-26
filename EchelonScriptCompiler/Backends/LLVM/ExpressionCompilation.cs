@@ -29,6 +29,18 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
             public bool Constant;
             public bool Addressable;
+
+            public bool TypeIsPointer (ES_TypeInfo* baseType = null) {
+                if (Type is null)
+                    return false;
+
+                if (Type->TypeTag != ES_TypeTag.Reference)
+                    return false;
+
+                var refType = (ES_ReferenceData*) Type;
+
+                return (baseType is null || refType->PointedType == baseType);
+            }
         }
 
         private void GenerateCode_EnsureImplicitCompat (ref ExpressionData exprData, ES_TypeInfo* dstType) {
@@ -51,6 +63,28 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
             throw new CompilationException (ES_BackendErrors.FrontendError);
         }
+
+        private void GenerateCode_Dereference (ref ES_TypeInfo* type, ref LLVMValueRef value, ES_TypeInfo* reqType = null) {
+            if (type is null)
+                return;
+
+            if (type->TypeTag != ES_TypeTag.Reference)
+                return;
+
+            var refType = (ES_ReferenceData*) type;
+
+            if (reqType is not null && refType->PointedType != reqType)
+                return;
+
+            if (value.IsNonRefPointer ())
+                value = GetLLVMValue (value);
+
+            type = refType->PointedType;
+            value = builderRef.BuildLoad (value);
+        }
+
+        private void GenerateCode_Dereference (ref ExpressionData exprData, ES_TypeInfo* reqType = null)
+            => GenerateCode_Dereference (ref exprData.Type, ref exprData.Value, reqType);
 
         private ExpressionData GenerateCode_Expression (
             ref TranslationUnitData transUnit, SymbolStack<Symbol> symbols, ReadOnlySpan<char> src,
@@ -79,14 +113,8 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                     }*/
                 }
 
-                case ES_AstNewObjectExpression newObjExpr: {
-                    throw new NotImplementedException ("[TODO] 'new' object expressions not implemented yet.");
-                    /*if (newExpr.TypeDeclaration is not null)
-                        newExpr.TypeDeclaration = GenerateASTTypeRef (ref transUnit, symbols, src, newExpr.TypeDeclaration);
-
-                    foreach (var args in newExpr.Arguments)
-                        GenerateCode_Expression (ref transUnit, symbols, src, args.ValueExpression);*/
-                }
+                case ES_AstNewObjectExpression newObjExpr:
+                    return GenerateCode_Expression_NewObject (ref transUnit, symbols, src, newObjExpr, expectedType);
 
                 case ES_AstNewArrayExpression newArrayExpr:
                     throw new NotImplementedException ("[TODO] 'new' array expressions not implemented yet.");
@@ -248,7 +276,10 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             ret.Constant = false;
             ret.Addressable = false;
 
-            var srcVal = GetLLVMValue (src.Value);
+            if (dst->TypeTag != ES_TypeTag.Reference)
+                GenerateCode_Dereference (ref src.Type, ref src.Value);
+
+            var srcVal = src.Value;
 
             switch (src.Type->TypeTag) {
                 case ES_TypeTag.Int: {
@@ -364,6 +395,9 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
             else if (lhs.Type->TypeTag == ES_TypeTag.Float && rhs.Type->TypeTag == ES_TypeTag.Int)
                 return GenerateCode_BinaryExpr_FloatInt (lhs, rhs, exprOp);
+
+            else if (lhs.Type->TypeTag == ES_TypeTag.Reference && rhs.Type->TypeTag == ES_TypeTag.Reference)
+                return GenerateCode_BinaryExpr_RefRef (lhs, rhs, exprOp);
 
             throw new CompilationException (ES_BackendErrors.FrontendError);
         }
@@ -714,6 +748,61 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 return new ExpressionData { Type = env!.TypeBool, Value = value, Constant = false, Addressable = false, };
         }
 
+        private ExpressionData GenerateCode_BinaryExpr_RefRef (ExpressionData lhs, ExpressionData rhs, SimpleBinaryExprType exprOp) {
+            Debug.Assert (env is not null);
+
+            // Validate the types and op.
+            Debug.Assert (lhs.Type->TypeTag == ES_TypeTag.Reference);
+            Debug.Assert (rhs.Type->TypeTag == ES_TypeTag.Reference);
+
+            var lhsRef = (ES_ReferenceData*) lhs.Type;
+            var rhsRef = (ES_ReferenceData*) rhs.Type;
+
+            bool isAssignment = exprOp.IsAssignment ();
+            var originalLHS = lhs.Value;
+
+            Debug.Assert (!isAssignment || originalLHS.IsPointer ());
+
+            if (lhsRef != rhsRef)
+                throw new CompilationException (ES_BackendErrors.FrontendError);
+
+            // Dereference pointers.
+            lhs.Value = GetLLVMValue (lhs.Value);
+            rhs.Value = GetLLVMValue (rhs.Value);
+
+            LLVMValueRef value;
+            switch (exprOp) {
+                case SimpleBinaryExprType.Assign:
+                    value = rhs.Value;
+                    break;
+
+                case SimpleBinaryExprType.Equals:
+                case SimpleBinaryExprType.NotEquals: {
+                    var lhsInt = builderRef.BuildPtrToInt (lhs.Value, intPtrType, "refCmpTmp_LHS");
+                    var rhsInt = builderRef.BuildPtrToInt (rhs.Value, intPtrType, "refCmpTmp_RHS");
+
+                    var predicate = LLVMIntPredicate.LLVMIntEQ;
+
+                    if (exprOp == SimpleBinaryExprType.NotEquals)
+                        predicate = LLVMIntPredicate.LLVMIntNE;
+
+                    value = builderRef.BuildICmp (predicate, lhsInt, rhsInt, "refCmpTmp");
+                    break;
+                }
+
+                default:
+                    throw new NotImplementedException ("Operation not implemented yet.");
+            }
+
+            if (isAssignment)
+                builderRef.BuildStore (value, originalLHS);
+
+            if (!exprOp.IsComparison ())
+                return new ExpressionData { Type = lhs.Type, Value = value, Constant = false, Addressable = false, };
+            else
+                return new ExpressionData { Type = env!.TypeBool, Value = value, Constant = false, Addressable = false, };
+        }
+
         private ExpressionData GenerateCode_LogicalBinaryExpr (
             ref TranslationUnitData transUnit, SymbolStack<Symbol> symbols, ReadOnlySpan<char> src,
             ES_AstSimpleBinaryExpression binExpr
@@ -784,6 +873,8 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 return GenerateCode_UnaryExpr_Bool (inner, exprOp);
             else if (inner.Type->TypeTag == ES_TypeTag.Float)
                 return GenerateCode_UnaryExpr_Float (inner, exprOp);
+            else if (inner.Type->TypeTag == ES_TypeTag.Reference)
+                return GenerateCode_UnaryExpr_Ref (inner, exprOp);
             else
                 throw new NotImplementedException ("Operation not implemented yet.");
 
@@ -857,6 +948,30 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             return new ExpressionData { Type = inner.Type, Value = value, Constant = inner.Constant, Addressable = false, };
         }
 
+        private ExpressionData GenerateCode_UnaryExpr_Ref (ExpressionData inner, SimpleUnaryExprType exprOp) {
+            Debug.Assert (inner.Type->TypeTag == ES_TypeTag.Reference);
+
+            var innerRef = (ES_ReferenceData*) inner.Type;
+
+            inner.Value = GetLLVMValue (inner.Value);
+            ES_TypeInfo* finalType;
+            bool isAddressable;
+
+            LLVMValueRef value;
+            switch (exprOp) {
+                case SimpleUnaryExprType.Dereference:
+                    value = inner.Value;
+                    finalType = innerRef->PointedType;
+                    isAddressable = true;
+                    break;
+
+                default:
+                    throw new NotImplementedException ("Operation not implemented yet.");
+            }
+
+            return new ExpressionData { Type = finalType, Value = value, Constant = false, Addressable = isAddressable, };
+        }
+
         #endregion
 
         private ExpressionData GenerateCode_Expression_MemberAccess (
@@ -873,9 +988,13 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             var memberId = idPool.GetIdentifier (expr.Member.Value.Text.Span);
 
             if (parentExpr.Type is not null) {
-                var type = parentExpr.Type;
+                if (parentExpr.Type->TypeTag == ES_TypeTag.Reference) {
+                    parentExpr.Type = ((ES_ReferenceData*) parentExpr.Type)->PointedType;
 
-                switch (type->TypeTag) {
+                    parentExpr.Value = GetLLVMValue (parentExpr.Value);
+                }
+
+                switch (parentExpr.Type->TypeTag) {
                     case ES_TypeTag.Struct:
                         return GenerateCode_Expression_MemberAccess_Struct (src, expr, ref parentExpr, memberId);
 
@@ -1081,15 +1200,82 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 argsArr.Span [argIdx] = GetLLVMValue (argExprData.Value);
             }
 
-            var retVal = builderRef.BuildCall (funcDef, argsArr.Span, "funcCall");
+            LLVMValueRef retVal;
+            if (funcType->ReturnType->TypeTag != ES_TypeTag.Void)
+                retVal = builderRef.BuildCall (funcDef, argsArr.Span, "funcCall");
+            else
+                retVal = null;
 
             return new ExpressionData { Expr = funcCallExpr, Type = funcType->ReturnType, Value = retVal, Constant = false, Addressable = false };
+        }
+
+        private LLVMValueRef GenerateCode_GetAllocObjFunc () {
+            const string funcName = "GC_AllocObj";
+
+            var func = moduleRef.GetNamedFunction (funcName);
+            if (func != null)
+                return func;
+
+            var voidPtrType = LLVMTypeRef.CreatePointer (contextRef.VoidType, 0);
+
+            Span<LLVMTypeRef> funcTypeArgs = stackalloc LLVMTypeRef [1] {
+                voidPtrType,
+            };
+            var funcType = LLVMTypeRef.CreateFunction (voidPtrType, funcTypeArgs, false);
+
+            func = moduleRef.AddFunction (funcName, funcType);
+
+            return func;
+        }
+
+        private ExpressionData GenerateCode_Expression_NewObject (
+            ref TranslationUnitData transUnit, SymbolStack<Symbol> symbols, ReadOnlySpan<char> src,
+            ES_AstNewObjectExpression newObjExpr, ES_TypeInfo* expectedType
+        ) {
+            var typeUnkn = env!.TypeUnknownValue;
+
+            var objType = GetTypeRef (newObjExpr.TypeDeclaration);
+            var ptrType = envBuilder!.CreateReferenceType (objType);
+
+            // Get the alloc function and generate the args.
+            var allocFunc = GenerateCode_GetAllocObjFunc ();
+            var voidPtrType = LLVMTypeRef.CreatePointer (contextRef.VoidType, 0);
+
+            Span<LLVMValueRef> allocArgs = stackalloc LLVMValueRef [1] {
+                LLVMValueRef.CreateConstIntToPtr (
+                    LLVMValueRef.CreateConstInt (intPtrType, (ulong) objType, true), voidPtrType
+                ),
+            };
+
+            // Allocate the object.
+            var objPtr = builderRef.BuildCall (allocFunc, allocArgs, "GCAllocCall");
+            objPtr = builderRef.BuildPointerCast (objPtr, GetLLVMType (ptrType), "GCAllocTmp");
+
+            // Evaluate the constructor arguments.
+            var args = new StructPooledList<ExpressionData> (CL_ClearMode.Auto);
+            args.EnsureCapacity (newObjExpr.Arguments.Length);
+
+            int argCount = 0;
+            foreach (var arg in newObjExpr.Arguments)
+                args [argCount++] = GenerateCode_Expression (ref transUnit, symbols, src, arg.ValueExpression, typeUnkn);
+
+            // Default-initialize the object.
+            if (args.Count < 1) {
+                // TODO: Implement custom parameterless constructors!
+                builderRef.BuildStore (GetDefaultValue (objType), objPtr);
+            } else {
+                throw new NotImplementedException ("[TODO] Parametrized constructors not implemented yet.");
+            }
+
+            return new ExpressionData { Expr = newObjExpr, Type = ptrType, Value = objPtr, Constant = false, Addressable = false };
         }
 
         private ExpressionData GenerateCode_ConditionalExpression (
             ref TranslationUnitData transUnit, SymbolStack<Symbol> symbols, ReadOnlySpan<char> src,
             ES_AstConditionalExpression expr, ES_TypeInfo* expectedType
         ) {
+            var expectedLLVMType = GetLLVMType (expectedType);
+
             var condExpr = GenerateCode_Expression (ref transUnit, symbols, src, expr.Condition, env!.TypeBool);
 
             GenerateCode_EnsureImplicitCompat (ref condExpr, env.TypeBool);
@@ -1126,7 +1312,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
             // End
             builderRef.PositionAtEnd (endBlock);
-            var phi = builderRef.BuildPhi (GetLLVMType (expectedType), "ternaryCondTmp");
+            var phi = builderRef.BuildPhi (expectedLLVMType, "ternaryCondTmp");
             phi.AddIncoming (leftExpr.Value, thenBlock);
             phi.AddIncoming (rightExpr.Value, elseBlock);
 

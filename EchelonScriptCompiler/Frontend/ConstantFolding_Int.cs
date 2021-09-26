@@ -10,7 +10,6 @@
 using System;
 using System.Diagnostics;
 using EchelonScriptCompiler.CompilerCommon;
-using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Data.Types;
 
 namespace EchelonScriptCompiler.Frontend {

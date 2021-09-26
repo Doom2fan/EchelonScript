@@ -504,12 +504,12 @@ namespace EchelonScriptCompiler.Frontend {
                 }
 
                 case ES_AstNewObjectExpression newObjExpr: {
-                    throw new NotImplementedException ("[TODO] 'new' object expressions not implemented yet.");
-                    /*if (newExpr.TypeDeclaration is not null)
-                        newExpr.TypeDeclaration = GenerateASTTypeRef (ref transUnit, symbols, src, newExpr.TypeDeclaration);
+                    var type = GetTypeRef (newObjExpr.TypeDeclaration);
 
-                    foreach (var args in newExpr.Arguments)
-                        FoldConstants_Expression (ref transUnit, symbols, src, args.ValueExpression);*/
+                    foreach (var arg in newObjExpr.Arguments)
+                        FoldConstants_Expression (ref transUnit, symbols, src, ref arg.ValueExpression, typeUnkn);
+
+                    return new ExpressionData { Expr = expr, Type = type, };
                 }
 
                 case ES_AstNewArrayExpression newArrayExpr: {

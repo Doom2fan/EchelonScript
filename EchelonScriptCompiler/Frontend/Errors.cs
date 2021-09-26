@@ -190,6 +190,7 @@ namespace EchelonScriptCompiler.Frontend {
         public const string MemberDoesntExist = "The type \"{typeName}\" has no member named \"{memberName}\".";
         public const string StaticAccessOnInst = "The member \"{memberName}\" cannot be accessed through an instance; use \"{typeName}.{memberName}\" instead.";
         public const string InstAccessOnStatic = "The member \"{memberName}\" is not static; it must be accessed through an instance.";
+        public const string NoSuchConstructor = "The type \"{typeName}\" has no constructor that takes the parameter types {signature}.";
 
         public const string UnexpectedReturnValue = "Unexpected return value.";
         public const string MissingReturnValue = "A return value of or convertible to type \"{retType}\" is required.";
@@ -352,6 +353,10 @@ namespace EchelonScriptCompiler.Frontend {
         public static EchelonScriptErrorMessage GenInstAccessOnStatic (string memberName, EchelonScriptToken errorToken) {
             var errorMessage = InstAccessOnStatic.Replace ("{memberName}", memberName);
             return new EchelonScriptErrorMessage (errorToken, errorMessage);
+        }
+        public static EchelonScriptErrorMessage GenNoSuchConstructor (string typeName, string signature, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
+            var errorMessage = NoSuchConstructor.Replace ("{typeName}", typeName).Replace ("{signature}", signature);
+            return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
         }
 
         public static EchelonScriptErrorMessage GenMissingReturnValue (string retType, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
