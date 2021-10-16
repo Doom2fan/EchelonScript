@@ -1252,12 +1252,12 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             objPtr = builderRef.BuildPointerCast (objPtr, GetLLVMType (ptrType), "GCAllocTmp");
 
             // Evaluate the constructor arguments.
-            var args = new StructPooledList<ExpressionData> (CL_ClearMode.Auto);
+            using var args = new StructPooledList<ExpressionData> (CL_ClearMode.Auto);
             args.EnsureCapacity (newObjExpr.Arguments.Length);
 
             int argCount = 0;
             foreach (var arg in newObjExpr.Arguments)
-                args [argCount++] = GenerateCode_Expression (ref transUnit, symbols, src, arg.ValueExpression, typeUnkn);
+                args.Add (GenerateCode_Expression (ref transUnit, symbols, src, arg.ValueExpression, typeUnkn));
 
             // Default-initialize the object.
             if (args.Count < 1) {

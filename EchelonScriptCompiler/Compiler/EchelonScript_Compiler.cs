@@ -93,7 +93,7 @@ namespace EchelonScriptCompiler {
 
             bool foundErrors = false;
 
-            var astUnitsList = new StructPooledList<ES_AbstractSyntaxTree> (CL_ClearMode.Auto);
+            using var astUnitsList = new StructPooledList<ES_AbstractSyntaxTree> (CL_ClearMode.Auto);
             {
                 foreach (var codeUnit in codeTransUnit) {
                     parser.Reset ();
