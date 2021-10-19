@@ -314,7 +314,7 @@ namespace EchelonScriptCommon.Immix_GC {
         public static void* AllocObject (ES_TypeInfo* type) {
             EnsureInitialized ();
 
-            int objSize = type->RuntimeSize;
+            int objSize = Math.Max (type->RuntimeSize, sizeof (void*));
             int allocSize = sizeof (ImmixObjectHeader) + objSize;
 
             // Allocate large objects in the LOS heap.
