@@ -304,6 +304,13 @@ namespace EchelonScriptCommon.Immix_GC {
         public static void* AllocArrayUnmanaged (ES_ArrayTypeData* arrayType, int* dimSizesPtr, int dimsCount)
             => AllocArray (arrayType, dimSizesPtr, dimsCount);
 
+        public static T* AllocObject<T> (ES_TypeInfo* type, T defaultVal = default) where T : unmanaged {
+            var ptr = (T*) AllocObject (type);
+            *ptr = defaultVal;
+
+            return ptr;
+        }
+
         public static void* AllocObject (ES_TypeInfo* type) {
             EnsureInitialized ();
 

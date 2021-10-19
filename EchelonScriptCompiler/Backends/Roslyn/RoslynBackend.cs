@@ -502,6 +502,13 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
             var compUnit = CompilationUnit ().WithMembers (
                 SingletonList<MemberDeclarationSyntax> (namespaceDecl)
+            ).AddUsings (
+                UsingDirective (NamespaceNameSyntax ("System")),
+                UsingDirective (NamespaceNameSyntax ("EchelonScriptCommon")),
+                UsingDirective (NamespaceNameSyntax ("EchelonScriptCommon", "Data")),
+                UsingDirective (NamespaceNameSyntax ("EchelonScriptCommon", "Data", "Types")),
+                UsingDirective (NamespaceNameSyntax ("EchelonScriptCommon", "Immix_GC")),
+                UsingDirective (NamespaceNameSyntax ("EchelonScriptCommon", "Utilities"))
             ).NormalizeWhitespace ();
 
             // Create the syntax tree and parse options.
@@ -525,7 +532,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             }
 
             using var refApisSet = new PooledSet<Assembly> ();
-            GetReferenceAPIs (refApisSet, Assembly.GetExecutingAssembly ());
+            GetReferenceAPIs (refApisSet, typeof (ES_FunctionData).Assembly);
 
             var refApis = new MetadataReference [refApisSet.Count];
             var refApisCount = 0;
@@ -591,7 +598,42 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
         #endregion
 
-        #region .NET utils
+        #region Roslyn utils
+
+        private ExpressionSyntax PointerLiteral (void* value, TypeSyntax? type = null) {
+            if (type is null)
+                type = PointerType (PredefinedType (Token (SyntaxKind.VoidKeyword)));
+
+            SyntaxToken litToken;
+
+            switch (sizeof (void*)) {
+                case sizeof (uint):
+                    litToken = Literal ((uint) value);
+                    break;
+
+                case sizeof (ulong):
+                    litToken = Literal ((ulong) value);
+                    break;
+
+                default:
+                    throw new NotImplementedException ("Pointer size not implemented.");
+            }
+
+            return CastExpression (
+                type,
+                LiteralExpression (SyntaxKind.NumericLiteralExpression, litToken)
+            );
+        }
+
+        private NameSyntax NamespaceNameSyntax (params string [] name) {
+            Debug.Assert (name.Length > 0);
+
+            NameSyntax ret = IdentifierName (name [0]);
+            for (int i = 1; i < name.Length; i++)
+                ret = QualifiedName (ret, IdentifierName (name [i]));
+
+            return ret;
+        }
 
         #endregion
 

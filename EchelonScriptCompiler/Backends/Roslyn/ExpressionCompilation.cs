@@ -401,46 +401,62 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             return func;
         }*/
 
+        private ExpressionSyntax GenerateCode_NewObject (ES_TypeInfo* type, ExpressionSyntax assignValue) {
+            using var mangledTypeName = MangleTypeName (type);
+
+            // Generate the member access. ("ImmixGC.AllocObject")
+            var accessExpr = MemberAccessExpression (SyntaxKind.SimpleMemberAccessExpression,
+                IdentifierName ("ImmixGC"),
+                GenericName (Identifier ("AllocObject")).WithTypeArgumentList (
+                    TypeArgumentList (SingletonSeparatedList<TypeSyntax> (
+                        IdentifierName (mangledTypeName.GetPooledString ())
+                    ))
+                )
+            );
+
+            // Construct the types list.
+            using var argsList = new StructPooledList<SyntaxNodeOrToken> (CL_ClearMode.Auto);
+            argsList.EnsureCapacity (3);
+
+            // Generate the pointer type syntax for the type pointer.
+            var pointerTypeSyntax = PointerType (IdentifierName ("ES_TypeInfo"));
+
+            // Add the type pointer.
+            argsList.Add (Argument (PointerLiteral (type, pointerTypeSyntax)));
+
+            // Add the value to assign.
+            argsList.Add (Token (SyntaxKind.CommaToken));
+            argsList.Add (Argument (assignValue));
+
+            // Generate the function call.
+            return InvocationExpression (accessExpr)
+                .WithArgumentList (ArgumentList (SeparatedList<ArgumentSyntax> (argsList)));
+        }
+
         private ExpressionData GenerateCode_Expression_NewObject (
             ref TranslationUnitData transUnit, SymbolStack<Symbol> symbols, ReadOnlySpan<char> src,
             ES_AstNewObjectExpression newObjExpr, ES_TypeInfo* expectedType
         ) {
-            throw new NotImplementedException ("[TODO] Not implemented yet.");
-            /*var typeUnkn = env!.TypeUnknownValue;
+            //var typeUnkn = env!.TypeUnknownValue;
 
             var objType = GetTypeRef (newObjExpr.TypeDeclaration);
             var ptrType = envBuilder!.CreateReferenceType (objType);
-
-            // Get the alloc function and generate the args.
-            var allocFunc = GenerateCode_GetAllocObjFunc ();
-            var voidPtrType = LLVMTypeRef.CreatePointer (contextRef.VoidType, 0);
-
-            Span<LLVMValueRef> allocArgs = stackalloc LLVMValueRef [1] {
-                LLVMValueRef.CreateConstIntToPtr (
-                    LLVMValueRef.CreateConstInt (intPtrType, (ulong) objType, true), voidPtrType
-                ),
-            };
-
-            // Allocate the object.
-            var objPtr = builderRef.BuildCall (allocFunc, allocArgs, "GCAllocCall");
-            objPtr = builderRef.BuildPointerCast (objPtr, GetLLVMType (ptrType), "GCAllocTmp");
 
             // Evaluate the constructor arguments.
             var args = new StructPooledList<ExpressionData> (CL_ClearMode.Auto);
             args.EnsureCapacity (newObjExpr.Arguments.Length);
 
-            int argCount = 0;
-            foreach (var arg in newObjExpr.Arguments)
-                args [argCount++] = GenerateCode_Expression (ref transUnit, symbols, src, arg.ValueExpression, typeUnkn);
-
-            // Default-initialize the object.
-            if (args.Count < 1) {
-                // TODO: Implement custom parameterless constructors!
-                builderRef.BuildStore (GetDefaultValue (objType), objPtr);
-            } else {
+            if (newObjExpr.Arguments.Length > 0) {
                 throw new NotImplementedException ("[TODO] Parametrized constructors not implemented yet.");
             }
-            return new ExpressionData { Expr = newObjExpr, Type = ptrType, Constant = false, Addressable = false };*/
+            /*int argCount = 0;
+            foreach (var arg in newObjExpr.Arguments)
+                args [argCount++] = GenerateCode_Expression (ref transUnit, symbols, src, arg.ValueExpression, typeUnkn);*/
+
+            var value = GenerateCode_NewObject (objType, GetDefaultValue (objType));
+
+            // Default-initialize the object.
+            return new ExpressionData { Expr = newObjExpr, Type = ptrType, Value = value, Constant = false, Addressable = false };
         }
 
         private ExpressionData GenerateCode_ConditionalExpression (
