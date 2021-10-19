@@ -13,7 +13,6 @@ using ChronosLib.Pooled;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Frontend;
-using EchelonScriptCompiler.Utilities;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -317,11 +316,10 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
             ExpressionSyntax innerExpression;
             if (true) {
-                using var mangledName = MangleGlobalFunctionName (func);
                 innerExpression = MemberAccessExpression (
                     SyntaxKind.SimpleMemberAccessExpression,
                     IdentifierName (GlobalStorageTypeName),
-                    IdentifierName (mangledName.GetPooledString ())
+                    IdentifierName (MangleGlobalFunctionName (func))
                 );
             } else {
                 // TODO: Handle member functions.
@@ -402,16 +400,12 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
         }*/
 
         private ExpressionSyntax GenerateCode_NewObject (ES_TypeInfo* type, ExpressionSyntax assignValue) {
-            using var mangledTypeName = MangleTypeName (type);
-
             // Generate the member access. ("ImmixGC.AllocObject")
             var accessExpr = MemberAccessExpression (SyntaxKind.SimpleMemberAccessExpression,
                 IdentifierName ("ImmixGC"),
-                GenericName (Identifier ("AllocObject")).WithTypeArgumentList (
-                    TypeArgumentList (SingletonSeparatedList<TypeSyntax> (
-                        IdentifierName (mangledTypeName.GetPooledString ())
-                    ))
-                )
+                GenericName (Identifier ("AllocObject")).WithTypeArgumentList (TypeArgumentList (
+                    SingletonSeparatedList<TypeSyntax> (IdentifierName (MangleTypeName (type)))
+                ))
             );
 
             // Construct the types list.

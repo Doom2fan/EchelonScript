@@ -141,10 +141,9 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                         if (!memberVar->Info.Flags.HasFlag (ES_MemberFlags.Static))
                             throw new CompilationException (ES_BackendErrors.FrontendError);
 
-                        using var mangledTypeName = MangleTypeName (type);
                         var value = MemberAccessExpression (
                             SyntaxKind.SimpleMemberAccessExpression,
-                            IdentifierName (mangledTypeName.GetPooledString ()),
+                            IdentifierName (MangleTypeName (type)),
                             IdentifierName (memberVar->Info.Name.GetPooledString (Encoding.ASCII))
                         );
 

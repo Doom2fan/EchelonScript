@@ -83,8 +83,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                     return ret;
                 }
 
-                using var funcName = RoslynCompilerBackend.MangleGlobalFunctionName (func);
-                ret = GetGlobalFunction (funcName);
+                ret = GetGlobalFunction (RoslynCompilerBackend.MangleGlobalFunctionName (func));
 
                 functionMethodMappings.Add (func, ret);
                 return ret;

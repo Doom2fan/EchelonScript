@@ -97,8 +97,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                         initExprNodes.Add (Token (SyntaxKind.CommaToken));
                     }
 
-                    using var structNameChars = MangleTypeName (varType);
-                    var structName = IdentifierName (structNameChars.Span.GetPooledString ());
+                    var structName = IdentifierName (MangleTypeName (varType));
                     var initExpr = InitializerExpression (
                         SyntaxKind.ObjectInitializerExpression,
                         SeparatedList<ExpressionSyntax> (initExprNodes.ToArray ())
@@ -155,9 +154,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             var paramsList = ParameterList (SeparatedList<ParameterSyntax> (argsArr));
 
             if (namespaceData is not null) {
-                using var funcName = MangleGlobalFunctionName (funcData);
-
-                return (MethodDeclaration (GetRoslynType (retType), funcName.Span.GetPooledString ())
+                return (MethodDeclaration (GetRoslynType (retType), MangleGlobalFunctionName (funcData))
                     .WithParameterList (paramsList)
                     .WithModifiers (TokenList (
                         Token (SyntaxKind.PublicKeyword),

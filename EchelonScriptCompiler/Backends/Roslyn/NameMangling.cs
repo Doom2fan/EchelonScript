@@ -19,7 +19,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
         internal const string GlobalStaticConsName = "_globalStaticCons";
         internal const string GlobalStorageTypeName = "_globalFunctionsStorageType";
 
-        private static PooledArray<char> MangleDefaultConstructorName (ES_TypeInfo* typeName, bool isStatic) {
+        private static string MangleDefaultConstructorName (ES_TypeInfo* typeName, bool isStatic) {
             // Sample name: "struct.System.Numerics__Vector2"
             using var mangleChars = new StructPooledList<char> (CL_ClearMode.Auto);
 
@@ -42,10 +42,10 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             var structSpan = mangleChars.AddSpan (structName.Length);
             Encoding.ASCII.GetChars (structName, structSpan);
 
-            return mangleChars.ToPooledArray ();
+            return mangleChars.Span.GetPooledString ();
         }
 
-        internal static PooledArray<char> MangleGlobalFunctionName ([DisallowNull] ES_FunctionData* func) {
+        internal static string MangleGlobalFunctionName ([DisallowNull] ES_FunctionData* func) {
             // Sample name: "System.Math__FMath.Sin"
             using var mangleChars = new StructPooledList<char> (CL_ClearMode.Auto);
 
@@ -63,10 +63,10 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             using var typeMangle = MangleFunctionType (func->FunctionType);
             mangleChars.AddRange (typeMangle);*/
 
-            return mangleChars.ToPooledArray ();
+            return mangleChars.Span.GetPooledString ();
         }
 
-        internal static PooledArray<char> MangleMemberFunctionName ([DisallowNull] ES_TypeInfo* owner, [DisallowNull] ES_FunctionData* func) {
+        internal static string MangleMemberFunctionName ([DisallowNull] ES_TypeInfo* owner, [DisallowNull] ES_FunctionData* func) {
             using var mangleChars = new StructPooledList<char> (CL_ClearMode.Auto);
 
             // The type name.
@@ -78,12 +78,12 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             // The function name.
             mangleChars.AddRange (func->Name.TypeNameString);
 
-            return mangleChars.ToPooledArray ();
+            return mangleChars.Span.GetPooledString ();
         }
 
         #region Type names
 
-        private static PooledArray<char> MangleStructName ([DisallowNull] ES_StructData* structData) {
+        private static string MangleStructName ([DisallowNull] ES_StructData* structData) {
             // Sample name: "struct.System.Numerics__Vector2"
             using var mangleChars = new StructPooledList<char> (CL_ClearMode.Auto);
 
@@ -103,10 +103,10 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             var structSpan = mangleChars.AddSpan (structName.Length);
             Encoding.ASCII.GetChars (structName, structSpan);
 
-            return mangleChars.ToPooledArray ();
+            return mangleChars.Span.GetPooledString ();
         }
 
-        private static PooledArray<char> MangleFunctionType ([DisallowNull] ES_FunctionPrototypeData* type) {
+        private static string MangleFunctionType ([DisallowNull] ES_FunctionPrototypeData* type) {
             using var mangleChars = new StructPooledList<char> (CL_ClearMode.Auto);
 
             // Add the return type.
@@ -131,10 +131,10 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 mangleChars.AddRange (arg.ValueType->Name.TypeNameString);
             }
 
-            return mangleChars.ToPooledArray ();
+            return mangleChars.Span.GetPooledString ();
         }
 
-        private static PooledArray<char> MangleTypeName ([DisallowNull] ES_TypeInfo* type) {
+        private static string MangleTypeName ([DisallowNull] ES_TypeInfo* type) {
             switch (type->TypeTag) {
                 case ES_TypeTag.Struct:
                     return MangleStructName ((ES_StructData*) type);
@@ -142,10 +142,34 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 case ES_TypeTag.Function:
                     return MangleFunctionType ((ES_FunctionPrototypeData*) type);
 
-                case ES_TypeTag.Void:
-                case ES_TypeTag.Bool:
-                case ES_TypeTag.Int:
-                case ES_TypeTag.Float:
+                case ES_TypeTag.Void: return "void";
+
+                case ES_TypeTag.Bool: return "bool";
+
+                case ES_TypeTag.Int: {
+                    var intType = (ES_IntTypeData*) type;
+
+                    return intType->IntSize switch {
+                        ES_IntSize.Int8 => !intType->Unsigned ? "sbyte" : "byte",
+                        ES_IntSize.Int16 => !intType->Unsigned ? "short" : "ushort",
+                        ES_IntSize.Int32 => !intType->Unsigned ? "int" : "uint",
+                        ES_IntSize.Int64 => !intType->Unsigned ? "long" : "ulong",
+
+                        _ => throw new NotImplementedException ("Int size not implemented."),
+                    };
+                }
+
+                case ES_TypeTag.Float: {
+                    var floatType = (ES_FloatTypeData*) type;
+
+                    return floatType->FloatSize switch {
+                        ES_FloatSize.Single => "float",
+                        ES_FloatSize.Double => "double",
+
+                        _ => throw new NotImplementedException ("Float size not implemented."),
+                    };
+                }
+
                 case ES_TypeTag.Class:
                 case ES_TypeTag.Enum:
                 case ES_TypeTag.Interface:

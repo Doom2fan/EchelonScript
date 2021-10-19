@@ -91,14 +91,12 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             );
 
             // Create the struct declaration.
-            using var structChars = MangleStructName (structData);
-            var structDecl = (StructDeclaration (structChars.Span.GetPooledString ())
+            var structDecl = StructDeclaration (MangleStructName (structData))
                 .WithMembers (List (memberTypes))
                 .WithModifiers (TokenList (
                     Token (SyntaxKind.PublicKeyword),
                     Token (SyntaxKind.UnsafeKeyword)
-                ))
-            );
+                ));
 
             return structDecl;
         }

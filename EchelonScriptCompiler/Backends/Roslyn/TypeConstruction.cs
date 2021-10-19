@@ -9,7 +9,6 @@
 
 using System;
 using EchelonScriptCommon.Data.Types;
-using EchelonScriptCompiler.Utilities;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
@@ -31,10 +30,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                     return GetFloatType (floatType->FloatSize);
                 }
 
-                case ES_TypeTag.Struct: {
-                    using var mangledName = MangleTypeName (type);
-                    return IdentifierName (mangledName.GetPooledString ());
-                }
+                case ES_TypeTag.Struct: return IdentifierName (MangleTypeName (type));
 
                 case ES_TypeTag.Reference: {
                     var pointerType = (ES_ReferenceData*) type;
