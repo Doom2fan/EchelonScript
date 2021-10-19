@@ -182,6 +182,55 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             #endregion
         }
 
+        protected class DoubleDereferenceExpressionParselet : IPrefixExpressionParselet {
+            #region ================== Instance fields
+
+            protected ExpressionPrecedence opPrecedence;
+
+            #endregion
+
+            #region ================== Instance properties
+
+            public ExpressionPrecedence PrefixPrecedence => opPrecedence;
+
+            #endregion
+
+            #region ================== Constructors
+
+            public DoubleDereferenceExpressionParselet (ExpressionPrecedence precedence) {
+                opPrecedence = precedence;
+            }
+
+            #endregion
+
+            #region ================== Instance methods
+
+            public bool CheckCanParse (EchelonScriptParser parser, EchelonScriptToken token) {
+                return token.Type == EchelonScriptTokenType.PowerOp;
+            }
+
+            public ES_AstExpression Parse (EchelonScriptParser parser, EchelonScriptToken token) {
+                parser.tokenizer.NextToken ();
+
+                var inner = parser.ParseExpression (opPrecedence);
+
+                var asteriskLeft = token;
+                var asteriskRight = token;
+                asteriskLeft.Type = asteriskRight.Type = EchelonScriptTokenType.Asterisk;
+
+                asteriskLeft.Text = token.Text.Slice (0, 1);
+                asteriskRight.Text = token.Text.Slice (1, 1);
+
+                asteriskRight.TextStartPos++;
+                asteriskRight.TextColumn++;
+
+                inner = new ES_AstSimpleUnaryExpression (asteriskRight, SimpleUnaryExprType.Dereference, inner);
+                return new ES_AstSimpleUnaryExpression (asteriskLeft, SimpleUnaryExprType.Dereference, inner);
+            }
+
+            #endregion
+        }
+
         #region Primary expressions
 
         protected class ParenthesisExpressionParselet : IPrefixExpressionParselet {
@@ -844,6 +893,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             AddSimpleUnaryExpr (ExpressionPrecedence.Unary, EchelonScriptTokenType.Bang, SimpleUnaryExprType.LogicalNot);
             AddSimpleUnaryExpr (ExpressionPrecedence.Unary, EchelonScriptTokenType.Tilde, SimpleUnaryExprType.BitNot);
             AddSimpleUnaryExpr (ExpressionPrecedence.Unary, EchelonScriptTokenType.Asterisk, SimpleUnaryExprType.Dereference);
+            AddPrefixParselet (EchelonScriptTokenType.PowerOp, new DoubleDereferenceExpressionParselet (ExpressionPrecedence.Unary));
             AddPrefixParselet (EchelonScriptTokenType.PlusPlus, incDecParselet);
             AddPrefixParselet (EchelonScriptTokenType.MinusMinus, incDecParselet);
             AddPrefixParselet (EchelonScriptTokenType.Identifier, new CastExpressionParselet ());
@@ -1240,6 +1290,20 @@ namespace EchelonScriptCompiler.Frontend.Parser {
 
                     var bounds = new ES_AstNodeBounds (innerDecl?.NodeBounds.StartPos ?? tkPair.tk.TextStartPos, tkPair.tk.TextEndPos);
                     innerDecl = new ES_AstTypeDeclaration_Basic (ES_AstTypeDeclaration_Basic.DeclType.Reference, innerDecl!, bounds);
+                } else if (tkPair.tk.Type == EchelonScriptTokenType.AndAnd) {
+                    tokenizer.NextToken ();
+                    if (innerDecl == null) {
+                        var errToken = tkPair.tk;
+                        errToken.Text = errToken.Text.Slice (0, 1);
+                        errorsList.Add (ES_FrontendErrors.GenUnexpectedToken (errToken));
+                        break;
+                    }
+
+                    var boundsInner = new ES_AstNodeBounds (innerDecl?.NodeBounds.StartPos ?? tkPair.tk.TextStartPos, tkPair.tk.TextEndPos - 1);
+                    innerDecl = new ES_AstTypeDeclaration_Basic (ES_AstTypeDeclaration_Basic.DeclType.Reference, innerDecl!, boundsInner);
+
+                    var boundsOuter = new ES_AstNodeBounds (innerDecl?.NodeBounds.StartPos ?? tkPair.tk.TextStartPos, tkPair.tk.TextEndPos);
+                    innerDecl = new ES_AstTypeDeclaration_Basic (ES_AstTypeDeclaration_Basic.DeclType.Reference, innerDecl!, boundsOuter);
                 } else if (tkPair.tk.Type == EchelonScriptTokenType.Question) {
                     tokenizer.NextToken ();
                     if (innerDecl == null) {

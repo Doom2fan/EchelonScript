@@ -435,7 +435,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 .WithArgumentList (ArgumentList (SeparatedList<ArgumentSyntax> (argsList)));
 
             if (isReference)
-                ret = CastExpression (roslynType, ret);
+                ret = CastExpression (PointerType (roslynType), ret);
 
             return ret;
         }
