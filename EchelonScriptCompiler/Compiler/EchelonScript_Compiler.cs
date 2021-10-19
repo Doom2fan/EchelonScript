@@ -40,6 +40,8 @@ namespace EchelonScriptCompiler {
         public IReadOnlyList<EchelonScriptErrorMessage> Warnings => warningsList;
         public IReadOnlyList<EchelonScriptErrorMessage> InfoMessages => infoList;
 
+        public bool HasBackend => backend is not null;
+
         #endregion
 
         #region ================== Constructors
