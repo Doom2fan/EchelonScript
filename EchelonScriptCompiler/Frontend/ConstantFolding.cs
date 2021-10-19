@@ -400,6 +400,13 @@ namespace EchelonScriptCompiler.Frontend {
             if (op.IsAssignment ())
                 return;
 
+            if (binExpr.Left is ES_AstBooleanConstantExpression lhsBool && binExpr.Right is ES_AstBooleanConstantExpression rhsBool) {
+                if (op.IsComparison ())
+                    FoldConstants_BinaryExpression_BoolBool_Comp (ref expr, op, lhsBool, rhsBool);
+                else
+                    FoldConstants_BinaryExpression_BoolBool_Arithmetic (ref expr, op, lhsBool, rhsBool);
+            }
+
             if (binExpr.Left is ES_AstIntegerConstantExpression lhsInt && binExpr.Right is ES_AstIntegerConstantExpression rhsInt) {
                 if (op.IsComparison ())
                     FoldConstants_BinaryExpression_IntInt_Comp (ref expr, op, lhsInt, rhsInt);
@@ -442,6 +449,13 @@ namespace EchelonScriptCompiler.Frontend {
             var unaryExpr = (expr as ES_AstSimpleUnaryExpression)!;
 
             switch (unaryExpr.Inner) {
+                case ES_AstBooleanConstantExpression boolConstExpr: {
+                    if (unaryExpr.ExpressionType == SimpleUnaryExprType.LogicalNot)
+                        expr = new ES_AstBooleanConstantExpression (!boolConstExpr.Value, expr);
+
+                    break;
+                }
+
                 case ES_AstIntegerConstantExpression intConstExpr: {
                     var innerIntType = (ES_IntTypeData*) intConstExpr.IntType;
 
