@@ -297,7 +297,13 @@ namespace EchelonScriptCompiler.Immix_GC {
             }
         }
 
-        [UnmanagedCallersOnly(CallConvs = new [] { typeof (CallConvCdecl) })]
+        [UnmanagedCallersOnly (CallConvs = new [] { typeof (CallConvCdecl) })]
+        public static void* AllocObjectUnmanaged (ES_TypeInfo* type) => AllocObject (type);
+
+        [UnmanagedCallersOnly (CallConvs = new [] { typeof (CallConvCdecl) })]
+        public static void* AllocArrayUnmanaged (ES_ArrayTypeData* arrayType, int* dimSizesPtr, int dimsCount)
+            => AllocArray (arrayType, dimSizesPtr, dimsCount);
+
         public static void* AllocObject (ES_TypeInfo* type) {
             EnsureInitialized ();
 
@@ -350,7 +356,6 @@ namespace EchelonScriptCompiler.Immix_GC {
             return (byte*) objHeader + sizeof (ImmixObjectHeader);
         }
 
-        [UnmanagedCallersOnly (CallConvs = new [] { typeof (CallConvCdecl) })]
         public static void* AllocArray (ES_ArrayTypeData* arrayType, int* dimSizesPtr, int dimsCount) {
             EnsureInitialized ();
 

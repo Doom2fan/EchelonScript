@@ -349,7 +349,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             intPtrType = contextRef.GetIntPtrType (execEngine.TargetData);
 
             // Create and map the GC functions.
-            delegate* unmanaged [Cdecl] <ES_TypeInfo*, void*> objAllocFuncPtr = &ImmixGC.AllocObject;
+            delegate* unmanaged [Cdecl] <ES_TypeInfo*, void*> objAllocFuncPtr = &ImmixGC.AllocObjectUnmanaged;
             execEngine.AddGlobalMapping (GenerateCode_GetAllocObjFunc (), (IntPtr) objAllocFuncPtr);
         }
 
