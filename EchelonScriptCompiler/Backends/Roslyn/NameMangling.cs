@@ -25,9 +25,9 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
             // The prefix.
             if (!isStatic)
-                mangleChars.AddRange ("defaultConstructor.");
+                mangleChars.AddRange ("defaultConstructor!");
             else
-                mangleChars.AddRange ("defaultStaticConstructor.");
+                mangleChars.AddRange ("defaultStaticConstructor!");
 
             // The namespace.
             var namespaceName = typeName->Name.NamespaceName.Span;
@@ -88,7 +88,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             using var mangleChars = new StructPooledList<char> (CL_ClearMode.Auto);
 
             // The prefix.
-            mangleChars.AddRange ("struct.");
+            mangleChars.AddRange ("struct!");
 
             // The namespace.
             var namespaceName = structData->TypeInfo.Name.NamespaceName.Span;
@@ -134,7 +134,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             return mangleChars.Span.GetPooledString ();
         }
 
-        private static string MangleTypeName ([DisallowNull] ES_TypeInfo* type) {
+        internal static string MangleTypeName ([DisallowNull] ES_TypeInfo* type) {
             switch (type->TypeTag) {
                 case ES_TypeTag.Struct:
                     return MangleStructName ((ES_StructData*) type);
@@ -142,33 +142,11 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 case ES_TypeTag.Function:
                     return MangleFunctionType ((ES_FunctionPrototypeData*) type);
 
-                case ES_TypeTag.Void: return "void";
-
-                case ES_TypeTag.Bool: return "bool";
-
-                case ES_TypeTag.Int: {
-                    var intType = (ES_IntTypeData*) type;
-
-                    return intType->IntSize switch {
-                        ES_IntSize.Int8 => !intType->Unsigned ? "sbyte" : "byte",
-                        ES_IntSize.Int16 => !intType->Unsigned ? "short" : "ushort",
-                        ES_IntSize.Int32 => !intType->Unsigned ? "int" : "uint",
-                        ES_IntSize.Int64 => !intType->Unsigned ? "long" : "ulong",
-
-                        _ => throw new NotImplementedException ("Int size not implemented."),
-                    };
-                }
-
-                case ES_TypeTag.Float: {
-                    var floatType = (ES_FloatTypeData*) type;
-
-                    return floatType->FloatSize switch {
-                        ES_FloatSize.Single => "float",
-                        ES_FloatSize.Double => "double",
-
-                        _ => throw new NotImplementedException ("Float size not implemented."),
-                    };
-                }
+                case ES_TypeTag.Void:
+                case ES_TypeTag.Bool:
+                case ES_TypeTag.Int:
+                case ES_TypeTag.Float:
+                    throw new NotSupportedException ("Type cannot be name-mangled.");
 
                 case ES_TypeTag.Class:
                 case ES_TypeTag.Enum:

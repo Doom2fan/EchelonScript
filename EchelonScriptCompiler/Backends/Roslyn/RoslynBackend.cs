@@ -13,6 +13,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Runtime.Loader;
 using System.Text;
 using ChronosLib.Pooled;
@@ -63,6 +64,8 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             asmLoadContext = new AssemblyLoadContext ($"{name} load context", true);
             assembly = asmLoadContext.LoadFromStream (dllStream, symbolsStream);
 
+            SizeTypes ();
+
             functionMethodMappings = new Dictionary<Pointer<ES_FunctionData>, MethodInfo> ();
             methodDelegateMappings = new Dictionary<(MethodInfo, Type), Delegate> ();
 
@@ -73,6 +76,37 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
         #endregion
 
         #region ================== Instance methods
+
+        private void SizeTypes () {
+            Debug.Assert (assembly is not null);
+
+            const string namespacePrefix = RoslynCompilerBackend.NamespaceName + ".";
+            foreach (var nmData in environment.Namespaces.Values) {
+                foreach (var typeAddr in nmData.Types) {
+                    var type = typeAddr.Address;
+
+                    if (type->RuntimeSize > -1)
+                        continue;
+
+                    switch (type->TypeTag) {
+                        case ES_TypeTag.Void:
+                        case ES_TypeTag.Bool:
+                        case ES_TypeTag.Int:
+                        case ES_TypeTag.Float:
+                        case ES_TypeTag.Reference:
+                            continue;
+                    }
+
+                    var mangledName = RoslynCompilerBackend.MangleTypeName (type);
+                    var roslynType = assembly.GetType (namespacePrefix + mangledName, false);
+
+                    if (roslynType is null)
+                        continue;
+
+                    type->RuntimeSize = Marshal.SizeOf (roslynType);
+                }
+            }
+        }
 
         private MethodInfo GetFunctionMethodInfo ([DisallowNull] ES_FunctionData* func) {
             if (false) {

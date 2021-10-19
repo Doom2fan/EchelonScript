@@ -404,7 +404,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             var accessExpr = MemberAccessExpression (SyntaxKind.SimpleMemberAccessExpression,
                 IdentifierName ("ImmixGC"),
                 GenericName (Identifier ("AllocObject")).WithTypeArgumentList (TypeArgumentList (
-                    SingletonSeparatedList<TypeSyntax> (IdentifierName (MangleTypeName (type)))
+                    SingletonSeparatedList (GetRoslynType (type))
                 ))
             );
 
