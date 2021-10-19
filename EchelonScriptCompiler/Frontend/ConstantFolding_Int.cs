@@ -484,31 +484,31 @@ namespace EchelonScriptCompiler.Frontend {
             switch (op) {
                 // Add/sub
                 case SimpleBinaryExprType.Add:
-                    finalValue = lhs.Value + lhs.Value;
+                    finalValue = lhs.Value + rhs.Value;
                     finalType = lhs.IntType;
                     break;
                 case SimpleBinaryExprType.Subtract:
-                    finalValue = lhs.Value - lhs.Value;
+                    finalValue = lhs.Value - rhs.Value;
                     finalType = lhs.IntType;
                     break;
 
                 // Mul/Div/Mod
                 case SimpleBinaryExprType.Multiply:
-                    finalValue = lhs.Value * lhs.Value;
+                    finalValue = lhs.Value * rhs.Value;
                     finalType = lhs.IntType;
                     break;
                 case SimpleBinaryExprType.Divide:
                     if (!lhsType->Unsigned)
-                        finalValue = (ulong) ((long) lhs.Value / (long) lhs.Value);
+                        finalValue = (ulong) ((long) lhs.Value / (long) rhs.Value);
                     else
                         finalValue = lhs.Value / lhs.Value;
                     finalType = lhs.IntType;
                     break;
                 case SimpleBinaryExprType.Modulo:
                     if (!lhsType->Unsigned)
-                        finalValue = (ulong) ((long) lhs.Value % (long) lhs.Value);
+                        finalValue = (ulong) ((long) lhs.Value % (long) rhs.Value);
                     else
-                        finalValue = lhs.Value % lhs.Value;
+                        finalValue = lhs.Value % rhs.Value;
                     finalType = lhs.IntType;
                     break;
 

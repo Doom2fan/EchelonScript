@@ -124,21 +124,21 @@ namespace EchelonScriptCompiler.Frontend {
             switch (op) {
                 // Add/sub
                 case SimpleBinaryExprType.Add:
-                    finalValue = lhs.Value + lhs.Value;
+                    finalValue = lhs.Value + rhs.Value;
                     break;
                 case SimpleBinaryExprType.Subtract:
-                    finalValue = lhs.Value - lhs.Value;
+                    finalValue = lhs.Value - rhs.Value;
                     break;
 
                 // Mul/Div/Mod
                 case SimpleBinaryExprType.Multiply:
-                    finalValue = lhs.Value * lhs.Value;
+                    finalValue = lhs.Value * rhs.Value;
                     break;
                 case SimpleBinaryExprType.Divide:
-                        finalValue = lhs.Value / lhs.Value;
+                        finalValue = lhs.Value / rhs.Value;
                     break;
                 case SimpleBinaryExprType.Modulo:
-                        finalValue = lhs.Value % lhs.Value;
+                        finalValue = lhs.Value % rhs.Value;
                     break;
 
                 case SimpleBinaryExprType.Power:
@@ -220,21 +220,21 @@ namespace EchelonScriptCompiler.Frontend {
             switch (op) {
                 // Add/sub
                 case SimpleBinaryExprType.Add:
-                    finalValue = lhs.Value + lhs.Value;
+                    finalValue = lhs.Value + rhs.Value;
                     break;
                 case SimpleBinaryExprType.Subtract:
-                    finalValue = lhs.Value - lhs.Value;
+                    finalValue = lhs.Value - rhs.Value;
                     break;
 
                 // Mul/Div/Mod
                 case SimpleBinaryExprType.Multiply:
-                    finalValue = lhs.Value * lhs.Value;
+                    finalValue = lhs.Value * rhs.Value;
                     break;
                 case SimpleBinaryExprType.Divide:
-                    finalValue = lhs.Value / lhs.Value;
+                    finalValue = lhs.Value / rhs.Value;
                     break;
                 case SimpleBinaryExprType.Modulo:
-                    finalValue = lhs.Value % lhs.Value;
+                    finalValue = lhs.Value % rhs.Value;
                     break;
 
                 case SimpleBinaryExprType.Power:
