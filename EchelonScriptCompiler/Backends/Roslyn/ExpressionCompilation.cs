@@ -400,11 +400,17 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
         }*/
 
         private ExpressionSyntax GenerateCode_NewObject (ES_TypeInfo* type, ExpressionSyntax assignValue) {
+            bool isReference = type->TypeTag == ES_TypeTag.Reference;
+
+            // Get the roslyn type.
+            var intPtrType = IdentifierName ("IntPtr");
+            var roslynType = GetRoslynType (type);
+
             // Generate the member access. ("ImmixGC.AllocObject")
             var accessExpr = MemberAccessExpression (SyntaxKind.SimpleMemberAccessExpression,
                 IdentifierName ("ImmixGC"),
                 GenericName (Identifier ("AllocObject")).WithTypeArgumentList (TypeArgumentList (
-                    SingletonSeparatedList (GetRoslynType (type))
+                    SingletonSeparatedList (!isReference ? roslynType : intPtrType)
                 ))
             );
 
@@ -420,11 +426,18 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
             // Add the value to assign.
             argsList.Add (Token (SyntaxKind.CommaToken));
+            if (isReference)
+                assignValue = CastExpression (intPtrType, assignValue);
             argsList.Add (Argument (assignValue));
 
             // Generate the function call.
-            return InvocationExpression (accessExpr)
+            ExpressionSyntax ret = InvocationExpression (accessExpr)
                 .WithArgumentList (ArgumentList (SeparatedList<ArgumentSyntax> (argsList)));
+
+            if (isReference)
+                ret = CastExpression (roslynType, ret);
+
+            return ret;
         }
 
         private ExpressionData GenerateCode_Expression_NewObject (
