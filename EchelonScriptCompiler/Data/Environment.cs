@@ -1042,6 +1042,29 @@ namespace EchelonScriptCompiler.Data {
             return StringPool.Shared.GetOrAdd (chars.Span);
         }
 
+        public T? GetFunctionDelegate<T> (ArrayPointer<byte> namespaceName, ArrayPointer<byte> functionName)
+            where T : Delegate {
+            if (backendData is null)
+                return null;
+
+            foreach (var nmKVP in namespacesDict) {
+                if (!nmKVP.Key.Equals (namespaceName))
+                    continue;
+
+                foreach (var funcDataKVP in nmKVP.Value.Functions) {
+                    if (!funcDataKVP.Key.Equals (functionName))
+                        continue;
+
+                    return backendData.GetFunctionDelegate<T> (funcDataKVP.Value);
+                }
+            }
+
+            return null;
+        }
+
+        public T? GetFunctionDelegate<T> (ES_FunctionData* funcData) where T : Delegate
+            => backendData?.GetFunctionDelegate<T> (funcData);
+
         #endregion
 
         #region ================== IDisposable support

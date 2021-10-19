@@ -50,8 +50,6 @@ namespace EchelonScriptCompiler.Data.Types {
         public readonly ArrayPointer<ES_FunctionArgData> Arguments;
         public readonly int OptionalArgsCount;
 
-        public readonly void* FunctionPointer;
-
         #endregion
 
         #region ================== Instance properties
@@ -79,14 +77,6 @@ namespace EchelonScriptCompiler.Data.Types {
             FunctionType = functionType;
             Arguments = args;
             OptionalArgsCount = optArgCount;
-
-            FunctionPointer = null;
-        }
-
-        public ES_FunctionData (ES_FunctionData funcData, void* funcPtr) {
-            this = funcData;
-
-            FunctionPointer = funcPtr;
         }
 
         #endregion

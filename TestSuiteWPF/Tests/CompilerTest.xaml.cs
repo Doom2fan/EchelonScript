@@ -10,18 +10,19 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using ChronosLib.Pooled;
+using CommunityToolkit.HighPerformance.Buffers;
 using EchelonScriptCompiler;
 using EchelonScriptCompiler.Backends.LLVMBackend;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Data.Types;
 using EchelonScriptCompiler.Frontend;
 using ICSharpCode.AvalonEdit.Document;
-using CommunityToolkit.HighPerformance.Buffers;
 
 namespace TestSuiteWPF.Tests {
     /// <summary>
@@ -112,6 +113,9 @@ namespace TestSuiteWPF.Tests {
 
         #region ================== Event handlers
 
+        [UnmanagedFunctionPointer (CallingConvention.Cdecl)] public delegate int Int32Int32Int32Delegate (int a, int b);
+        [UnmanagedFunctionPointer (CallingConvention.Cdecl)] public delegate float FloatFloatFloatDelegate (float a, float b);
+
         Random rand = new Random ();
         private unsafe void codeText_TextChanged (object sender, EventArgs e) {
             string code = codeText.Text;
@@ -201,11 +205,11 @@ namespace TestSuiteWPF.Tests {
 
                     bool matchSig = false;
 
-                    delegate* unmanaged[Cdecl]<int, int, int> fp = null;
+                    Int32Int32Int32Delegate fp = null;
                     if (funcType->ReturnType == typeInt32 && funcType->ArgumentsList.Length == 2 &&
                         funcType->ArgumentsList.Span [0].ValueType == typeInt32 && funcType->ArgumentsList.Span [0].ArgType == ES_ArgumentType.Normal &&
                         funcType->ArgumentsList.Span [1].ValueType == typeInt32 && funcType->ArgumentsList.Span [1].ArgType == ES_ArgumentType.Normal) {
-                        fp = (delegate* unmanaged[Cdecl]<int, int, int>) func.Address->FunctionPointer;
+                        fp = env.GetFunctionDelegate<Int32Int32Int32Delegate> (func);
                         matchSig = true;
                     }
 
@@ -227,11 +231,11 @@ namespace TestSuiteWPF.Tests {
 
                     bool matchSig = false;
 
-                    delegate* unmanaged[Cdecl]<float, float, float> fp = null;
+                    FloatFloatFloatDelegate fp = null;
                     if (funcType->ReturnType == typeFloat32 && funcType->ArgumentsList.Length == 2 &&
                         funcType->ArgumentsList.Span [0].ValueType == typeFloat32 && funcType->ArgumentsList.Span [0].ArgType == ES_ArgumentType.Normal &&
                         funcType->ArgumentsList.Span [1].ValueType == typeFloat32 && funcType->ArgumentsList.Span [1].ArgType == ES_ArgumentType.Normal) {
-                        fp = (delegate* unmanaged[Cdecl]<float, float, float>) func.Address->FunctionPointer;
+                        fp = env.GetFunctionDelegate<FloatFloatFloatDelegate> (func);
                         matchSig = true;
                     }
 

@@ -9,7 +9,9 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using EchelonScriptCompiler.Data;
+using EchelonScriptCompiler.Data.Types;
 using EchelonScriptCompiler.Frontend;
 
 namespace EchelonScriptCompiler.Backends {
@@ -17,6 +19,12 @@ namespace EchelonScriptCompiler.Backends {
         #region ================== Instance properties
 
         public bool IsDisposed { get; }
+
+        #endregion
+
+        #region ================== Instance methods
+
+        T? GetFunctionDelegate<T> ([DisallowNull] ES_FunctionData* func) where T : Delegate;
 
         #endregion
     }

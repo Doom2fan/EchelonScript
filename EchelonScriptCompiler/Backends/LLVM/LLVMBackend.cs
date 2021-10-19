@@ -10,19 +10,24 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Data.Types;
 using EchelonScriptCompiler.Frontend;
 using EchelonScriptCompiler.Immix_GC;
+using EchelonScriptCompiler.Utilities;
 using LLVMSharp.Interop;
 
 namespace EchelonScriptCompiler.Backends.LLVMBackend {
-    public sealed class LLVMBackendData : IBackendData {
+    public unsafe sealed class LLVMBackendData : IBackendData {
         #region ================== Instance fields
 
         private LLVMExecutionEngineRef engine;
         private LLVMModuleRef module;
+
+        private Dictionary<Pointer<ES_FunctionData>, LLVMValueRef> functionMethodMappings;
+        private Dictionary<(LLVMValueRef, Type), Delegate> methodDelegateMappings;
 
         #endregion
 
@@ -34,14 +39,55 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
 
         #region ================== Constructor
 
-        private LLVMBackendData () {
-            engine = null;
-            module = null;
-        }
-
         public LLVMBackendData (LLVMExecutionEngineRef eng, LLVMModuleRef mod) {
             engine = eng;
             module = mod;
+
+            functionMethodMappings = new Dictionary<Pointer<ES_FunctionData>, LLVMValueRef> ();
+            methodDelegateMappings = new Dictionary<(LLVMValueRef, Type), Delegate> ();
+        }
+
+        #endregion
+
+        #region ================== Instance methods
+
+        private LLVMValueRef GetFunctionRef ([DisallowNull] ES_FunctionData* func) {
+            if (false) {
+                // TODO: Add support for member functions.
+            } else {
+                if (functionMethodMappings.TryGetValue (func, out var ret)) {
+                    Debug.Assert (ret != null);
+                    return ret;
+                }
+
+                using var funcNameMangled = LLVMCompilerBackend.MangleFunctionName (func);
+                ret = module.GetNamedFunction (funcNameMangled);
+
+                functionMethodMappings.Add (func, ret);
+                return ret;
+            }
+        }
+
+        public T? GetFunctionDelegate<T> ([DisallowNull] ES_FunctionData* func) where T : Delegate {
+            Debug.Assert (engine != null);
+            Debug.Assert (module != null);
+
+            var delegateType = typeof (T);
+            var funcRef = GetFunctionRef (func);
+
+            if (methodDelegateMappings.TryGetValue ((funcRef, delegateType), out var delRet)) {
+                Debug.Assert (delRet is not null);
+                Debug.Assert (delRet is T);
+
+                return delRet as T;
+            }
+
+            var ret = engine.GetPointerToGlobal<T> (funcRef);
+            if (ret is null)
+                return null;
+
+            methodDelegateMappings.Add ((funcRef, delegateType), ret);
+            return ret;
         }
 
         #endregion
@@ -372,16 +418,6 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             foreach (var namespaceData in env!.Namespaces.Values) {
                 foreach (var type in namespaceData.Types) {
                     // TODO: Handle types.
-                }
-
-                foreach (var funcKVP in namespaceData.Functions) {
-                    var funcId = funcKVP.Key;
-                    var func = funcKVP.Value.Address;
-
-                    using var funcNameMangled = MangleFunctionName (func);
-                    var funcDef = moduleRef.GetNamedFunction (funcNameMangled);
-
-                    *func = new ES_FunctionData (*func, (void*) execEngine.GetPointerToGlobal (funcDef));
                 }
             }
 

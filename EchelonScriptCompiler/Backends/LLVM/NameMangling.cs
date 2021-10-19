@@ -15,7 +15,7 @@ using EchelonScriptCompiler.Data.Types;
 
 namespace EchelonScriptCompiler.Backends.LLVMBackend {
     public unsafe sealed partial class LLVMCompilerBackend {
-        private PooledArray<char> MangleStaticVarName (ES_TypeInfo* parentType, ArrayPointer<byte> varName) {
+        private static PooledArray<char> MangleStaticVarName (ES_TypeInfo* parentType, ArrayPointer<byte> varName) {
             // Sample name: "struct.System.Numerics__Vector2"
             using var mangleChars = new StructPooledList<char> (CL_ClearMode.Auto);
 
@@ -43,7 +43,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             return mangleChars.ToPooledArray ();
         }
 
-        private PooledArray<char> MangleDefaultConstructorName (ES_TypeInfo* typeName, bool isStatic) {
+        private static PooledArray<char> MangleDefaultConstructorName (ES_TypeInfo* typeName, bool isStatic) {
             // Sample name: "struct.System.Numerics__Vector2"
             using var mangleChars = new StructPooledList<char> (CL_ClearMode.Auto);
 
@@ -69,7 +69,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             return mangleChars.ToPooledArray ();
         }
 
-        private PooledArray<char> MangleStructName ([DisallowNull] ES_StructData* structData) {
+        private static PooledArray<char> MangleStructName ([DisallowNull] ES_StructData* structData) {
             // Sample name: "struct.System.Numerics__Vector2"
             using var mangleChars = new StructPooledList<char> (CL_ClearMode.Auto);
 
@@ -92,7 +92,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             return mangleChars.ToPooledArray ();
         }
 
-        private PooledArray<char> MangleFunctionType (ES_FunctionPrototypeData* type) {
+        private static PooledArray<char> MangleFunctionType (ES_FunctionPrototypeData* type) {
             using var mangleChars = new StructPooledList<char> (CL_ClearMode.Auto);
 
             // Add the return type.
@@ -120,7 +120,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             return mangleChars.ToPooledArray ();
         }
 
-        private PooledArray<char> MangleFunctionName ([DisallowNull] ES_FunctionData* func) {
+        internal static PooledArray<char> MangleFunctionName ([DisallowNull] ES_FunctionData* func) {
             // Sample name: "System.Math__FMath.Sin"
             using var mangleChars = new StructPooledList<char> (CL_ClearMode.Auto);
 
