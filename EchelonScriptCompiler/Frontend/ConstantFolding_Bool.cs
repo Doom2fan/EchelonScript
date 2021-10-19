@@ -7,10 +7,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-using System;
 using System.Diagnostics;
 using EchelonScriptCompiler.CompilerCommon;
-using EchelonScriptCompiler.Data.Types;
 
 namespace EchelonScriptCompiler.Frontend {
     public unsafe partial class CompilerFrontend {

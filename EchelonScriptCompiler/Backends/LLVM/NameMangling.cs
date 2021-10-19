@@ -10,8 +10,8 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using ChronosLib.Pooled;
-using EchelonScriptCompiler.Data;
-using EchelonScriptCompiler.Data.Types;
+using EchelonScriptCommon.Data.Types;
+using EchelonScriptCommon.Utilities;
 
 namespace EchelonScriptCompiler.Backends.LLVMBackend {
     public unsafe sealed partial class LLVMCompilerBackend {

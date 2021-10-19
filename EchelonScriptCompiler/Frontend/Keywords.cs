@@ -8,7 +8,7 @@
  */
 
 using System;
-using EchelonScriptCompiler.Data.Types;
+using EchelonScriptCommon.Data.Types;
 
 namespace EchelonScriptCompiler.Frontend {
     public static class ES_PrimitiveTypes {

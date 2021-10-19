@@ -11,11 +11,11 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using EchelonScriptCompiler.Data;
-using EchelonScriptCompiler.Data.Types;
+using EchelonScriptCommon.Data.Types;
+using EchelonScriptCommon.Utilities;
 using static TerraFX.Interop.Mimalloc;
 
-namespace EchelonScriptCompiler.Immix_GC {
+namespace EchelonScriptCommon.Immix_GC {
     public enum ImmixBlockUsage : int {
         Empty = 0,
         Filled,

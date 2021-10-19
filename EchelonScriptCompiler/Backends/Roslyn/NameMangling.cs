@@ -11,7 +11,7 @@ using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using ChronosLib.Pooled;
-using EchelonScriptCompiler.Data.Types;
+using EchelonScriptCommon.Data.Types;
 
 namespace EchelonScriptCompiler.Backends.RoslynBackend {
     public unsafe sealed partial class RoslynCompilerBackend {

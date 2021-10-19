@@ -9,25 +9,28 @@
 
 using System;
 using System.Linq;
-using EchelonScriptCompiler.Frontend.Parser;
 
-namespace EchelonScriptCompiler.Data.Types {
+namespace EchelonScriptCommon.Data.Types {
     public abstract class ES_ExportAttributeBase : Attribute {
         public enum AggregateType {
             Struct,
             Class,
         }
 
+        public static bool IsLatinLetter (char? c) => (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+
+        public static bool IsIntegerDigit (char? c) => c >= '0' && c <= '9';
+
         public bool IsValidIdentifier (string id) {
             if (id is null || id.Length < 1)
                 return false;
 
-            if (!EchelonScriptTokenizer.IsLatinLetter (id [0]) && id [0] != '_')
+            if (!IsLatinLetter (id [0]) && id [0] != '_')
                 return false;
 
             return id.All (c => (
-                EchelonScriptTokenizer.IsLatinLetter (c) ||
-                EchelonScriptTokenizer.IsIntegerDigit (c) ||
+                IsLatinLetter (c) ||
+                IsIntegerDigit (c) ||
                 c == '_'
             ));
         }

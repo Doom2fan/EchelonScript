@@ -8,36 +8,12 @@
  */
 
 using System;
-using System.Runtime.InteropServices;
 using System.Text;
 using ChronosLib.Pooled;
-using ChronosLib.Unmanaged;
 using CommunityToolkit.HighPerformance.Buffers;
-using EchelonScriptCompiler.Data;
+using EchelonScriptCommon.Utilities;
 
 namespace EchelonScriptCompiler.Utilities {
-    [StructLayout(LayoutKind.Sequential)]
-    public unsafe struct Pointer<T>
-        where T : unmanaged {
-        public T* Address;
-
-        public Pointer (T* address) {
-            Address = address;
-        }
-
-        public static implicit operator T* (Pointer<T> pointer) {
-            return pointer.Address;
-        }
-
-        public static implicit operator Pointer<T> (T* pointer) {
-            return new Pointer<T> (pointer);
-        }
-
-        public static implicit operator IntPtr (Pointer<T> pointer) {
-            return (IntPtr) pointer.Address;
-        }
-    }
-
     public static class ES_Utils {
         public unsafe static string GetPooledString (this Span<byte> bytes, Encoding encoding)
             => StringPool.Shared.GetOrAdd (bytes, encoding);
@@ -53,19 +29,5 @@ namespace EchelonScriptCompiler.Utilities {
 
         public static string GetPooledString (this PooledArray<char> chars)
             => StringPool.Shared.GetOrAdd (chars.Span);
-
-        public unsafe static ArrayPointer<T> GetArray<T> (this IMemoryManager manager, int count)
-            where T : unmanaged {
-            if (count < 1)
-                throw new ArgumentOutOfRangeException (nameof (count), "Count must be greater than zero.");
-
-            var mem = manager.GetMemory<T> (count);
-            return new ArrayPointer<T> (mem, count);
-        }
-
-        public unsafe static void ReturnMemory<T> (this IMemoryManager manager, ArrayPointer<T> mem)
-            where T : unmanaged {
-            manager.ReturnMemory (mem.Elements);
-        }
     }
 }

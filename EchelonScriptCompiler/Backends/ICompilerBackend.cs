@@ -10,8 +10,8 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using EchelonScriptCommon.Data.Types;
 using EchelonScriptCompiler.Data;
-using EchelonScriptCompiler.Data.Types;
 using EchelonScriptCompiler.Frontend;
 
 namespace EchelonScriptCompiler.Backends {

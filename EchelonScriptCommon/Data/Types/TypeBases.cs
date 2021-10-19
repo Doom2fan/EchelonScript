@@ -9,8 +9,9 @@
 
 using System.Text;
 using CommunityToolkit.HighPerformance.Buffers;
+using EchelonScriptCommon.Utilities;
 
-namespace EchelonScriptCompiler.Data.Types {
+namespace EchelonScriptCommon.Data.Types {
     public enum ES_TypeTag : int {
         UNKNOWN   = 0,
         Void      = 1,

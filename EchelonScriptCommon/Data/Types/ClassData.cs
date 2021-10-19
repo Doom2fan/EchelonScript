@@ -9,9 +9,9 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
-using EchelonScriptCompiler.Utilities;
+using EchelonScriptCommon.Utilities;
 
-namespace EchelonScriptCompiler.Data.Types {
+namespace EchelonScriptCommon.Data.Types {
     [StructLayout (LayoutKind.Sequential, Pack = 1)]
     public unsafe struct ES_ClassData {
         public unsafe sealed class Builder {

@@ -8,8 +8,9 @@
  */
 
 using System.Diagnostics.CodeAnalysis;
+using EchelonScriptCommon.Utilities;
 
-namespace EchelonScriptCompiler.Data.Types {
+namespace EchelonScriptCommon.Data.Types {
     public unsafe struct ES_InterfaceData {
         public unsafe sealed class Builder {
             #region ================== Instance fields

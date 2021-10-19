@@ -16,11 +16,11 @@ using ChronosLib.Pooled;
 using ChronosLib.Unmanaged;
 using Collections.Pooled;
 using CommunityToolkit.HighPerformance.Buffers;
+using EchelonScriptCommon.Data.Types;
+using EchelonScriptCommon.Utilities;
 using EchelonScriptCompiler.Backends;
 using EchelonScriptCompiler.CompilerCommon;
-using EchelonScriptCompiler.Data.Types;
 using EchelonScriptCompiler.Frontend;
-using EchelonScriptCompiler.Utilities;
 
 namespace EchelonScriptCompiler.Data {
     public unsafe class ES_NamespaceData {

@@ -9,8 +9,8 @@
 
 using System;
 using System.Diagnostics;
+using EchelonScriptCommon.Data.Types;
 using EchelonScriptCompiler.CompilerCommon;
-using EchelonScriptCompiler.Data.Types;
 
 namespace EchelonScriptCompiler.Frontend {
     public unsafe partial class CompilerFrontend {

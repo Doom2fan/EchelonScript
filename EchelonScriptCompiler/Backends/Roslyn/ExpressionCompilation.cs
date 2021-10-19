@@ -10,8 +10,8 @@
 using System;
 using System.Diagnostics;
 using ChronosLib.Pooled;
+using EchelonScriptCommon.Data.Types;
 using EchelonScriptCompiler.CompilerCommon;
-using EchelonScriptCompiler.Data.Types;
 using EchelonScriptCompiler.Frontend;
 using EchelonScriptCompiler.Utilities;
 using Microsoft.CodeAnalysis;

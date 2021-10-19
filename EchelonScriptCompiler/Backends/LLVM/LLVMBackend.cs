@@ -11,12 +11,12 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using EchelonScriptCommon.Data.Types;
+using EchelonScriptCommon.Immix_GC;
+using EchelonScriptCommon.Utilities;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data;
-using EchelonScriptCompiler.Data.Types;
 using EchelonScriptCompiler.Frontend;
-using EchelonScriptCompiler.Immix_GC;
-using EchelonScriptCompiler.Utilities;
 using LLVMSharp.Interop;
 
 namespace EchelonScriptCompiler.Backends.LLVMBackend {

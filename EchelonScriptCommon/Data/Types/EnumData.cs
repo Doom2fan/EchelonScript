@@ -9,8 +9,9 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
+using EchelonScriptCommon.Utilities;
 
-namespace EchelonScriptCompiler.Data.Types {
+namespace EchelonScriptCommon.Data.Types {
     [StructLayout (LayoutKind.Sequential, Pack = 1)]
     [ES_ExportAggregate (new [] { "EchelonScript", "Reflection" }, "EnumData", ES_ExportAttributeBase.AggregateType.Struct)]
     public unsafe struct ES_EnumData {

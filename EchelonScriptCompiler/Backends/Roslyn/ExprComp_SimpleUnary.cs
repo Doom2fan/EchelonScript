@@ -9,8 +9,8 @@
 
 using System;
 using System.Diagnostics;
+using EchelonScriptCommon.Data.Types;
 using EchelonScriptCompiler.CompilerCommon;
-using EchelonScriptCompiler.Data.Types;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;

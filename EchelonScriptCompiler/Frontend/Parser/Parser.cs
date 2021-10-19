@@ -13,9 +13,9 @@ using System.Diagnostics;
 using System.Reflection;
 using ChronosLib.Pooled;
 using CommunityToolkit.HighPerformance.Buffers;
+using EchelonScriptCommon.Data.Types;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data;
-using EchelonScriptCompiler.Data.Types;
 
 namespace EchelonScriptCompiler.Frontend.Parser {
     public struct ES_AggregateModifiers {

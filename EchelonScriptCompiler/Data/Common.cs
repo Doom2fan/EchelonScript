@@ -8,43 +8,10 @@
  */
 
 using System;
-using System.Text;
-using CommunityToolkit.HighPerformance.Buffers;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Frontend.Parser;
 
 namespace EchelonScriptCompiler.Data {
-    public unsafe struct ArrayPointer<T>
-        : IEquatable<ArrayPointer<T>>
-        where T : unmanaged {
-        public static ArrayPointer<T> Null = new ArrayPointer<T> (null, 0);
-
-        public int Length;
-        public T* Elements;
-
-        public ArrayPointer (T* ptr, int len) {
-            Elements = ptr;
-            Length = len;
-        }
-
-        public Span<T> Span => new Span<T> (Elements, Length);
-
-        public bool Equals (ArrayPointer<T> other) {
-            if (Elements == null && other.Elements == null)
-                return true;
-            else if (Elements == null || other.Elements == null)
-                return false;
-            else if (Elements == other.Elements && Length == other.Length)
-                return true;
-            else
-                return false;
-        }
-
-        public override int GetHashCode () {
-            return HashCode.Combine (((IntPtr) Elements).GetHashCode (), Length.GetHashCode ());
-        }
-    }
-
     public struct EchelonScriptErrorMessage {
         public string? Message { get; }
 
@@ -83,55 +50,6 @@ namespace EchelonScriptCompiler.Data {
 
             Line = line;
             Column = column;
-        }
-    }
-
-    public enum ES_AccessModifier {
-        /// <summary>The symbol is only accessible from the context it was defined in.</summary>
-        Private,
-        /// <summary>The symbol is accessible from the context it was defined in and anything inheriting from it.</summary>
-        Protected,
-        /// <summary>The symbol is accessible from the context it was defined in, anything inheriting from it and from
-        /// anything defined in the same program/library as the context it was defined in.</summary>
-        ProtectedInternal,
-        /// <summary>The symbol is accessible from the context it was defined in and from anything defined in the same
-        /// program/library as the context it was defined in.</summary>
-        Internal,
-        /// <summary>The symbol is accessible from any context.</summary>
-        Public,
-    }
-
-    public enum ES_VirtualnessModifier {
-        None,
-        Virtual,
-        Abstract,
-        Override,
-    }
-
-    public readonly struct ES_FullyQualifiedName {
-        public readonly ArrayPointer<byte> NamespaceName;
-        public readonly ArrayPointer<byte> TypeName;
-
-        public string NamespaceNameString {
-            get => StringPool.Shared.GetOrAdd (NamespaceName.Span, Encoding.ASCII);
-        }
-        public string TypeNameString {
-            get => StringPool.Shared.GetOrAdd (TypeName.Span, Encoding.ASCII);
-        }
-
-        public ES_FullyQualifiedName (ArrayPointer<byte> namespaceName, ArrayPointer<byte> typeName) {
-            NamespaceName = namespaceName;
-            TypeName = typeName;
-        }
-
-        public string GetNameAsTypeString () {
-            Span<byte> bytes = stackalloc byte [NamespaceName.Length + TypeName.Length + 2];
-
-            NamespaceName.Span.CopyTo (bytes);
-            bytes.Slice (NamespaceName.Length, 2).Fill ((byte) ':');
-            TypeName.Span.CopyTo (bytes.Slice (NamespaceName.Length + 2));
-
-            return StringPool.Shared.GetOrAdd (bytes, Encoding.ASCII);
         }
     }
 }

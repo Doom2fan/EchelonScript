@@ -9,8 +9,9 @@
 
 using System;
 using System.Runtime.InteropServices;
+using EchelonScriptCommon.Utilities;
 
-namespace EchelonScriptCompiler.Data.Types {
+namespace EchelonScriptCommon.Data.Types {
     public enum ES_IntSize : int {
         Int8  = 0,
         Int16 = 1,

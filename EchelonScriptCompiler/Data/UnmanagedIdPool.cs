@@ -16,6 +16,7 @@ using System.Text;
 using ChronosLib.Pooled;
 using Collections.Pooled;
 using CommunityToolkit.HighPerformance;
+using EchelonScriptCommon.Utilities;
 using static TerraFX.Interop.Mimalloc;
 
 namespace EchelonScriptCompiler.Data {

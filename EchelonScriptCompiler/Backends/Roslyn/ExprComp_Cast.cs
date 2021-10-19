@@ -9,7 +9,7 @@
 
 using System;
 using System.Diagnostics;
-using EchelonScriptCompiler.Data.Types;
+using EchelonScriptCommon.Data.Types;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace EchelonScriptCompiler.Backends.RoslynBackend {

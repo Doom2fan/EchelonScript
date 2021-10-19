@@ -11,8 +11,8 @@ using System;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using ChronosLib.Pooled;
+using EchelonScriptCommon.Data.Types;
 using EchelonScriptCompiler.CompilerCommon;
-using EchelonScriptCompiler.Data.Types;
 using EchelonScriptCompiler.Frontend;
 using LLVMSharp.Interop;
 

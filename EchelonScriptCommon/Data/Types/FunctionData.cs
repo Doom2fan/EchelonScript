@@ -13,8 +13,9 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Text;
 using CommunityToolkit.HighPerformance.Buffers;
+using EchelonScriptCommon.Utilities;
 
-namespace EchelonScriptCompiler.Data.Types {
+namespace EchelonScriptCommon.Data.Types {
     [Flags]
     public enum ES_FunctionFlags : int {
         /// <summary>The function is a member function of a type, and has an implicit self pointer.</summary>

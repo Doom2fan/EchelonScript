@@ -9,9 +9,9 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
-using EchelonScriptCompiler.Utilities;
+using EchelonScriptCommon.Utilities;
 
-namespace EchelonScriptCompiler.Data.Types {
+namespace EchelonScriptCommon.Data.Types {
     public enum ES_MemberType : int {
         Field = 0,
         Function = 1,
