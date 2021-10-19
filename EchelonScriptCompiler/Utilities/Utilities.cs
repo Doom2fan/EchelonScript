@@ -9,7 +9,10 @@
 
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
+using ChronosLib.Pooled;
 using ChronosLib.Unmanaged;
+using CommunityToolkit.HighPerformance.Buffers;
 using EchelonScriptCompiler.Data;
 
 namespace EchelonScriptCompiler.Utilities {
@@ -36,6 +39,21 @@ namespace EchelonScriptCompiler.Utilities {
     }
 
     public static class ES_Utils {
+        public unsafe static string GetPooledString (this Span<byte> bytes, Encoding encoding)
+            => StringPool.Shared.GetOrAdd (bytes, encoding);
+
+        public unsafe static string GetPooledString (this ArrayPointer<byte> bytes, Encoding encoding)
+            => StringPool.Shared.GetOrAdd (bytes.Span, encoding);
+
+        public unsafe static string GetPooledString (this PooledArray<byte> bytes, Encoding encoding)
+            => StringPool.Shared.GetOrAdd (bytes.Span, encoding);
+
+        public static string GetPooledString (this ArrayPointer<char> chars)
+            => StringPool.Shared.GetOrAdd (chars.Span);
+
+        public static string GetPooledString (this PooledArray<char> chars)
+            => StringPool.Shared.GetOrAdd (chars.Span);
+
         public unsafe static ArrayPointer<T> GetArray<T> (this IMemoryManager manager, int count)
             where T : unmanaged {
             if (count < 1)
