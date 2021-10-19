@@ -681,6 +681,9 @@ namespace TestSuiteWPF.Tests {
                         case SimpleUnaryExprType.BitNot:
                             opText = "Bitwise NOT";
                             break;
+                        case SimpleUnaryExprType.Dereference:
+                            opText = "Dereference";
+                            break;
 
                         default:
                             throw new NotImplementedException ();
