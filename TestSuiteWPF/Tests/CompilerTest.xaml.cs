@@ -10,7 +10,6 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -19,6 +18,7 @@ using ChronosLib.Pooled;
 using CommunityToolkit.HighPerformance.Buffers;
 using EchelonScriptCompiler;
 using EchelonScriptCompiler.Backends.LLVMBackend;
+using EchelonScriptCompiler.Backends.RoslynBackend;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Data.Types;
 using EchelonScriptCompiler.Frontend;
@@ -28,7 +28,7 @@ namespace TestSuiteWPF.Tests {
     /// <summary>
     /// Interaction logic for CompilerTest.xaml
     /// </summary>
-    public partial class CompilerTestBase : UserControl {
+    public partial class CompilerTest : UserControl {
         protected enum MessageType {
             Error,
             Warning,
@@ -64,16 +64,11 @@ namespace TestSuiteWPF.Tests {
 
         System.Globalization.CultureInfo cultureInfo;
 
-        protected bool frontendOnly;
-        protected EchelonScript_Compiler compiler;
-
         #endregion
 
         #region ================== Constructors
 
-        protected CompilerTestBase (bool noBackend) {
-            frontendOnly = noBackend;
-
+        public CompilerTest () {
             InitializeComponent ();
 
             textMarkerService = new TextMarkerService (codeText);
@@ -85,11 +80,25 @@ namespace TestSuiteWPF.Tests {
             cultureInfo = new System.Globalization.CultureInfo (System.Globalization.CultureInfo.CurrentCulture.Name);
             cultureInfo.NumberFormat.NumberDecimalSeparator = ".";
             cultureInfo.NumberFormat.NumberGroupSeparator = "'";
+
+            AddCompiler ("Frontend only", EchelonScript_Compiler.Create ());
+            AddCompiler ("LLVM", EchelonScript_Compiler.Create<LLVMCompilerBackend> ());
+            AddCompiler ("Roslyn", EchelonScript_Compiler.Create<RoslynCompilerBackend> ());
+
+            compilerComboBox.SelectedIndex = 0;
         }
 
         #endregion
 
         #region ================== Instance methods
+
+        private void AddCompiler (string name, EchelonScript_Compiler compiler) {
+            var comboBoxItem = new ComboBoxItem ();
+            comboBoxItem.Content = name;
+            comboBoxItem.Tag = compiler;
+
+            compilerComboBox.Items.Add (comboBoxItem);
+        }
 
         private void DisplaySquiggly (int column, int lineNumber, int length, string message, Color col) {
             if (lineNumber >= 1 && lineNumber <= codeText.Document.LineCount) {
@@ -109,19 +118,108 @@ namespace TestSuiteWPF.Tests {
             }
         }
 
-        #endregion
+        private TreeViewItem AddNodeToTree (string nodeText, TreeViewItem parentItem) {
+            var thisItem = new TreeViewItem ();
+            parentItem.Items.Add (thisItem);
+            thisItem.Header = nodeText;
 
-        #region ================== Event handlers
+            return thisItem;
+        }
 
-        [UnmanagedFunctionPointer (CallingConvention.Cdecl)] public delegate int Int32Int32Int32Delegate (int a, int b);
-        [UnmanagedFunctionPointer (CallingConvention.Cdecl)] public delegate float FloatFloatFloatDelegate (float a, float b);
+        private unsafe void AddTypeToTree (ES_TypeInfo* typeData, TreeViewItem parentItem) {
+            string typeType = null;
+
+            switch (typeData->TypeTag) {
+                case ES_TypeTag.Void: typeType = "Void"; break;
+                case ES_TypeTag.Bool: typeType = "Bool"; break;
+                case ES_TypeTag.Int: typeType = "Int"; break;
+                case ES_TypeTag.Float: typeType = "Float"; break;
+
+                case ES_TypeTag.Function: typeType = "Prototype"; break;
+                case ES_TypeTag.Struct: typeType = "Struct"; break;
+                case ES_TypeTag.Class: typeType = "Class"; break;
+                case ES_TypeTag.Enum: typeType = "Enum"; break;
+                case ES_TypeTag.Interface: typeType = "Interface"; break;
+
+                case ES_TypeTag.Reference: typeType = "Reference"; break;
+                case ES_TypeTag.Const: typeType = "Const"; break;
+                case ES_TypeTag.Immutable: typeType = "Immutable"; break;
+                case ES_TypeTag.Array: typeType = "Array"; break;
+
+                default: typeType = "[UNRECOGNIZED]"; break;
+            }
+
+            var typeNode = AddNodeToTree ($"{typeType} {typeData->Name.TypeNameString}", parentItem);
+
+            AddNodeToTree ($"Runtime size: {typeData->RuntimeSize}", typeNode);
+            AddNodeToTree ($"Fully qualified name: {typeData->Name.GetNameAsTypeString ()}", typeNode);
+            AddNodeToTree ($"Source unit: {typeData->SourceUnitString}", typeNode);
+
+            if (typeData->TypeTag == ES_TypeTag.Function) {
+                var funcData = (ES_FunctionPrototypeData*) typeData;
+
+                AddNodeToTree ($"Return type: {funcData->ReturnType->Name.GetNameAsTypeString ()}", typeNode);
+
+                var argsListNode = AddNodeToTree ($"Arguments list", typeNode);
+                foreach (var arg in funcData->ArgumentsList.Span) {
+                    string argType = arg.ArgType.ToString ();
+                    string argTypeName;
+
+                    if (arg.ValueType != null)
+                        argTypeName = arg.ValueType->Name.GetNameAsTypeString ();
+                    else
+                        argTypeName = "[NULL]";
+
+                    AddNodeToTree ($"{argType} {argTypeName}", argsListNode);
+                }
+            }
+        }
+
+        private unsafe void AddFunctionToTree (ES_FunctionData* functionData, TreeViewItem parentItem) {
+            var typeNode = AddNodeToTree ($"Function {functionData->Name.TypeNameString}", parentItem);
+
+            AddNodeToTree ($"Fully qualified name: {functionData->Name.GetNameAsTypeString ()}", typeNode);
+            AddNodeToTree ($"Source unit: {functionData->SourceUnitString}", typeNode);
+
+            var protoData = functionData->FunctionType;
+            AddNodeToTree ($"Return type: {protoData->ReturnType->Name.GetNameAsTypeString ()}", typeNode);
+
+            var argsListNode = AddNodeToTree ($"Arguments list", typeNode);
+            var reqArgsCount = protoData->ArgumentsList.Length - functionData->OptionalArgsCount;
+            for (int i = 0; i < protoData->ArgumentsList.Length; i++) {
+                var argProto = protoData->ArgumentsList.Span [i];
+                var argData = functionData->Arguments.Span [i];
+
+                var argType = string.Empty;
+                var argTypeName = "[NULL]";
+                var argName = StringPool.Shared.GetOrAdd (argData.Name.Span, Encoding.ASCII);
+                var argDef = string.Empty;
+
+                if (argProto.ArgType != ES_ArgumentType.Normal)
+                    argType = $"{argProto.ArgType} ";
+
+                if (argProto.ValueType != null)
+                    argTypeName = argProto.ValueType->Name.GetNameAsTypeString ();
+
+                if (i >= reqArgsCount)
+                    argDef = " = [...]";
+
+                AddNodeToTree ($"{argType}{argName} {argTypeName}{argDef}", argsListNode);
+            }
+        }
+
+        public delegate int Int32Int32Int32Delegate (int a, int b);
+        public delegate float FloatFloatFloatDelegate (float a, float b);
 
         Random rand = new Random ();
-        private unsafe void codeText_TextChanged (object sender, EventArgs e) {
-            string code = codeText.Text;
+        private unsafe void CompileCode () {
+            var code = codeText.Text;
 
             using var codeUnits = new StructPooledList<ReadOnlyMemory<char>> (CL_ClearMode.Auto);
             codeUnits.Add (code.AsMemory ());
+
+            var compiler = (compilerComboBox.SelectedItem as ComboBoxItem)!.Tag as EchelonScript_Compiler;
+            bool frontendOnly = !compiler.HasBackend;
 
             compiler.Reset ();
             compiler.Setup (out var env);
@@ -254,95 +352,16 @@ namespace TestSuiteWPF.Tests {
             }
         }
 
-        private TreeViewItem AddNodeToTree (string nodeText, TreeViewItem parentItem) {
-            var thisItem = new TreeViewItem ();
-            parentItem.Items.Add (thisItem);
-            thisItem.Header = nodeText;
+        #endregion
 
-            return thisItem;
+        #region ================== Event handlers
+
+        private void codeText_TextChanged (object sender, EventArgs e) {
+            if (compileOnEditCheckbox.IsChecked == true)
+                CompileCode ();
         }
 
-        private unsafe void AddTypeToTree (ES_TypeInfo* typeData, TreeViewItem parentItem) {
-            string typeType = null;
-
-            switch (typeData->TypeTag) {
-                case ES_TypeTag.Void: typeType = "Void"; break;
-                case ES_TypeTag.Bool: typeType = "Bool"; break;
-                case ES_TypeTag.Int: typeType = "Int"; break;
-                case ES_TypeTag.Float: typeType = "Float"; break;
-
-                case ES_TypeTag.Function: typeType = "Prototype"; break;
-                case ES_TypeTag.Struct: typeType = "Struct"; break;
-                case ES_TypeTag.Class: typeType = "Class"; break;
-                case ES_TypeTag.Enum: typeType = "Enum"; break;
-                case ES_TypeTag.Interface: typeType = "Interface"; break;
-
-                case ES_TypeTag.Reference: typeType = "Reference"; break;
-                case ES_TypeTag.Const: typeType = "Const"; break;
-                case ES_TypeTag.Immutable: typeType = "Immutable"; break;
-                case ES_TypeTag.Array: typeType = "Array"; break;
-
-                default: typeType = "[UNRECOGNIZED]"; break;
-            }
-
-            var typeNode = AddNodeToTree ($"{typeType} {typeData->Name.TypeNameString}", parentItem);
-
-            AddNodeToTree ($"Runtime size: {typeData->RuntimeSize}", typeNode);
-            AddNodeToTree ($"Fully qualified name: {typeData->Name.GetNameAsTypeString ()}", typeNode);
-            AddNodeToTree ($"Source unit: {typeData->SourceUnitString}", typeNode);
-
-            if (typeData->TypeTag == ES_TypeTag.Function) {
-                var funcData = (ES_FunctionPrototypeData*) typeData;
-
-                AddNodeToTree ($"Return type: {funcData->ReturnType->Name.GetNameAsTypeString ()}", typeNode);
-
-                var argsListNode = AddNodeToTree ($"Arguments list", typeNode);
-                foreach (var arg in funcData->ArgumentsList.Span) {
-                    string argType = arg.ArgType.ToString ();
-                    string argTypeName;
-
-                    if (arg.ValueType != null)
-                        argTypeName = arg.ValueType->Name.GetNameAsTypeString ();
-                    else
-                        argTypeName = "[NULL]";
-
-                    AddNodeToTree ($"{argType} {argTypeName}", argsListNode);
-                }
-            }
-        }
-
-        private unsafe void AddFunctionToTree (ES_FunctionData* functionData, TreeViewItem parentItem) {
-            var typeNode = AddNodeToTree ($"Function {functionData->Name.TypeNameString}", parentItem);
-
-            AddNodeToTree ($"Fully qualified name: {functionData->Name.GetNameAsTypeString ()}", typeNode);
-            AddNodeToTree ($"Source unit: {functionData->SourceUnitString}", typeNode);
-
-            var protoData = functionData->FunctionType;
-            AddNodeToTree ($"Return type: {protoData->ReturnType->Name.GetNameAsTypeString ()}", typeNode);
-
-            var argsListNode = AddNodeToTree ($"Arguments list", typeNode);
-            var reqArgsCount = protoData->ArgumentsList.Length - functionData->OptionalArgsCount;
-            for (int i = 0; i < protoData->ArgumentsList.Length; i++) {
-                var argProto = protoData->ArgumentsList.Span [i];
-                var argData = functionData->Arguments.Span [i];
-
-                var argType = string.Empty;
-                var argTypeName = "[NULL]";
-                var argName = StringPool.Shared.GetOrAdd (argData.Name.Span, Encoding.ASCII);
-                var argDef = string.Empty;
-
-                if (argProto.ArgType != ES_ArgumentType.Normal)
-                    argType = $"{argProto.ArgType} ";
-
-                if (argProto.ValueType != null)
-                    argTypeName = argProto.ValueType->Name.GetNameAsTypeString ();
-
-                if (i >= reqArgsCount)
-                    argDef = " = [...]";
-
-                AddNodeToTree ($"{argType}{argName} {argTypeName}{argDef}", argsListNode);
-            }
-        }
+        private void CompileButton_Click (object sender, System.Windows.RoutedEventArgs e) => CompileCode ();
 
         private void errorsList_MouseDoubleClick (object sender, MouseButtonEventArgs e) {
             if (errorsList.SelectedItem is not CompilerMessage)
@@ -365,17 +384,5 @@ namespace TestSuiteWPF.Tests {
         }
 
         #endregion
-    }
-
-    public class FrontendTest : CompilerTestBase {
-        public FrontendTest () : base (true) {
-            compiler = EchelonScript_Compiler.Create ();
-        }
-    }
-
-    public class CompilerTestLLVM : CompilerTestBase {
-        public CompilerTestLLVM () : base (false) {
-            compiler = EchelonScript_Compiler.Create<LLVMCompilerBackend> ();
-        }
     }
 }
