@@ -302,7 +302,7 @@ namespace EchelonScriptCommon.Immix_GC {
 
         [UnmanagedCallersOnly (CallConvs = new [] { typeof (CallConvCdecl) })]
         public static void* AllocArrayUnmanaged (ES_ArrayTypeData* arrayType, int* dimSizesPtr, int dimsCount)
-            => AllocArray (arrayType, dimSizesPtr, dimsCount);
+            => AllocArray (arrayType, new Span<int> (dimSizesPtr, dimsCount));
 
         public static T* AllocObject<T> (ES_TypeInfo* type, T defaultVal = default) where T : unmanaged {
             var ptr = (T*) AllocObject (type);
@@ -363,23 +363,21 @@ namespace EchelonScriptCommon.Immix_GC {
             return (byte*) objHeader + sizeof (ImmixObjectHeader);
         }
 
-        public static void* AllocArray (ES_ArrayTypeData* arrayType, int* dimSizesPtr, int dimsCount) {
+        public static void* AllocArray (ES_ArrayTypeData* arrayType, Span<int> dimSizes) {
             EnsureInitialized ();
 
             var elementType = arrayType->ElementType;
-            var dimSizesSpan = new Span<int> (dimSizesPtr, dimsCount);
-
             int elemSize = elementType->RuntimeSize;
 
             // Calculate the total number of elements.
             int totalElemsCount = 1;
 
-            foreach (var dim in dimSizesSpan)
+            foreach (var dim in dimSizes)
                 totalElemsCount *= dim;
 
             // Calculate the array object's sizes.
             int arrSize = elemSize * totalElemsCount;
-            int arrHeaderSize = dimsCount * sizeof (int);
+            int arrHeaderSize = dimSizes.Length * sizeof (int);
 
             int allocSize = sizeof (ImmixObjectHeader) + arrHeaderSize + arrSize;
 
@@ -434,7 +432,7 @@ namespace EchelonScriptCommon.Immix_GC {
 
             // Copy the array dimensions to the start of the array object.
             var arrHeader = (byte*) objHeader + sizeof (ImmixObjectHeader);
-            dimSizesSpan.CopyTo (new Span<int> (arrHeader, dimsCount));
+            dimSizes.CopyTo (new Span<int> (arrHeader, dimSizes.Length));
 
             return arrHeader + arrHeaderSize;
         }
