@@ -182,12 +182,28 @@ namespace EchelonScriptCompiler.Frontend {
             Debug.Assert (retType is not null);
 
             foreach (var arg in funcDef.ArgumentsList) {
-                if (arg.ArgType != ES_ArgumentType.Normal)
-                    throw new NotImplementedException ("[TODO] Argument type not implemented yet.");
-
                 var argName = idPool.GetIdentifier (arg.Name.Text.Span);
                 var argValType = GetTypeRef (arg.ValueType);
-                symbols.AddSymbol (argName, NewSymbolVariable (argValType));
+
+                var flags = (FrontendSymbolFlags) 0;
+
+                switch (arg.ArgType) {
+                    case ES_ArgumentType.Normal:
+                        break;
+
+                    case ES_ArgumentType.Ref:
+                        flags |= FrontendSymbolFlags.RefVar;
+                        break;
+
+                    case ES_ArgumentType.In:
+                    case ES_ArgumentType.Out:
+                        throw new NotImplementedException ("[TODO] Argument type not implemented yet.");
+
+                    default:
+                        throw new NotImplementedException ("Argument type not implemented yet.");
+                }
+
+                symbols.AddSymbol (argName, NewSymbolVariable (argValType, flags));
 
                 if (arg.DefaultExpression is not null) {
                     var argDefExpr = CheckTypes_Expression (ref transUnit, symbols, unitSrc, arg.DefaultExpression, argValType);

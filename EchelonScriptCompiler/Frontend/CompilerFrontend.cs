@@ -85,7 +85,9 @@ namespace EchelonScriptCompiler.Frontend {
     }
 
     public enum FrontendSymbolFlags {
-        UsingVar,
+        UsingVar = 1,
+        RefVar   = 1 << 1,
+        OutVar   = 1 << 2,
     }
 
     public unsafe struct FrontendSymbol {
