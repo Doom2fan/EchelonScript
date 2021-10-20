@@ -337,47 +337,48 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
             // Handle passed-in args.
             for (; argIdx < callArgCount; argIdx++) {
-                var arg = funcCallExpr.Arguments [argIdx];
                 var argData = func->Arguments.Elements + argIdx;
                 var argTypeData = funcType->ArgumentsList.Elements + argIdx;
 
-                if (argTypeData->ArgType == ES_ArgumentType.Normal && arg.ArgType != ES_ArgumentType.Normal)
-                    throw new CompilationException (ES_BackendErrors.FrontendError);
-
-                if (argTypeData->ArgType != ES_ArgumentType.Normal && arg.ArgType != argTypeData->ArgType)
-                    throw new CompilationException (ES_BackendErrors.FrontendError);
+                if (argTypeData->ArgType == ES_ArgumentType.In || argTypeData->ArgType == ES_ArgumentType.Out)
+                    throw new NotImplementedException ("[TODO] Argument type not implemented yet.");
 
                 var argValType = argTypeData->ValueType;
-                var argExprData = GenerateCode_Expression (ref transUnit, symbols, src, arg.ValueExpression, argValType);
+                ES_AstExpression argValExpr;
+                if (argIdx < callArgCount) {
+                    var arg = funcCallExpr.Arguments [argIdx];
+
+                    if (argTypeData->ArgType == ES_ArgumentType.Normal && arg.ArgType != ES_ArgumentType.Normal)
+                        throw new CompilationException (ES_BackendErrors.FrontendError);
+                    else if (argTypeData->ArgType != ES_ArgumentType.Normal && arg.ArgType != argTypeData->ArgType)
+                        throw new CompilationException (ES_BackendErrors.FrontendError);
+
+                    argValExpr = arg.ValueExpression;
+                } else {
+                    var arg = funcAST.ArgumentsList [argIdx];
+
+                    if (arg.DefaultExpression is null)
+                        throw new CompilationException (ES_BackendErrors.FrontendError);
+                    if (argTypeData->ArgType != ES_ArgumentType.Normal && argTypeData->ArgType != ES_ArgumentType.In)
+                        throw new CompilationException (ES_BackendErrors.FrontendError);
+
+                    argValExpr = arg.DefaultExpression;
+                }
+
+                var argExprData = GenerateCode_Expression (ref transUnit, symbols, src, argValExpr, argValType);
 
                 GenerateCode_EnsureImplicitCompat (ref argExprData, argValType);
                 Debug.Assert (argExprData.Value is not null);
 
                 if (argIdx > 0)
                     argsArr.Add (Token (SyntaxKind.CommaToken));
-                argsArr.Add (Argument (argExprData.Value));
-            }
 
-            // Handle default args.
-            for (; argIdx < funcArgCount; argIdx++) {
-                var arg = funcAST.ArgumentsList [argIdx];
-                var argData = func->Arguments.Elements + argIdx;
-                var argTypeData = funcType->ArgumentsList.Elements + argIdx;
+                var argExpr = Argument (argExprData.Value);
 
-                if (arg.DefaultExpression is null)
-                    throw new CompilationException (ES_BackendErrors.FrontendError);
-                if (argTypeData->ArgType != ES_ArgumentType.Normal && argTypeData->ArgType != ES_ArgumentType.In)
-                    throw new CompilationException (ES_BackendErrors.FrontendError);
+                if (argTypeData->ArgType == ES_ArgumentType.Ref)
+                    argExpr = argExpr.WithRefKindKeyword (Token (SyntaxKind.RefKeyword));
 
-                var argValType = argTypeData->ValueType;
-                var argExprData = GenerateCode_Expression (ref transUnit, symbols, src, arg.DefaultExpression, argValType);
-
-                GenerateCode_EnsureImplicitCompat (ref argExprData, argValType);
-                Debug.Assert (argExprData.Value is not null);
-
-                if (argIdx > 0)
-                    argsArr.Add (Token (SyntaxKind.CommaToken));
-                argsArr.Add (Argument (argExprData.Value));
+                argsArr.Add (argExpr);
             }
 
             var value = InvocationExpression (innerExpression)

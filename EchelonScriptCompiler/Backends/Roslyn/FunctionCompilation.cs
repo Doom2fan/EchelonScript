@@ -137,13 +137,16 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 var protoArg = protoArgsList [argNum];
                 var funcArg = funcArgsList [argNum];
 
-                if (protoArg.ArgType != ES_ArgumentType.Normal)
+                if (protoArg.ArgType == ES_ArgumentType.In || protoArg.ArgType == ES_ArgumentType.Out)
                     throw new NotImplementedException ("[TODO] Argument type not implemented yet.");
 
                 var roslynType = GetRoslynType (protoArg.ValueType);
                 var argIdent = Identifier (funcArg.Name.GetPooledString (Encoding.ASCII));
 
                 var parameterData = Parameter (argIdent).WithType (roslynType);
+
+                if (protoArg.ArgType == ES_ArgumentType.Ref)
+                    parameterData = parameterData.WithModifiers (TokenList (Token (SyntaxKind.RefKeyword)));
 
                 if (argNum > 0)
                     argsArr.Add (Token (SyntaxKind.CommaToken));
@@ -200,6 +203,14 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 switch (argTypeInfo.ArgType) {
                     case ES_ArgumentType.Normal:
                         break;
+
+                    case ES_ArgumentType.Ref:
+                        argFlags |= VariableFlags.Ref;
+                        break;
+
+                    case ES_ArgumentType.In:
+                    case ES_ArgumentType.Out:
+                        throw new NotImplementedException ("[TODO] Argument type not implemented.");
 
                     default:
                         throw new NotImplementedException ("Argument type not implemented.");
