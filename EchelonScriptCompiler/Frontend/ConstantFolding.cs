@@ -501,8 +501,26 @@ namespace EchelonScriptCompiler.Frontend {
             var idPool = Environment.IdPool;
 
             switch (expr) {
-                case ES_AstParenthesisExpression parenExpr:
-                    return FoldConstants_Expression (ref transUnit, symbols, src, ref parenExpr.Inner, expectedType);
+                case ES_AstParenthesisExpression parenExpr: {
+                    var innerExpr = FoldConstants_Expression (ref transUnit, symbols, src, ref parenExpr.Inner, expectedType);
+
+                    switch (innerExpr.Expr) {
+                        case ES_AstBooleanConstantExpression boolExpr:
+                            expr = new ES_AstBooleanConstantExpression (boolExpr.Value, expr);
+                            break;
+                        case ES_AstIntegerConstantExpression intExpr:
+                            expr = new ES_AstIntegerConstantExpression (intExpr.IntType, intExpr.Value, expr);
+                            break;
+                        case ES_AstFloat32ConstantExpression float32Expr:
+                            expr = new ES_AstFloat32ConstantExpression (float32Expr.Value, expr);
+                            break;
+                        case ES_AstFloat64ConstantExpression float64Expr:
+                            expr = new ES_AstFloat64ConstantExpression (float64Expr.Value, expr);
+                            break;
+                    }
+
+                    return new ExpressionData { Expr = expr, Type = typeUnkn };
+                }
 
                 #region Primary expressions
 
