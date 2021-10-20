@@ -75,8 +75,14 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             var typeUnkn = env.TypeUnknownValue;
 
             switch (expr) {
-                case ES_AstParenthesisExpression parenExpr:
-                    return GenerateCode_Expression (ref transUnit, symbols, src, parenExpr.Inner, expectedType);
+                case ES_AstParenthesisExpression parenExpr: {
+                    var innerExpr = GenerateCode_Expression (ref transUnit, symbols, src, parenExpr.Inner, expectedType);
+
+                    if (innerExpr.Value is not null)
+                        innerExpr.Value = ParenthesizedExpression (innerExpr.Value);
+
+                    return innerExpr;
+                }
 
                 #region Primary expressions
 
