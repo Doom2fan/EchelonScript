@@ -11,6 +11,8 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Threading;
+using ChronosLib.Unmanaged;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.Utilities;
 using static TerraFX.Interop.Mimalloc;
@@ -58,6 +60,17 @@ namespace EchelonScriptCommon.Immix_GC {
         public ImmixObjectFlags Flags;
         public short Size;
         public ES_TypeInfo* TypeData;
+    }
+
+    public struct ImmixDebugInfo {
+        public int BlockCount;
+        public int EmptyBlocks;
+        public int FullBlocks;
+        public int RecyclableBlocks;
+
+        public int CurrentBlockIndex;
+        public int BlockStride;
+        public UnmanagedArray<byte> Blocks;
     }
 
     public unsafe static class ImmixGC {
@@ -295,6 +308,66 @@ namespace EchelonScriptCommon.Immix_GC {
 
                 initialized = true;
             }
+        }
+
+        public static void GetInfo (out ImmixDebugInfo info, out ImmixDebugInfo overflowInfo) {
+            if (!initialized) {
+                info = default;
+                overflowInfo = default;
+
+                return;
+            }
+
+            info = GetInfo (ref allocData);
+            overflowInfo = GetInfo (ref overflowAllocData);
+        }
+
+        private static ImmixDebugInfo GetInfo (ref AllocData alloc) {
+            int blockStride = LinesCount / 8;
+            if (blockStride * 8 != LinesCount)
+                blockStride++;
+
+            var blocks = UnmanagedArray<byte>.GetArray (alloc.BlocksList.Count * blockStride);
+            var blocksSpan = blocks.Span;
+
+            int fullBlocks = 0;
+            int emptyBlocks = 0;
+            int recyclableBlocks = 0;
+
+            int blockIdx = 0;
+            foreach (var block in alloc.BlocksList.Span) {
+                switch (block.UsageLevel) {
+                    case ImmixBlockUsage.Empty: emptyBlocks++; break;
+                    case ImmixBlockUsage.Filled: fullBlocks++; break;
+                    case ImmixBlockUsage.Recyclable: recyclableBlocks++; break;
+                }
+
+                var lineMapSpan = block.LineMap.Span;
+                var linesSpan = blocksSpan.Slice (blockStride * blockIdx, blockStride);
+                for (int lineIdx = 0; lineIdx < LinesCount; lineIdx++) {
+                    byte lineMapChunk = 0;
+
+                    int chunkLen = Math.Min (8, LinesCount - lineIdx);
+                    var lineMapMidSpan = lineMapSpan.Slice (lineIdx, chunkLen);
+                    for (byte i = 0; i < chunkLen; i++)
+                        lineMapChunk |= (byte) ((lineMapMidSpan [i] & 1) << i);
+
+                    linesSpan [lineIdx / 8] = lineMapChunk;
+                }
+
+                blockIdx++;
+            }
+
+            return new ImmixDebugInfo {
+                BlockCount = alloc.BlocksList.Count,
+                EmptyBlocks = emptyBlocks,
+                FullBlocks = fullBlocks,
+                RecyclableBlocks = recyclableBlocks,
+
+                CurrentBlockIndex = alloc.CurBlockIndex,
+                BlockStride = blockStride,
+                Blocks = blocks,
+            };
         }
 
         [UnmanagedCallersOnly (CallConvs = new [] { typeof (CallConvCdecl) })]
