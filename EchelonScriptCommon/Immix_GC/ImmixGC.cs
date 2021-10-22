@@ -442,10 +442,13 @@ namespace EchelonScriptCommon.Immix_GC {
 
     internal unsafe static class ImmixGC_GlobalAllocator {
         private static List<ImmixBlock> freeBlocks;
+        private static int totalBlocks;
 
         static ImmixGC_GlobalAllocator () {
             freeBlocks = new List<ImmixBlock> ();
         }
+
+        public static (int Total, int Free) GetBlockCount () => (totalBlocks, freeBlocks.Count);
 
         internal static ImmixBlock GetBlock () {
             bool gotBlock = false;
@@ -465,7 +468,7 @@ namespace EchelonScriptCommon.Immix_GC {
                 block = new ImmixBlock (mem);
                 block.LineMap.Span.Fill (0);
 
-                gotBlock = true;
+                Interlocked.Increment (ref totalBlocks);
             }
 
             block.UsageLevel = ImmixBlockUsage.Empty;
