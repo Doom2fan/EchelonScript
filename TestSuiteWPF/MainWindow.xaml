@@ -4,7 +4,6 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:TestSuiteWPF"
-        xmlns:avalon="http://icsharpcode.net/sharpdevelop/avalonedit"
         xmlns:Tests="clr-namespace:TestSuiteWPF.Tests" x:Class="TestSuiteWPF.MainWindow"
         mc:Ignorable="d"
         Title="TestSuite" Width="816" Height="489">
@@ -24,7 +23,10 @@
                 <Tests:CompilerTest />
             </Grid>
         </TabItem>
+        <TabItem Header="GC Info">
+            <Grid Background="#FFE5E5E5">
+                <Tests:GCInfo />
+            </Grid>
+        </TabItem>
     </TabControl>
-
-
 </Window>
