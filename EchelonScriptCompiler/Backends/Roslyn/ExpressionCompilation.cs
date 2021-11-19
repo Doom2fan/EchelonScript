@@ -382,7 +382,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             }
 
             var value = InvocationExpression (innerExpression)
-                .WithArgumentList (ArgumentList (SeparatedList<ArgumentSyntax> (argsArr)));
+                .WithArgumentList (ArgumentList (SeparatedListSpan<ArgumentSyntax> (argsArr.Span)));
 
             return new ExpressionData { Expr = funcCallExpr, Type = funcType->ReturnType, Value = value, Constant = false, Addressable = false };
         }
@@ -439,7 +439,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
             // Generate the function call.
             ExpressionSyntax ret = InvocationExpression (accessExpr)
-                .WithArgumentList (ArgumentList (SeparatedList<ArgumentSyntax> (argsList)));
+                .WithArgumentList (ArgumentList (SeparatedListSpan<ArgumentSyntax> (argsList.Span)));
 
             if (isReference)
                 ret = CastExpression (PointerType (roslynType), ret);

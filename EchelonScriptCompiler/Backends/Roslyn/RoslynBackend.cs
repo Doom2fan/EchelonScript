@@ -516,13 +516,13 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 ).WithModifiers (TokenList (
                     Token (SyntaxKind.PublicKeyword),
                     Token (SyntaxKind.StaticKeyword)
-                )).WithBody (Block (globalStaticConsBody))
+                )).WithBody (BlockSpan (globalStaticConsBody.Span))
             );
 
             // Create the global storage type and add it to the definitions list.
             memberDefinitions.Add (
                 StructDeclaration (GlobalStorageTypeName)
-                .WithMembers (List (globalFunctions))
+                .WithMembers (ListSpan (globalFunctions.Span))
                 .WithModifiers (TokenList (
                     Token (SyntaxKind.PublicKeyword),
                     Token (SyntaxKind.UnsafeKeyword)
@@ -531,7 +531,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
             // Create the namespace and compilation unit.
             var namespaceName = IdentifierName (NamespaceName);
-            var namespaceDecl = NamespaceDeclaration (namespaceName).WithMembers (List (memberDefinitions));
+            var namespaceDecl = NamespaceDeclaration (namespaceName).WithMembers (ListSpan (memberDefinitions.Span));
 
             var compUnit = CompilationUnit ().WithMembers (
                 SingletonList<MemberDeclarationSyntax> (namespaceDecl)
@@ -666,6 +666,33 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 ret = QualifiedName (ret, IdentifierName (name [i]));
 
             return ret;
+        }
+
+        private SeparatedSyntaxList<TNode> SeparatedListSpan<TNode> (ReadOnlySpan<SyntaxNodeOrToken> nodes) where TNode : SyntaxNode {
+            var nodesList = new SyntaxNodeOrTokenList ();
+            foreach (var node in nodes)
+                nodesList = nodesList.Add (node);
+
+            return SeparatedList<TNode> (nodesList);
+        }
+
+        private SyntaxList<TNode> ListSpan<TNode> (Span<TNode> statements) where TNode : SyntaxNode
+            => ListSpan ((ReadOnlySpan<TNode>) statements);
+
+        private SyntaxList<TNode> ListSpan<TNode> (ReadOnlySpan<TNode> nodes) where TNode : SyntaxNode {
+            var nodesList = new SyntaxList<TNode> ();
+            foreach (var node in nodes)
+                nodesList = nodesList.Add (node);
+
+            return List (nodesList);
+        }
+
+        private BlockSyntax BlockSpan (ReadOnlySpan<StatementSyntax> statements) {
+            var stmtsList = new SyntaxList<StatementSyntax> ();
+            foreach (var stmt in statements)
+                stmtsList = stmtsList.Add (stmt);
+
+            return Block (stmtsList);
         }
 
         #endregion

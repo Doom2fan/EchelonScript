@@ -100,7 +100,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                     var structName = IdentifierName (MangleTypeName (varType));
                     var initExpr = InitializerExpression (
                         SyntaxKind.ObjectInitializerExpression,
-                        SeparatedList<ExpressionSyntax> (initExprNodes.ToArray ())
+                        SeparatedListSpan<ExpressionSyntax> (initExprNodes.ToArray ())
                     );
                     return ObjectCreationExpression (structName).WithInitializer (initExpr);
                 }
@@ -154,7 +154,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             }
 
             var retType = funcData->FunctionType->ReturnType;
-            var paramsList = ParameterList (SeparatedList<ParameterSyntax> (argsArr));
+            var paramsList = ParameterList (SeparatedListSpan<ParameterSyntax> (argsArr.Span));
 
             if (namespaceData is not null) {
                 return (MethodDeclaration (GetRoslynType (retType), MangleGlobalFunctionName (funcData))
@@ -297,7 +297,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
                     symbols.Pop ();
 
-                    return new StatementData (Block (stmtsList), alwaysReturns);
+                    return new StatementData (BlockSpan (stmtsList.Span), alwaysReturns);
                 }
 
                 #region Symbol definition
@@ -513,14 +513,14 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                             iterExprs.Add (exprData.Value);
                         }
 
-                        statement = statement.WithIncrementors (SeparatedList<ExpressionSyntax> (iterExprs));
+                        statement = statement.WithIncrementors (SeparatedListSpan<ExpressionSyntax> (iterExprs.Span));
                     }
 
                     loopBlock.Add (statement);
 
                     symbols.Pop ();
 
-                    return new StatementData (Block (loopBlock), false);
+                    return new StatementData (BlockSpan (loopBlock.Span), false);
                 }
 
                 #endregion
