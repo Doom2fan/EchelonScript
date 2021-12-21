@@ -11,6 +11,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Text;
+using System.Linq;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -63,6 +64,9 @@ namespace TestSuiteWPF.Tests {
         protected TextMarkerService textMarkerService;
 
         System.Globalization.CultureInfo cultureInfo;
+
+        EchelonScriptEnvironment env;
+        Random rand = new Random ();
 
         #endregion
 
@@ -211,7 +215,6 @@ namespace TestSuiteWPF.Tests {
         public delegate int Int32Int32Int32Delegate (int a, int b);
         public delegate float FloatFloatFloatDelegate (float a, float b);
 
-        Random rand = new Random ();
         private unsafe void CompileCode () {
             var code = codeText.Text;
 
@@ -219,10 +222,11 @@ namespace TestSuiteWPF.Tests {
             codeUnits.Add (code.AsMemory ());
 
             var compiler = (compilerComboBox.SelectedItem as ComboBoxItem)!.Tag as EchelonScript_Compiler;
-            bool frontendOnly = !compiler.HasBackend;
+            var frontendOnly = !compiler.HasBackend;
 
+            env?.Dispose ();
             compiler.Reset ();
-            compiler.Setup (out var env);
+            compiler.Setup (out env);
             compiler.AddTranslationUnit ("MainUnit", codeUnits.Span);
             compiler.Compile ();
 
@@ -262,8 +266,42 @@ namespace TestSuiteWPF.Tests {
             rootItem.IsExpanded = true;
             symbolsTreeView.Items.Add (rootItem);
 
-            if (errList.Count > 0)
+            if (errList.Count > 0) {
+                env?.Dispose ();
+                env = null;
                 return;
+            }
+
+            foreach (var namespaceKVP in env.Namespaces) {
+                var namespaceData = namespaceKVP.Value;
+                var namespaceNode = AddNodeToTree (namespaceData.NamespaceNameString, rootItem);
+                namespaceNode.IsExpanded = true;
+
+                foreach (var typeDataPtr in namespaceData.Types)
+                    AddTypeToTree (typeDataPtr.Address, namespaceNode);
+
+                foreach (var funcKVP in namespaceData.Functions)
+                    AddFunctionToTree (funcKVP.Value.Address, namespaceNode);
+            }
+
+            if (frontendOnly) {
+                env.Dispose ();
+                env = null;
+                return;
+            }
+
+            if (runOnCompile.IsChecked == true)
+                RunCode ();
+        }
+
+        private unsafe void RunCode () {
+            if (env is null)
+                return;
+
+            var newErrList = errList.Where (msg => msg.Type != "Output").ToArray ();
+            errList.Clear ();
+            foreach (var err in newErrList)
+                errList.Add (err);
 
             var testI32Name = "testI32";
             var testF32Name = "testF32";
@@ -279,18 +317,12 @@ namespace TestSuiteWPF.Tests {
             var typeFloat32 = env.GetFullyQualifiedType (env.GlobalTypesNamespace, idFloat32);
 
             Debug.Assert (typeInt32 is not null);
+            Debug.Assert (typeFloat32 is not null);
+
             foreach (var namespaceKVP in env.Namespaces) {
                 var namespaceData = namespaceKVP.Value;
-                var namespaceNode = AddNodeToTree (namespaceData.NamespaceNameString, rootItem);
-                namespaceNode.IsExpanded = true;
 
-                foreach (var typeDataPtr in namespaceData.Types)
-                    AddTypeToTree (typeDataPtr.Address, namespaceNode);
-
-                foreach (var funcKVP in namespaceData.Functions)
-                    AddFunctionToTree (funcKVP.Value.Address, namespaceNode);
-
-                if (!frontendOnly && namespaceData.Functions.TryGetValue (idMain, out var func)) {
+                if (namespaceData.Functions.TryGetValue (idMain, out var func)) {
                     var funcType = func.Address->FunctionType;
 
                     if (funcType->ReturnType->TypeTag == ES_TypeTag.Void && funcType->ArgumentsList.Length == 0) {
@@ -298,7 +330,7 @@ namespace TestSuiteWPF.Tests {
                     }
                 }
 
-                if (!frontendOnly && namespaceData.Functions.TryGetValue (idTestI32, out func)) {
+                if (namespaceData.Functions.TryGetValue (idTestI32, out func)) {
                     var funcType = func.Address->FunctionType;
 
                     bool matchSig = false;
@@ -317,14 +349,14 @@ namespace TestSuiteWPF.Tests {
                         int ret = fp (a, b);
 
                         var infoStr = string.Format (cultureInfo, $"{testI32Name} ({{0:n0}}, {{1:n0}}) returned {{2:n0}}.", a, b, ret);
-                        errList.Add (new CompilerMessage ("lol", new EchelonScriptErrorMessage (infoStr, 0, 0, 0, 0)));
+                        errList.Add (new CompilerMessage ("Output", new EchelonScriptErrorMessage (infoStr, 0, 0, 0, 0)));
                     } else if (matchSig)
-                        errList.Add (new CompilerMessage ("lol", new EchelonScriptErrorMessage ($"{testI32Name} had a null function pointer.", 0, 0, 0, 0)));
+                        errList.Add (new CompilerMessage ("Output", new EchelonScriptErrorMessage ($"{testI32Name} had a null function pointer.", 0, 0, 0, 0)));
                     else
-                        errList.Add (new CompilerMessage ("lol", new EchelonScriptErrorMessage ($"{testI32Name} didn't match signature.", 0, 0, 0, 0)));
+                        errList.Add (new CompilerMessage ("Output", new EchelonScriptErrorMessage ($"{testI32Name} didn't match signature.", 0, 0, 0, 0)));
                 }
 
-                if (!frontendOnly && namespaceData.Functions.TryGetValue (idTestF32, out func)) {
+                if (namespaceData.Functions.TryGetValue (idTestF32, out func)) {
                     var funcType = func.Address->FunctionType;
 
                     bool matchSig = false;
@@ -343,11 +375,11 @@ namespace TestSuiteWPF.Tests {
                         float ret = fp (a, b);
 
                         var infoStr = string.Format (cultureInfo, $"{testF32Name} ({{0:n}}, {{1:n}}) returned {{2:n}}.", a, b, ret);
-                        errList.Add (new CompilerMessage ("lol", new EchelonScriptErrorMessage (infoStr, 0, 0, 0, 0)));
+                        errList.Add (new CompilerMessage ("Output", new EchelonScriptErrorMessage (infoStr, 0, 0, 0, 0)));
                     } else if (matchSig)
-                        errList.Add (new CompilerMessage ("lol", new EchelonScriptErrorMessage ($"{testF32Name} had a null function pointer.", 0, 0, 0, 0)));
+                        errList.Add (new CompilerMessage ("Output", new EchelonScriptErrorMessage ($"{testF32Name} had a null function pointer.", 0, 0, 0, 0)));
                     else
-                        errList.Add (new CompilerMessage ("lol", new EchelonScriptErrorMessage ($"{testF32Name} didn't match signature.", 0, 0, 0, 0)));
+                        errList.Add (new CompilerMessage ("Output", new EchelonScriptErrorMessage ($"{testF32Name} didn't match signature.", 0, 0, 0, 0)));
                 }
             }
         }
@@ -362,6 +394,8 @@ namespace TestSuiteWPF.Tests {
         }
 
         private void CompileButton_Click (object sender, System.Windows.RoutedEventArgs e) => CompileCode ();
+
+        private void RunButton_Click (object sender, System.Windows.RoutedEventArgs e) => RunCode ();
 
         private void errorsList_MouseDoubleClick (object sender, MouseButtonEventArgs e) {
             if (errorsList.SelectedItem is not CompilerMessage)

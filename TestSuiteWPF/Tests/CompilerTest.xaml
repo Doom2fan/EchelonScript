@@ -42,7 +42,9 @@
             </ListView.View>
         </ListView>
         <ComboBox x:Name="compilerComboBox" HorizontalAlignment="Left" Margin="10,0,0,0" Grid.Row="1" VerticalAlignment="Center" Width="175" />
-        <CheckBox x:Name="compileOnEditCheckbox" Content="Compile on edit" HorizontalAlignment="Left" Margin="243,0,0,0" Grid.Row="1" VerticalAlignment="Center" IsChecked="True" />
+        <CheckBox x:Name="compileOnEditCheckbox" Content="Compile on edit" HorizontalAlignment="Left" Margin="309,0,0,0" Grid.Row="1" VerticalAlignment="Center" IsChecked="True" />
         <Button Content="Compile" HorizontalAlignment="Left" Margin="190,0,0,0" Grid.Row="1" VerticalAlignment="Center" Click="CompileButton_Click"/>
+        <Button Content="Run code" HorizontalAlignment="Left" Margin="243,0,0,0" Grid.Row="1" VerticalAlignment="Center" Width="61" Click="RunButton_Click"/>
+        <CheckBox x:Name="runOnCompile" Content="Run on compile" HorizontalAlignment="Left" Margin="419,0,0,0" Grid.Row="1" VerticalAlignment="Center" IsChecked="True" />
     </Grid>
 </UserControl>
