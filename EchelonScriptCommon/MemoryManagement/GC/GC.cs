@@ -140,7 +140,7 @@ namespace EchelonScriptCommon.GarbageCollection {
 
         private static ES_ArrayIndex CalculateTotalArrayLength (ReadOnlySpan<ES_ArrayIndex> dimSizes) {
             var totalElemsCount = dimSizes [0];
-            foreach (var dim in dimSizes.Slice (0))
+            foreach (var dim in dimSizes.Slice (1))
                 totalElemsCount *= dim;
 
             return totalElemsCount;
