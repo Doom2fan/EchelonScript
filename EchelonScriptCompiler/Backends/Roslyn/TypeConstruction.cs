@@ -8,6 +8,7 @@
  */
 
 using System;
+using EchelonScriptCommon;
 using EchelonScriptCommon.Data.Types;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -38,13 +39,15 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                     return PointerType (pointedType);
                 }
 
+                case ES_TypeTag.Array:
+                    return PointerType (IdentifierName (nameof (ES_ArrayHeader)));
+
                 case ES_TypeTag.Function:
                 case ES_TypeTag.Class:
                 case ES_TypeTag.Enum:
                 case ES_TypeTag.Interface:
                 case ES_TypeTag.Const:
                 case ES_TypeTag.Immutable:
-                case ES_TypeTag.Array:
                     throw new NotImplementedException ("[TODO] Type not implemented yet.");
 
                 default:

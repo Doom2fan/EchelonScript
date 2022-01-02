@@ -10,7 +10,9 @@
 using System;
 using System.Diagnostics;
 using ChronosLib.Pooled;
+using EchelonScriptCommon;
 using EchelonScriptCommon.Data.Types;
+using EchelonScriptCommon.GarbageCollection;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Frontend;
 using Microsoft.CodeAnalysis;
@@ -89,20 +91,14 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 case ES_AstFunctionCallExpression funcCallExpr:
                     return GenerateCode_Expression_FunctionCall (ref transUnit, symbols, src, funcCallExpr, expectedType);
 
-                case ES_AstIndexingExpression indexExpr: {
-                    throw new NotImplementedException ("[TODO] Indexing expressions not implemented yet.");
-                    /*GenerateCode_Expression (ref transUnit, symbols, src, indexExpr.IndexedExpression);
-                    foreach (var rank in indexExpr.RankExpressions) {
-                        if (rank is not null)
-                            GenerateCode_Expression (ref transUnit, symbols, src, rank);
-                    }*/
-                }
+                case ES_AstIndexingExpression indexExpr:
+                    return GenerateCode_Expression_Indexing (ref transUnit, symbols, src, indexExpr, expectedType);
 
                 case ES_AstNewObjectExpression newObjExpr:
                     return GenerateCode_Expression_NewObject (ref transUnit, symbols, src, newObjExpr, expectedType);
 
                 case ES_AstNewArrayExpression newArrayExpr:
-                    throw new NotImplementedException ("[TODO] 'new' array expressions not implemented yet.");
+                    return GenerateCode_Expression_NewArray (ref transUnit, symbols, src, newArrayExpr, expectedType);
 
                 case ES_AstIntegerLiteralExpression:
                 case ES_AstBooleanLiteralExpression:
@@ -387,49 +383,125 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             return new ExpressionData { Expr = funcCallExpr, Type = funcType->ReturnType, Value = value, Constant = false, Addressable = false };
         }
 
-        /*private LLVMValueRef GenerateCode_GetAllocObjFunc () {
-            const string funcName = "GC_AllocObj";
+        private ExpressionData GenerateCode_Expression_Indexing (
+            ref TranslationUnitData transUnit, SymbolStack<Symbol> symbols, ReadOnlySpan<char> src,
+            ES_AstIndexingExpression indexExpr, ES_TypeInfo* expectedType
+        ) {
+            var typeUnkn = env!.TypeUnknownValue;
+            var typeIndex = env.GetArrayIndexType ();
 
-            var func = moduleRef.GetNamedFunction (funcName);
-            if (func is not null)
-                return func;
+            var indexedExprData = GenerateCode_Expression (ref transUnit, symbols, src, indexExpr.IndexedExpression, typeUnkn);
 
-            var voidPtrType = LLVMTypeRef.CreatePointer (contextRef.VoidType, 0);
+            using var rankExprs = new StructPooledList<ExpressionData> (CL_ClearMode.Auto);
+            rankExprs.EnsureCapacity (indexExpr.RankExpressions.Length);
+            foreach (var rankExpr in indexExpr.RankExpressions) {
+                Debug.Assert (rankExpr is not null);
 
-            Span<LLVMTypeRef> funcTypeArgs = stackalloc LLVMTypeRef [1] {
-                voidPtrType,
-            };
-            var funcType = LLVMTypeRef.CreateFunction (voidPtrType, funcTypeArgs, false);
+                var rankExprData = GenerateCode_Expression (ref transUnit, symbols, src, rankExpr, typeIndex);
+                GenerateCode_EnsureImplicitCompat (ref rankExprData, typeIndex);
 
-            func = moduleRef.AddFunction (funcName, funcType);
+                rankExprs.Add (rankExprData);
+            }
 
-            return func;
-        }*/
+            if (indexedExprData.Type is not null) {
+                var indexedTypeTag = indexedExprData.Type->TypeTag;
+
+                if (indexedTypeTag == ES_TypeTag.Array)
+                    return GenerateCode_Expression_Indexing_Array (indexExpr, indexedExprData, rankExprs.Span, expectedType);
+            }
+
+            throw new NotImplementedException ("Indexing not implemented for type.");
+        }
+
+        private ExpressionData GenerateCode_Expression_Indexing_Array (
+            ES_AstIndexingExpression expr, ExpressionData indexedExpr, ReadOnlySpan<ExpressionData> rankExprs, ES_TypeInfo* expectedType
+        ) {
+            var arrayType = (ES_ArrayTypeData*) indexedExpr.Type;
+            var elemType = arrayType->ElementType;
+            var dimCount = arrayType->DimensionsCount;
+
+            Debug.Assert (dimCount == rankExprs.Length);
+
+            var elemIsRef = elemType->TypeTag == ES_TypeTag.Reference;
+
+            var elemRoslynType = GetRoslynType (elemType);
+            var elemPtrRoslynType = PointerType (elemRoslynType);
+
+            // Get the base address of the array's data.
+            var arrayArgumentList = ArgumentList (SingletonSeparatedList (Argument (indexedExpr.Value!)));
+
+            ExpressionSyntax baseAddrExpr = MemberAccessExpression (SyntaxKind.SimpleMemberAccessExpression,
+                IdentifierName (nameof (ES_ArrayHeader)),
+                IdentifierName (nameof (ES_ArrayHeader.GetArrayDataPointer))
+            );
+            baseAddrExpr = InvocationExpression (baseAddrExpr).WithArgumentList (arrayArgumentList);
+            baseAddrExpr = CastExpression (elemPtrRoslynType, baseAddrExpr);
+
+            // Calculate the rank sizes.
+            using var rankSizeExprs = PooledArray<ExpressionSyntax>.GetArray (dimCount);
+            var rankSizeExprsSpan = rankSizeExprs.Span;
+
+            ExpressionSyntax rankSizePtrExpr = MemberAccessExpression (SyntaxKind.SimpleMemberAccessExpression,
+                IdentifierName (nameof (ES_ArrayHeader)),
+                IdentifierName (nameof (ES_ArrayHeader.GetArrayIndicesPointer))
+            );
+            rankSizePtrExpr = InvocationExpression (rankSizePtrExpr).WithArgumentList (arrayArgumentList);
+            for (int i = 0; i < dimCount; i++) {
+                rankSizeExprsSpan [i] = ElementAccessExpression (rankSizePtrExpr).WithArgumentList (
+                    BracketedArgumentList (
+                        SingletonSeparatedList (
+                            Argument (LiteralExpression (SyntaxKind.NumericLiteralExpression, Literal (i)))
+                        )
+                    )
+                );
+            }
+
+            // Calculate the flattened index.
+            var flattenedIndex = rankExprs [0].Value!;
+            for (int i = 1; i < dimCount; i++) {
+                var rankIndex = rankExprs [i].Value!;
+
+                for (int j = 0; j < i; j++)
+                    rankIndex = BinaryExpression (SyntaxKind.MultiplyExpression, rankIndex, rankSizeExprsSpan [j]);
+
+                flattenedIndex = BinaryExpression (SyntaxKind.AddExpression, flattenedIndex, rankIndex);
+            }
+
+            var returnExpr = ElementAccessExpression (baseAddrExpr).WithArgumentList (
+                BracketedArgumentList (SingletonSeparatedList (Argument (flattenedIndex)))
+            );
+
+            return new ExpressionData { Expr = expr, Type = elemType, Value = returnExpr, Constant = false, Addressable = true };
+        }
 
         private ExpressionSyntax GenerateCode_NewObject (ES_TypeInfo* type, ExpressionSyntax assignValue) {
             bool isReference = type->TypeTag == ES_TypeTag.Reference;
 
             // Get the roslyn type.
-            var intPtrType = IdentifierName ("IntPtr");
+            var intPtrType = IdentifierName (nameof (IntPtr));
             var roslynType = GetRoslynType (type);
 
-            // Generate the member access. ("ImmixGC.AllocObject")
+            // Generate the member access.
             var accessExpr = MemberAccessExpression (SyntaxKind.SimpleMemberAccessExpression,
-                IdentifierName ("ImmixGC"),
-                GenericName (Identifier ("AllocObject")).WithTypeArgumentList (TypeArgumentList (
-                    SingletonSeparatedList (!isReference ? roslynType : intPtrType)
-                ))
+                IdentifierName (nameof (ES_GarbageCollector)),
+                GenericName (Identifier (nameof (ES_GarbageCollector.AllocObject))).WithTypeArgumentList (
+                    TypeArgumentList (SingletonSeparatedList (!isReference ? roslynType : intPtrType))
+                )
             );
 
-            // Construct the types list.
+            // Construct the args list.
             using var argsList = new StructPooledList<SyntaxNodeOrToken> (CL_ClearMode.Auto);
             argsList.EnsureCapacity (3);
 
             // Generate the pointer type syntax for the type pointer.
-            var pointerTypeSyntax = PointerType (IdentifierName ("ES_TypeInfo"));
+            var pointerTypeSyntax = PointerType (IdentifierName (nameof (ES_TypeInfo)));
 
             // Add the type pointer.
             argsList.Add (Argument (PointerLiteral (type, pointerTypeSyntax)));
+
+            // Add the "pinned" bool.
+            argsList.Add (Token (SyntaxKind.CommaToken));
+            argsList.Add (Argument (LiteralExpression (SyntaxKind.FalseLiteralExpression)));
 
             // Add the value to assign.
             argsList.Add (Token (SyntaxKind.CommaToken));
@@ -447,6 +519,44 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             return ret;
         }
 
+        private ExpressionSyntax GenerateCode_NewArray (ES_ArrayTypeData* arrayType, ReadOnlySpan<ExpressionData> ranks, ExpressionSyntax? elemAssignValue) {
+            Debug.Assert (arrayType->DimensionsCount == ranks.Length);
+
+            // Get the roslyn type.
+            var roslynArrType = GetRoslynType (&arrayType->TypeInfo);
+            var roslynElemType = GetRoslynType (arrayType->ElementType);
+
+            /** Generate the function name **/
+
+            /** Construct the args list **/
+            using var argsList = new StructPooledList<SyntaxNodeOrToken> (CL_ClearMode.Auto);
+            argsList.EnsureCapacity (1 + ranks.Length * 2 + (elemAssignValue is not null ? 2 : 0));
+
+            // Add the "pinned" bool.
+            argsList.Add (Argument (LiteralExpression (SyntaxKind.FalseLiteralExpression)));
+
+            // Add the ranks.
+            foreach (var rank in ranks) {
+                Debug.Assert (rank.Value is not null);
+
+                argsList.Add (Token (SyntaxKind.CommaToken));
+                argsList.Add (Argument (rank.Value!));
+            }
+
+            // Add the value to assign, if any.
+            if (elemAssignValue is not null) {
+                argsList.Add (Token (SyntaxKind.CommaToken));
+                argsList.Add (Argument (elemAssignValue));
+            }
+
+            /** Generate the function call **/
+            ExpressionSyntax ret = InvocationExpression (IdentifierName (MangleArrayAllocFunc (arrayType)))
+                .WithArgumentList (ArgumentList (SeparatedListSpan<ArgumentSyntax> (argsList.Span)));
+            ret = CastExpression (PointerType (IdentifierName (nameof (ES_ArrayHeader))), ret);
+
+            return ret;
+        }
+
         private ExpressionData GenerateCode_Expression_NewObject (
             ref TranslationUnitData transUnit, SymbolStack<Symbol> symbols, ReadOnlySpan<char> src,
             ES_AstNewObjectExpression newObjExpr, ES_TypeInfo* expectedType
@@ -457,7 +567,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             var ptrType = envBuilder!.CreateReferenceType (objType);
 
             // Evaluate the constructor arguments.
-            var args = new StructPooledList<ExpressionData> (CL_ClearMode.Auto);
+            using var args = new StructPooledList<ExpressionData> (CL_ClearMode.Auto);
             args.EnsureCapacity (newObjExpr.Arguments.Length);
 
             if (newObjExpr.Arguments.Length > 0) {
@@ -471,6 +581,36 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
             // Default-initialize the object.
             return new ExpressionData { Expr = newObjExpr, Type = ptrType, Value = value, Constant = false, Addressable = false };
+        }
+
+        private ExpressionData GenerateCode_Expression_NewArray (
+            ref TranslationUnitData transUnit, SymbolStack<Symbol> symbols, ReadOnlySpan<char> src,
+            ES_AstNewArrayExpression newArrExpr, ES_TypeInfo* expectedType
+        ) {
+            var typeUnkn = env!.TypeUnknownValue;
+            var typeIndex = env.GetArrayIndexType ();
+
+            var elemType = GetTypeRef (newArrExpr.ElementType);
+            var arrType = (ES_ArrayTypeData*) envBuilder!.CreateArrayType (elemType, newArrExpr.Ranks.Length);
+
+            // Evaluate the ranks.
+            using var ranks = PooledArray<ExpressionData>.GetArray (newArrExpr.Ranks.Length);
+
+            int rankCount = 0;
+            foreach (var rank in newArrExpr.Ranks) {
+                var rankExprData = GenerateCode_Expression (ref transUnit, symbols, src, rank!, typeIndex);
+                GenerateCode_EnsureImplicitCompat (ref rankExprData, typeIndex);
+
+                ranks.Span [rankCount++] = rankExprData;
+            }
+
+            // Get default values.
+            var defaultElemValue = GetDefaultValue (elemType);
+
+            var value = GenerateCode_NewArray (arrType, ranks.Span, defaultElemValue);
+
+            // Default-initialize the object.
+            return new ExpressionData { Expr = newArrExpr, Type = &arrType->TypeInfo, Value = value, Constant = false, Addressable = false };
         }
 
         private ExpressionData GenerateCode_ConditionalExpression (

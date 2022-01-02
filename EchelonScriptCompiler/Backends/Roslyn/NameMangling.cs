@@ -12,6 +12,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using ChronosLib.Pooled;
 using EchelonScriptCommon.Data.Types;
+using EchelonScriptCompiler.Frontend;
 
 namespace EchelonScriptCompiler.Backends.RoslynBackend {
     public unsafe sealed partial class RoslynCompilerBackend {
@@ -160,6 +161,38 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 default:
                     throw new NotImplementedException ("Type tag not implemented.");
             }
+        }
+
+        internal static string MangleTypeNameAny ([DisallowNull] ES_TypeInfo* type) {
+            switch (type->TypeTag) {
+                case ES_TypeTag.Bool:
+                    return ES_PrimitiveTypes.Bool;
+
+                case ES_TypeTag.Int: {
+                    var intType = (ES_IntTypeData*) type;
+                    return ES_PrimitiveTypes.GetIntName (intType->IntSize, intType->Unsigned);
+                }
+
+                case ES_TypeTag.Float: {
+                    var floatType = (ES_FloatTypeData*) type;
+                    return ES_PrimitiveTypes.GetFloatName (floatType->FloatSize);
+                }
+
+                default:
+                    return MangleTypeName (type);
+            }
+        }
+
+        static string MangleArrayAllocFunc (ES_ArrayTypeData* arrayType) {
+            const string functionIdPrefix = "$AllocateArray$";
+
+            var mangledTypeName = MangleTypeNameAny (arrayType->ElementType);
+            using var functionNameArr = PooledArray<char>.GetArray (functionIdPrefix.Length + mangledTypeName.Length);
+
+            functionIdPrefix.AsSpan ().CopyTo (functionNameArr.Span);
+            mangledTypeName.AsSpan ().CopyTo (functionNameArr.Span [functionIdPrefix.Length..]);
+
+            return functionNameArr.Span.GetPooledString ();
         }
 
         #endregion

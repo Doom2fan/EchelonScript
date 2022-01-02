@@ -13,6 +13,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Loader;
 using System.Text;
@@ -404,7 +405,11 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             using var symbols = new SymbolStack<Symbol> (new Symbol ());
             var idPool = env.IdPool;
 
-            // Pre-emit the types so we don't get errors when trying to use them later.
+            using var memberDefinitions = new StructPooledList<MemberDeclarationSyntax> (CL_ClearMode.Auto);
+            using var globalFunctions = new StructPooledList<MemberDeclarationSyntax> (CL_ClearMode.Auto);
+            using var globalStaticConsBody = new StructPooledList<StatementSyntax> (CL_ClearMode.Auto);
+
+            // Emit types and functions with no user code.
             foreach (var namespaceKVP in env.Namespaces) {
                 var namespaceData = namespaceKVP.Value;
 
@@ -426,6 +431,16 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                         case ES_TypeTag.Immutable:
                             break;
 
+                        case ES_TypeTag.Array: {
+                            var arrayType = (ES_ArrayTypeData*) typePtr;
+                            var allocFuncDefs = GenerateCode_AllocArrayFunc (arrayType);
+
+                            globalFunctions.Add (allocFuncDefs.Item1);
+                            globalFunctions.Add (allocFuncDefs.Item2);
+
+                            break;
+                        }
+
                         default:
                             throw new NotImplementedException ("Type not implemented yet.");
                     }
@@ -441,10 +456,6 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 foreach (var funcKVP in namespaceData.Functions)
                     ;//GetOrGenerateFunction (namespaceData, null, funcKVP.Key, out _, out _);
             }
-
-            using var memberDefinitions = new StructPooledList<MemberDeclarationSyntax> (CL_ClearMode.Auto);
-            using var globalFunctions = new StructPooledList<MemberDeclarationSyntax> (CL_ClearMode.Auto);
-            using var globalStaticConsBody = new StructPooledList<StatementSyntax> (CL_ClearMode.Auto);
 
             // Emit the type bodies. (Needs to be done before function bodies)
             foreach (ref var transUnit in transUnits) {
@@ -540,8 +551,17 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 UsingDirective (NamespaceNameSyntax ("EchelonScriptCommon")),
                 UsingDirective (NamespaceNameSyntax ("EchelonScriptCommon", "Data")),
                 UsingDirective (NamespaceNameSyntax ("EchelonScriptCommon", "Data", "Types")),
-                UsingDirective (NamespaceNameSyntax ("EchelonScriptCommon", "Immix_GC")),
-                UsingDirective (NamespaceNameSyntax ("EchelonScriptCommon", "Utilities"))
+                UsingDirective (NamespaceNameSyntax ("EchelonScriptCommon", "GarbageCollection")),
+                UsingDirective (NamespaceNameSyntax ("EchelonScriptCommon", "Utilities")),
+
+                UsingDirective (NameEquals (
+                    IdentifierName (nameof (MethodImplAttribute))),
+                    NamespaceNameSyntax ("System", "Runtime", "CompilerServices", nameof (MethodImplAttribute))
+                ),
+                UsingDirective (NameEquals (
+                    IdentifierName (nameof (MethodImplOptions))),
+                    NamespaceNameSyntax ("System", "Runtime", "CompilerServices", nameof (MethodImplOptions))
+                )
             ).NormalizeWhitespace ();
 
             // Create the syntax tree and parse options.
