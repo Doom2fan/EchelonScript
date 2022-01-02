@@ -12,7 +12,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using EchelonScriptCommon.Data.Types;
-using EchelonScriptCommon.Immix_GC;
+using EchelonScriptCommon.GarbageCollection;
 using EchelonScriptCommon.Utilities;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data;
@@ -395,7 +395,7 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             intPtrType = contextRef.GetIntPtrType (execEngine.TargetData);
 
             // Create and map the GC functions.
-            delegate* unmanaged [Cdecl] <ES_TypeInfo*, void*> objAllocFuncPtr = &ImmixGC.AllocObjectUnmanaged;
+            delegate* unmanaged [Cdecl] <ES_TypeInfo*, byte, void*> objAllocFuncPtr = &ES_GarbageCollector.AllocObjectUnmanaged;
             execEngine.AddGlobalMapping (GenerateCode_GetAllocObjFunc (), (IntPtr) objAllocFuncPtr);
         }
 

@@ -1217,9 +1217,11 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
                 return func;
 
             var voidPtrType = LLVMTypeRef.CreatePointer (contextRef.VoidType, 0);
+            var ubyteType = GetIntType (ES_IntSize.Int8, true);
 
-            Span<LLVMTypeRef> funcTypeArgs = stackalloc LLVMTypeRef [1] {
+            Span<LLVMTypeRef> funcTypeArgs = stackalloc LLVMTypeRef [2] {
                 voidPtrType,
+                ubyteType,
             };
             var funcType = LLVMTypeRef.CreateFunction (voidPtrType, funcTypeArgs, false);
 
