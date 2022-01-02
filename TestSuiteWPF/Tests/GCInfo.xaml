@@ -7,7 +7,28 @@
              mc:Ignorable="d"
              d:DesignHeight="450" d:DesignWidth="800">
     <Grid>
-        <ScrollViewer Margin="0,0,400,0"><TextBlock Name="gcInfoTextBlock" TextWrapping="Wrap"/></ScrollViewer>
-        <ScrollViewer Margin="400,0,0,0"><TextBlock x:Name="gcOverflowInfoTextBlock" TextWrapping="Wrap"/></ScrollViewer>
+        <Grid Margin="0,0,0,37">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition/>
+                <ColumnDefinition/>
+            </Grid.ColumnDefinitions>
+            <ScrollViewer Grid.Column="0" Margin="0,2,0,2">
+                <TextBlock Name="gcInfoTextBlock" TextWrapping="Wrap" ClipToBounds="True" HorizontalAlignment="Stretch" Margin="6,0,2,0"/>
+            </ScrollViewer>
+            <ScrollViewer Grid.Column="1" Margin="0,2,0,2">
+                <TextBlock x:Name="gcOverflowInfoTextBlock" TextWrapping="Wrap" ClipToBounds="True" HorizontalAlignment="Stretch" Margin="6,0,2,0"/>
+            </ScrollViewer>
+        </Grid>
+        <ComboBox x:Name="gcCollectGenDropDown" Margin="10,0,0,10" IsReadOnly="True" Height="22" VerticalAlignment="Bottom" HorizontalAlignment="Left" Width="120" SelectedIndex="0">
+            <ComboBoxItem Content="All gens" Tag="-1"/>
+            <ComboBoxItem Content="Gen 0" Tag="0"/>
+            <ComboBoxItem Content="Gen 1" Tag="1"/>
+            <ComboBoxItem Content="Gen 2" Tag="2"/>
+        </ComboBox>
+        <ComboBox x:Name="gcCollectModeDropDown" Margin="135,0,0,10" IsReadOnly="True" Height="22" VerticalAlignment="Bottom" HorizontalAlignment="Left" Width="120" SelectedIndex="0">
+            <ComboBoxItem Content="Forced" Tag="0"/>
+            <ComboBoxItem Content="Optimized" Tag="1"/>
+        </ComboBox>
+        <Button Content="Collect" Margin="260,0,0,11" VerticalAlignment="Bottom" HorizontalAlignment="Left" Width="68" Click="CollectButton_Click"/>
     </Grid>
 </UserControl>

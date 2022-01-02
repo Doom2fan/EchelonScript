@@ -6,7 +6,7 @@
         xmlns:local="clr-namespace:TestSuiteWPF"
         xmlns:Tests="clr-namespace:TestSuiteWPF.Tests" x:Class="TestSuiteWPF.MainWindow"
         mc:Ignorable="d"
-        Title="TestSuite" Width="816" Height="489">
+        Title="TestSuite" Width="820" Height="490" MinWidth="820" MinHeight="490">
     <TabControl>
         <TabItem Header="Tokenizer test">
             <Grid Background="#FFE5E5E5">

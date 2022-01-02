@@ -9,11 +9,13 @@
 
 using System;
 using System.Text;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Threading;
-using EchelonScriptCommon.Immix_GC;
+using EchelonScriptCommon.GarbageCollection;
+using EchelonScriptCommon.GarbageCollection.Immix;
 
 namespace TestSuiteWPF.Tests {
     /// <summary>
@@ -23,7 +25,6 @@ namespace TestSuiteWPF.Tests {
         #region ================== Instance fields
 
         DispatcherTimer updateTimer;
-        StringBuilder stringBuilder;
 
         #endregion
 
@@ -37,7 +38,6 @@ namespace TestSuiteWPF.Tests {
             updateTimer.Interval = TimeSpan.FromMilliseconds (1d / 60);
 
             updateTimer.Start ();
-            stringBuilder = new StringBuilder ();
         }
 
         #endregion
@@ -45,7 +45,7 @@ namespace TestSuiteWPF.Tests {
         #region ================== Event handlers
 
         private void Update () {
-            ImmixGC.GetInfo (out var allocInfo, out var overflowInfo);
+            ES_GarbageCollector.GetImmixInfo (out var allocInfo, out var overflowInfo);
 
             PrintInfo (gcInfoTextBlock, ref allocInfo);
             PrintInfo (gcOverflowInfoTextBlock, ref overflowInfo);
@@ -56,7 +56,7 @@ namespace TestSuiteWPF.Tests {
 
             block.Inlines.Clear ();
 
-            block.Inlines.Add ($"Line size / block size: {ImmixGC.LineSize} / {ImmixGC.BlockSize}\nLines count: {ImmixGC.LinesCount}\n\n");
+            block.Inlines.Add ($"Line size / block size: {ImmixConstants.LineSize} / {ImmixConstants.BlockSize}\nLines count: {ImmixConstants.LinesCount}\n\n");
 
             block.Inlines.Add ($"Total blocks: {info.BlockCount}\nEmpty blocks: {info.EmptyBlocks}\nFull blocks: {info.FullBlocks}\nRecyclable blocks: {info.RecyclableBlocks}\n\n");
 
@@ -81,7 +81,7 @@ namespace TestSuiteWPF.Tests {
                     }
                 }
 
-                var run = new Run ($"  Block {blockIdx + 1}:\n    Lines marked: {markedLinesCount} / {ImmixGC.LinesCount}\n");
+                var run = new Run ($"  Block {blockIdx + 1}:\n    Lines marked: {markedLinesCount} / {ImmixConstants.LinesCount}\n");
 
                 if (blockIdx == info.CurrentBlockIndex)
                     run.Foreground = Brushes.Red;
@@ -91,6 +91,52 @@ namespace TestSuiteWPF.Tests {
         }
 
         private void UpdateTimer_Tick (object sender, EventArgs e) => Update ();
+
+        private void CollectButton_Click (object sender, RoutedEventArgs e) {
+            static void ShowError (string message) {
+                MessageBox.Show (message, "Internal error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+
+            var genTag = (string) ((ComboBoxItem) gcCollectGenDropDown.SelectedItem)?.Tag;
+            if (genTag is null) {
+                ShowError ($"Generation tag is null.");
+                return;
+            }
+            if (!int.TryParse (genTag, out var collectionGen)) {
+                ShowError ($"Could not parse generation tag. (\"{genTag}\")");
+                return;
+            }
+            if (collectionGen < -1) {
+                ShowError ($"Generation tag < -1. ({collectionGen})");
+                return;
+            }
+            if (collectionGen > 2) {
+                ShowError ($"Generation tag > 2. ({collectionGen})");
+                return;
+            }
+
+            var modeTag = (string) ((ComboBoxItem) gcCollectModeDropDown.SelectedItem)?.Tag;
+            if (modeTag is null) {
+                ShowError ($"Mode tag is null.");
+                return;
+            }
+            if (!int.TryParse (modeTag, out var collectionMode)) {
+                ShowError ($"Could not parse generation tag. (\"{modeTag}\")");
+                return;
+            }
+            if (collectionMode < 0) {
+                ShowError ($"Mode tag < 0. ({collectionMode})");
+                return;
+            }
+            if (collectionMode >= (int) ES_GarbageCollector.CollectionMode.__Count) {
+                ShowError ($"Mode tag > max mode number. ({collectionMode})");
+                return;
+            }
+
+            ES_GarbageCollector.PerformCollection (collectionGen, (ES_GarbageCollector.CollectionMode) collectionMode);
+
+            Update ();
+        }
 
         #endregion
     }
