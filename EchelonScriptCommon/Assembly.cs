@@ -10,3 +10,4 @@
 using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo ("EchelonScriptCompiler")]
+[assembly: InternalsVisibleTo ("TestSuiteWPF")]

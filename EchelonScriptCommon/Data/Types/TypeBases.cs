@@ -12,6 +12,8 @@ using CommunityToolkit.HighPerformance.Buffers;
 using EchelonScriptCommon.Utilities;
 
 namespace EchelonScriptCommon.Data.Types {
+    // TODO: Add type flags
+    // TODO: Add a type flag that indicates the type contains no references.
     public enum ES_TypeTag : int {
         UNKNOWN   = 0,
         Void      = 1,
