@@ -191,6 +191,9 @@ namespace EchelonScriptCompiler.Frontend {
         public const string StaticAccessOnInst = "The member \"{memberName}\" cannot be accessed through an instance; use \"{typeName}.{memberName}\" instead.";
         public const string InstAccessOnStatic = "The member \"{memberName}\" is not static; it must be accessed through an instance.";
         public const string NoSuchConstructor = "The type \"{typeName}\" has no constructor that takes the parameter types {signature}.";
+        public const string CantApplyIndexingToType = "Cannot index expression of type \"{typeName}\".";
+        public const string CantApplyIndexing = "Indexed expression must return a type.";
+        public const string IndexingBadRankCount = "Incorrect number of dimensions.";
 
         public const string UnexpectedReturnValue = "Unexpected return value.";
         public const string MissingReturnValue = "A return value of or convertible to type \"{retType}\" is required.";
@@ -339,6 +342,10 @@ namespace EchelonScriptCompiler.Frontend {
         }
         public static EchelonScriptErrorMessage GenCantApplyUnaryOp (string op, string expr, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
             var errorMessage = CantApplyUnaryOp.Replace ("{op}", op).Replace ("{expr}", expr);
+            return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
+        }
+        public static EchelonScriptErrorMessage GenCantApplyIndexingToType (string typeName, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
+            var errorMessage = CantApplyIndexingToType.Replace ("{typeName}", typeName);
             return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
         }
 

@@ -544,12 +544,28 @@ namespace EchelonScriptCompiler.Frontend {
                     return FoldConstants_Expression_FunctionCall (ref transUnit, symbols, src, funcCallExpr, expectedType);
 
                 case ES_AstIndexingExpression indexExpr: {
-                    throw new NotImplementedException ("[TODO] Indexing not implemented yet.");
-                    /*FoldConstants_Expression (ref transUnit, symbols, src, indexExpr.IndexedExpression);
-                    foreach (var rank in indexExpr.RankExpressions) {
-                        if (rank is not null)
-                            FoldConstants_Expression (ref transUnit, symbols, src, rank);
-                    }*/
+                    var typeIndex = Environment.GetArrayIndexType ();
+
+                    var indexedExpr = FoldConstants_Expression (ref transUnit, symbols, src, ref indexExpr.IndexedExpression, typeUnkn);
+                    var returnType = typeUnkn;
+
+                    if (indexedExpr.Type is not null) {
+                        var indexedType = indexedExpr.Type;
+                        var indexedTypeTag = indexedType->TypeTag;
+
+                        if (indexedTypeTag == ES_TypeTag.Array) {
+                            var arrayData = (ES_ArrayTypeData*) indexedExpr.Type;
+                            returnType = arrayData->ElementType;
+                        }
+                    }
+
+                    foreach (ref var rank in indexExpr.RankExpressions.AsSpan ()) {
+                        Debug.Assert (rank is not null);
+                        FoldConstants_Expression (ref transUnit, symbols, src, ref rank, typeIndex);
+                        FoldConstants_EnsureCompat (typeIndex, ref rank);
+                    }
+
+                    return new ExpressionData { Expr = expr, Type = returnType, };
                 }
 
                 case ES_AstNewObjectExpression newObjExpr: {
@@ -562,13 +578,11 @@ namespace EchelonScriptCompiler.Frontend {
                 }
 
                 case ES_AstNewArrayExpression newArrayExpr: {
-                    var intName = idPool.GetIdentifier (ES_PrimitiveTypes.GetIntName (ES_IntSize.Int32, false));
-                    var intType = Environment.GetFullyQualifiedType (Environment.GlobalTypesNamespace, intName);
-                    Debug.Assert (intType is not null && intType->TypeTag == ES_TypeTag.Int);
+                    var indexType = Environment!.GetArrayIndexType ();
 
                     foreach (ref var rank in newArrayExpr.Ranks.AsSpan ()) {
                         Debug.Assert (rank is not null);
-                        FoldConstants_Expression (ref transUnit, symbols, src, ref rank, intType);
+                        FoldConstants_Expression (ref transUnit, symbols, src, ref rank, indexType);
                     }
 
                     var elemType = GetTypeRef (newArrayExpr.ElementType);

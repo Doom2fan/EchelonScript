@@ -32,7 +32,7 @@ namespace EchelonScriptCompiler.Frontend {
         public const string String = "string";
         public const string Char = "char";
 
-        public static ReadOnlySpan<char> GetIntName (ES_IntSize size, bool unsigned) {
+        public static string GetIntName (ES_IntSize size, bool unsigned) {
             switch (size) {
                 case ES_IntSize.Int8:
                     return unsigned ? UInt8 : Int8;
@@ -51,7 +51,7 @@ namespace EchelonScriptCompiler.Frontend {
             }
         }
 
-        public static ReadOnlySpan<char> GetFloatName (ES_FloatSize size) {
+        public static string GetFloatName (ES_FloatSize size) {
             switch (size) {
                 case ES_FloatSize.Single:
                     return Float32;

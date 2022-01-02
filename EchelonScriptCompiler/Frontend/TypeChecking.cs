@@ -580,20 +580,64 @@ namespace EchelonScriptCompiler.Frontend {
                     return CheckTypes_Expression_FunctionCall (ref transUnit, symbols, src, funcCallExpr, expectedType);
 
                 case ES_AstIndexingExpression indexExpr: {
-                    throw new NotImplementedException ("[TODO] Indexing not implemented yet.");
-                    /*CheckTypes_Expression (ref transUnit, symbols, src, indexExpr.IndexedExpression);
+                    var typeIndex = Environment.GetArrayIndexType ();
+
+                    var rankCount = indexExpr.RankExpressions.Length;
+                    var indexedExprData = CheckTypes_Expression (ref transUnit, symbols, src, indexExpr.IndexedExpression, typeUnkn);
+
                     foreach (var rank in indexExpr.RankExpressions) {
-                        if (rank is not null)
-                            CheckTypes_Expression (ref transUnit, symbols, src, rank);
-                    }*/
+                        Debug.Assert (rank is not null);
+
+                        var rankExprData = CheckTypes_Expression (ref transUnit, symbols, src, rank, typeIndex);
+                        CheckTypes_EnsureCompat (typeIndex, rankExprData.Type, src, rank.NodeBounds, out _);
+                    }
+
+                    var badRankCount = false;
+                    var returnType = typeUnkn;
+                    if (indexedExprData.Type is not null) {
+                        var indexedType = indexedExprData.Type;
+                        var indexedTypeTag = indexedType->TypeTag;
+
+                        if (indexedTypeTag == ES_TypeTag.Array) {
+                            var arrayData = (ES_ArrayTypeData*) indexedExprData.Type;
+
+                            badRankCount = rankCount != arrayData->DimensionsCount;
+                            returnType = arrayData->ElementType;
+                        } else {
+                            errorList.Add (ES_FrontendErrors.GenCantApplyIndexingToType (
+                                indexedExprData.Type->Name.GetNameAsTypeString (),
+                                src, indexedExprData.Expr.NodeBounds
+                            ));
+                        }
+                    } else {
+                        errorList.Add (new EchelonScriptErrorMessage (
+                            src, indexedExprData.Expr.NodeBounds, ES_FrontendErrors.CantApplyIndexing
+                        ));
+                    }
+
+                    if (badRankCount) {
+                        errorList.Add (new EchelonScriptErrorMessage (
+                            src, indexedExprData.Expr.NodeBounds, ES_FrontendErrors.IndexingBadRankCount
+                        ));
+                    }
+
+                    return new ExpressionData { Expr = expr, Type = returnType, Constant = false, Addressable = true };
                 }
 
                 case ES_AstNewObjectExpression newObjExpr:
                     return CheckTypes_Expression_NewObject (ref transUnit, symbols, src, newObjExpr, expectedType);
 
                 case ES_AstNewArrayExpression newArrayExpr: {
+                    var indexType = Environment!.GetArrayIndexType ();
                     var elemType = GetTypeRef (newArrayExpr.ElementType);
                     var arrType = EnvironmentBuilder!.CreateArrayType (elemType, newArrayExpr.Ranks.Length);
+
+                    foreach (var rank in newArrayExpr.Ranks) {
+                        Debug.Assert (rank is not null);
+                        var rankExpr = CheckTypes_Expression (ref transUnit, symbols, src, rank, indexType);
+
+                        CheckTypes_EnsureCompat (indexType, rankExpr.Type, src, rankExpr.Expr.NodeBounds, out _);
+                    }
 
                     return new ExpressionData { Expr = expr, Type = arrType, Constant = false, Addressable = false };
                 }
