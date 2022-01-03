@@ -10,6 +10,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -99,19 +100,26 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
 
             #region ================== Instance properties
 
-            public int Count { get; private set; }
+            public int Count {
+                [MethodImpl (MethodImplOptions.AggressiveInlining)]
+                get;
+                [MethodImpl (MethodImplOptions.AggressiveInlining)]
+                private set;
+            }
 
-            public Span<Pointer<ImmixBlockHeader>> Span => blocks.AsSpan (0, Count);
+            public Span<Pointer<ImmixBlockHeader>> Span {
+                [MethodImpl (MethodImplOptions.AggressiveInlining)]
+                get => blocks.AsSpan (0, Count);
+            }
 
             #endregion
 
             #region ================== Indexers
 
             public ref Pointer<ImmixBlockHeader> this [int index] {
+                [MethodImpl (MethodImplOptions.AggressiveInlining)]
                 get {
-                    if (index >= Count)
-                        throw new IndexOutOfRangeException (nameof (index));
-
+                    Debug.Assert (index < Count);
                     return ref blocks! [index];
                 }
             }
@@ -120,6 +128,7 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
 
             #region ================== Static methods
 
+            [MethodImpl (MethodImplOptions.AggressiveInlining)]
             public static BlockList Create () {
                 var ret = new BlockList ();
 
@@ -133,16 +142,19 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
 
             #region ================== Instance methods
 
+            [MethodImpl (MethodImplOptions.AggressiveInlining)]
             private void EnsureHeadroom (int num) {
                 if (blocks.Length >= Count + num)
                     return;
 
                 var oldBlocks = blocks;
+                var newCount = 1 << (sizeof (int) * 8 - BitOperations.LeadingZeroCount ((uint) (Count + num - 1)));
 
-                blocks = new Pointer<ImmixBlockHeader> [Count + num];
+                blocks = new Pointer<ImmixBlockHeader> [newCount];
                 Array.Copy (oldBlocks, blocks, Count);
             }
 
+            [MethodImpl (MethodImplOptions.AggressiveInlining)]
             public void Add (Pointer<ImmixBlockHeader> block) {
                 if (Count >= blocks.Length)
                     EnsureHeadroom (MinHeadroomCount);
@@ -150,6 +162,7 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
                 blocks [Count++] = block;
             }
 
+            [MethodImpl (MethodImplOptions.AggressiveInlining)]
             public void Remove (int pos) {
                 if (pos < Count - 1)
                     Array.Copy (blocks, pos + 1, blocks, pos - 1, Count - pos);
@@ -157,6 +170,7 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
                 Count--;
             }
 
+            [MethodImpl (MethodImplOptions.AggressiveInlining)]
             public void RemoveAll () => Count = 0;
 
             #endregion
@@ -176,15 +190,25 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
 
             #region ================== Instance properties
 
-            public int BumpSpace => (int) (BumpLimit - BumpPointer);
+            public int BumpSpace {
+                [MethodImpl (MethodImplOptions.AggressiveInlining)]
+                get => (int) (BumpLimit - BumpPointer);
+            }
 
-            public ImmixBlockHeader* CurrentBlock => BlocksList! [CurBlockIndex];
-            public ref Pointer<ImmixBlockHeader> CurrentBlockRef => ref BlocksList! [CurBlockIndex];
+            public ImmixBlockHeader* CurrentBlock {
+                [MethodImpl (MethodImplOptions.AggressiveInlining)]
+                get => BlocksList! [CurBlockIndex];
+            }
+            public ref Pointer<ImmixBlockHeader> CurrentBlockRef {
+                [MethodImpl (MethodImplOptions.AggressiveInlining)]
+                get => ref BlocksList! [CurBlockIndex];
+            }
 
             #endregion
 
             #region ================== Instance methods
 
+            [MethodImpl (MethodImplOptions.AggressiveInlining)]
             public void Initialize () {
                 BlocksList = BlockList.Create ();
 
@@ -196,11 +220,13 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
                 SetNewAllocData (0, ImmixConstants.LinesCount);
             }
 
+            [MethodImpl (MethodImplOptions.AggressiveInlining)]
             private void SetNewAllocData (int holeOffs, int holeSize) {
                 BumpPointer = (byte*) CurrentBlock + ((ImmixConstants.HeaderLines + holeOffs) * ImmixConstants.LineSize);
                 BumpLimit = BumpPointer + (holeSize * ImmixConstants.LineSize);
             }
 
+            [MethodImpl (MethodImplOptions.AggressiveInlining)]
             private bool ScanForHole (int minSize, out int holeOffs, out int holeSize) {
                 // If the block is empty, return the whole block's length as a hole.
                 if (CurrentBlock->UsageLevel == ImmixBlockUsage.Empty) {
@@ -246,6 +272,7 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
                 return false;
             }
 
+            [MethodImpl (MethodImplOptions.AggressiveInlining)]
             public void EnsureAllocatable (int minSize) {
                 if (ScanForHole (minSize, out var holeOffs, out var holeSize)) {
                     SetNewAllocData (holeOffs, holeSize);
@@ -311,11 +338,13 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
 
         #region ================== Instance methods
 
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
         public void GetInfo (out ImmixDebugInfo info, out ImmixDebugInfo overflowInfo) {
             info = GetInfo (ref allocData);
             overflowInfo = GetInfo (ref overflowAllocData);
         }
 
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
         private ImmixDebugInfo GetInfo (ref AllocData alloc) {
             int blockStride = ImmixConstants.LinesCount / 8;
             if (blockStride * 8 != ImmixConstants.LinesCount)
@@ -364,6 +393,7 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
             };
         }
 
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
         public void* AllocObject (ref ES_ObjectHeader headerData, int allocSize) {
             // Large objects cannot be allocated with Immix.
             Debug.Assert (allocSize < ES_GarbageCollector.LargeObjectSize, "Large objects must be allocated in the LOH.");
@@ -420,6 +450,7 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
         private static List<int> freeChunks;
         private static int totalChunks;
 
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
         static ImmixGC_GlobalAllocator () {
             Debug.Assert ((ImmixConstants.BlockSize & (ImmixConstants.BlockSize - 1)) == 0,
                 "The block size must be a power of two.");
@@ -432,6 +463,7 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
             freeChunks = new ();
         }
 
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
         private static ImmixChunkHeader* AllocateChunk () {
             var chunkMemPtr = (nint) mi_malloc_aligned_at (
                 (nuint) ImmixConstants.TotalChunkSize,
@@ -457,6 +489,7 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
             return chunkPtr;
         }
 
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
         internal static ImmixBlockHeader* GetBlock () {
             ImmixBlockHeader* block = null;
 
@@ -498,8 +531,9 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
             return block;
         }
 
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
         internal static void ReturnBlocks (Span<Pointer<ImmixBlockHeader>> block) {
-            throw new NotImplementedException ();
+            throw new NotImplementedException ("[TODO] Implement returning Immix blocks.");
             /*Debug.Assert (block.UsageLevel != ImmixBlockUsage.Empty);
 
             block.LineMap.Span.Clear ();

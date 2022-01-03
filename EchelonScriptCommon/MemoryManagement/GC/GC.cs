@@ -59,6 +59,7 @@ namespace EchelonScriptCommon.GarbageCollection {
 
         #region ================== Static methods
 
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
         private static void EnsureInitialized () {
             if (garbageCollector is null) {
                 garbageCollector = new ES_GarbageCollector ();
@@ -76,6 +77,7 @@ namespace EchelonScriptCommon.GarbageCollection {
         /// <summary>Performs a garbage collection for the specified generations.</summary>
         /// <param name="gen">What generations to collect. Use -1 to collect all generations.</param>
         /// <exception cref="ArgumentOutOfRangeException"></exception>
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
         public static void PerformCollection (int gen = -1, CollectionMode mode = CollectionMode.Default) {
             EnsureInitialized ();
             garbageCollector!.PerformCollectionInternal (gen, mode);
@@ -83,6 +85,7 @@ namespace EchelonScriptCommon.GarbageCollection {
 
         /// <summary>Performs a collection if it's deemed optimal or necessary to do so.
         /// Equivalent to PerformCollection with gen = -1 and collection mode "Optimized".</summary>
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
         public static void CheckCollection () {
             EnsureInitialized ();
             garbageCollector!.CheckCollectionInternal (-1);
@@ -90,6 +93,7 @@ namespace EchelonScriptCommon.GarbageCollection {
 
         /// <summary>Performs a collection if it's deemed optimal or necessary to do so.
         /// Equivalent to PerformCollection with collection mode "Optimized".</summary>
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
         public static void CheckCollection (int gen) {
             EnsureInitialized ();
             garbageCollector!.CheckCollectionInternal (gen);
@@ -107,6 +111,7 @@ namespace EchelonScriptCommon.GarbageCollection {
             return garbageCollector!.AllocateArray (arrayType, new Span<ES_ArrayIndex> (dimSizesPtr, dimsCount), pinned != 0, true);
         }
 
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
         public static T* AllocObject<T> (ES_TypeInfo* type, bool pinned, T defaultVal = default) where T : unmanaged {
             EnsureInitialized ();
 
@@ -116,28 +121,31 @@ namespace EchelonScriptCommon.GarbageCollection {
             return ptr;
         }
 
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
         public static ES_ArrayHeader* AllocArray<T> (ES_ArrayTypeData* arrayType, ReadOnlySpan<ES_ArrayIndex> dimSizes, bool pinned, T defaultElemVal = default) where T : unmanaged {
             EnsureInitialized ();
 
             var ptr = garbageCollector!.AllocateArray (arrayType, dimSizes, pinned, false);
 
-            var totalElemCount = CalculateTotalArrayLength (dimSizes);
-            var arraySpan = new Span<T> ((byte*) ptr + dimSizes.Length * sizeof (int), totalElemCount);
+            var arraySpan = new Span<T> (ES_ArrayHeader.GetArrayDataPointer (ptr), ptr->Length);
             arraySpan.Fill (defaultElemVal);
 
             return ptr;
         }
 
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
         public static void* AllocObject (ES_TypeInfo* type, bool pinned) {
             EnsureInitialized ();
             return garbageCollector!.AllocateObject (type, pinned);
         }
 
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
         public static ES_ArrayHeader* AllocArray (ES_ArrayTypeData* arrayType, ReadOnlySpan<ES_ArrayIndex> dimSizes, bool pinned) {
             EnsureInitialized ();
             return garbageCollector!.AllocateArray (arrayType, dimSizes, pinned, true);
         }
 
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
         private static ES_ArrayIndex CalculateTotalArrayLength (ReadOnlySpan<ES_ArrayIndex> dimSizes) {
             var totalElemsCount = dimSizes [0];
             foreach (var dim in dimSizes.Slice (1))
@@ -150,15 +158,17 @@ namespace EchelonScriptCommon.GarbageCollection {
 
         #region ================== Instance methods
 
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
         private void CheckDisposed () {
-            if (disposedValue)
-                throw new ObjectDisposedException (GetType ().Name);
+            Debug.Assert (!disposedValue, "GC object was disposed.");
         }
 
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
         private void CheckCollectionInternal (int gen) {
             throw new NotImplementedException ("[TODO] Garbage collection determination not implemented yet.");
         }
 
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
         private void PerformCollectionInternal (int gen = -1, CollectionMode mode = CollectionMode.Default) {
             if (gen < -1 || gen > 2)
                 throw new ArgumentOutOfRangeException (nameof (gen), $"Argument must be between -1 (all) and 2.");
@@ -177,10 +187,12 @@ namespace EchelonScriptCommon.GarbageCollection {
             }
         }
 
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
         private void CollectGarbage (int gen) {
             throw new NotImplementedException ("[TODO] Garbage collection not implemented yet.");
         }
 
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
         private void* AllocateObject (ES_TypeInfo* type, bool pinned) {
             CheckDisposed ();
 
@@ -222,6 +234,7 @@ namespace EchelonScriptCommon.GarbageCollection {
             return objPtr;
         }
 
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
         private ES_ArrayHeader* AllocateArray (ES_ArrayTypeData* arrayType, ReadOnlySpan<ES_ArrayIndex> dimSizes, bool pinned, bool clearElems) {
             CheckDisposed ();
 
@@ -269,7 +282,7 @@ namespace EchelonScriptCommon.GarbageCollection {
 
             // Copy the array data to the start of the array object.
             var arrHeader = (ES_ArrayHeader*) ((byte*) objHeader + sizeof (ES_ObjectHeader));
-            var arrDimsArea = (ES_ArrayIndex*) ((byte*) arrHeader + sizeof (ES_ArrayHeader));
+            var arrDimsArea = ES_ArrayHeader.GetArrayIndicesPointer (arrHeader);
 
             *arrHeader = new ES_ArrayHeader {
                 Length = totalElemsCount,
@@ -278,7 +291,7 @@ namespace EchelonScriptCommon.GarbageCollection {
             dimSizes.CopyTo (new Span<ES_ArrayIndex> (arrDimsArea, dimSizes.Length));
 
             // Clear the array's memory.
-            var objMem = new Span<byte> (arrHeader + arrHeaderSize, totalElemsCount);
+            var objMem = new Span<byte> (ES_ArrayHeader.GetArrayDataPointer (arrHeader), totalElemsCount);
             if (clearElems)
                 objMem.Clear ();
 
