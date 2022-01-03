@@ -594,10 +594,14 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
             // Compile the C# code and report errors.
             var csCompOptions = new CSharpCompilationOptions (OutputKind.DynamicallyLinkedLibrary,
+#if DEBUG
+                optimizationLevel: OptimizationLevel.Debug,
+#else
                 optimizationLevel: OptimizationLevel.Release,
+#endif
                 checkOverflow: false, allowUnsafe: true,
                 concurrentBuild: true, deterministic: false
-            ).WithAllowUnsafe (true);
+            );
             const string assemblyName = "EchelonScriptCodeAssembly"; // TODO: Generate a proper name for the assembly.
             var csComp = CSharpCompilation.Create (assemblyName, new [] { csSyntaxTree }, refApis, csCompOptions);
 
