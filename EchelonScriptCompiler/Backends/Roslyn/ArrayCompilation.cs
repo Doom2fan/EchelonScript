@@ -9,7 +9,6 @@
 
 using System;
 using System.Diagnostics;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using ChronosLib.Pooled;
 using EchelonScriptCommon;
@@ -40,27 +39,36 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
         }
 
         private MemberDeclarationSyntax GenerateCode_Array (ES_ArrayTypeData* arrayType) {
+            Debug.Assert (env is not null);
             Debug.Assert (envBuilder is not null);
 
             using var memberTypes = new StructPooledList<SyntaxNode> (CL_ClearMode.Auto);
 
-            var typeIndex = IdentifierName (nameof (ES_ArrayIndex));
+            var typeIndex = GetRoslynType (env.GetArrayIndexType ());
             var typeHeader = IdentifierName (nameof (ES_ArrayHeader));
 
             var attrAggressiveInlining = Attribute_MethodImpl_AggressiveInlining ();
 
+            var basicGetter = AccessorDeclaration (
+                SyntaxKind.GetAccessorDeclaration
+            ).WithAttributeLists (
+                SingletonList (SingletonAttributeList (attrAggressiveInlining))
+            );
+
             // Add the header.
             memberTypes.Add (
-                SimpleFieldDeclaration (typeHeader, Identifier ("header"))
-                    .WithModifiers (TokenList (Token (SyntaxKind.PrivateKeyword)))
+                SimpleFieldDeclaration (
+                    typeHeader, Identifier ("header")
+                ).WithModifiers (TokenList (Token (SyntaxKind.PrivateKeyword)))
             );
 
             // Add the dimension lengths.
             for (int i = 0; i < arrayType->DimensionsCount; i++) {
                 var dimId = Identifier (GetArrayDimensionMember (i));
                 memberTypes.Add (
-                    SimpleFieldDeclaration (typeIndex, dimId)
-                        .WithModifiers (TokenList (Token (SyntaxKind.PublicKeyword)))
+                    SimpleFieldDeclaration (
+                        typeIndex, dimId
+                    ).WithModifiers (TokenList (Token (SyntaxKind.PublicKeyword)))
                 );
             }
 
@@ -68,23 +76,19 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             var lengthName = arrayType->DimensionsCount < 2 ? "Length" : "TotalLength";
             memberTypes.Add (
                 PropertyDeclaration (typeIndex, lengthName).WithAccessorList (AccessorList (SingletonList (
-                    AccessorDeclaration (
-                        SyntaxKind.GetAccessorDeclaration
-                    ).WithExpressionBody (ArrowExpressionClause (
+                    basicGetter.WithExpressionBody (ArrowExpressionClause (
                         SimpleMemberAccess ("header", nameof (ES_ArrayHeader.Length))
-                    )).WithAttributeLists (SingletonList (SingletonAttributeList (attrAggressiveInlining)))
-                )))
+                    ))
+                ))).WithModifiers (TokenList (Token (SyntaxKind.PublicKeyword)))
             );
 
             // Add the array rank.
             memberTypes.Add (
                 PropertyDeclaration (typeIndex, "Rank").WithAccessorList (AccessorList (SingletonList (
-                    AccessorDeclaration (
-                        SyntaxKind.GetAccessorDeclaration
-                    ).WithExpressionBody (ArrowExpressionClause (
+                    basicGetter.WithExpressionBody (ArrowExpressionClause (
                         SimpleMemberAccess ("header", nameof (ES_ArrayHeader.Rank))
-                    )).WithAttributeLists (SingletonList (SingletonAttributeList (attrAggressiveInlining)))
-                )))
+                    ))
+                ))).WithModifiers (TokenList (Token (SyntaxKind.PublicKeyword)))
             );
 
             // Add the alloc functions to the members.

@@ -17,6 +17,7 @@ using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Frontend;
 using EchelonScriptCompiler.Utilities;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace EchelonScriptCompiler.Backends.RoslynBackend {
@@ -32,7 +33,8 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             var typeUnkn = env.TypeUnknownValue;
 
             var parentExpr = GenerateCode_Expression (ref transUnit, symbols, src, expr.Parent, null);
-            var memberId = idPool.GetIdentifier (expr.Member.Value.Text.Span);
+            var memberChars = expr.Member.Value.Text.Span;
+            var memberId = idPool.GetIdentifier (memberChars);
 
             if (parentExpr.Type is not null) {
                 var typeTag = parentExpr.Type->TypeTag;
@@ -40,11 +42,14 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                     typeTag = ((ES_ReferenceData*) parentExpr.Type)->PointedType->TypeTag;
 
                 switch (typeTag) {
+                    case ES_TypeTag.UNKNOWN:
+                        throw new CompilationException (ES_BackendErrors.FrontendError);
+
                     case ES_TypeTag.Struct:
                         return GenerateCode_Expression_MemberAccess_Struct (src, expr, ref parentExpr, memberId);
 
-                    case ES_TypeTag.UNKNOWN:
-                        throw new CompilationException (ES_BackendErrors.FrontendError);
+                    case ES_TypeTag.Array:
+                        return GenerateCode_Expression_MemberAccess_Array (src, expr, ref parentExpr, memberChars);
 
                     default:
                         throw new NotImplementedException ("Type not implemented yet.");
@@ -53,11 +58,11 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 var type = parentExpr.TypeInfo;
 
                 switch (type->TypeTag) {
-                    case ES_TypeTag.Struct:
-                        return GenerateCode_Expression_MemberAccessStatic_Aggregate (src, expr, type, memberId);
-
                     case ES_TypeTag.UNKNOWN:
                         throw new CompilationException (ES_BackendErrors.FrontendError);
+
+                    case ES_TypeTag.Struct:
+                        return GenerateCode_Expression_MemberAccessStatic_Aggregate (src, expr, type, memberId);
 
                     default:
                         throw new NotImplementedException ("Type not implemented yet.");
@@ -117,6 +122,44 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             }
 
             throw new CompilationException (ES_BackendErrors.FrontendError);
+        }
+
+        private ExpressionData GenerateCode_Expression_MemberAccess_Array (
+            ReadOnlySpan<char> src, ES_AstMemberAccessExpression expr,
+            ref ExpressionData parentExpr, ReadOnlySpan<char> memberChars
+        ) {
+            Debug.Assert (env is not null);
+            Debug.Assert (parentExpr.Type is not null);
+            Debug.Assert (parentExpr.Value is not null);
+            Debug.Assert (parentExpr.Type->TypeTag == ES_TypeTag.Array);
+
+            var typeArr = (ES_ArrayTypeData*) parentExpr.Type;
+            var typeIndex = env.GetArrayIndexType ();
+
+            var addressable = false;
+            ES_TypeInfo* memberType;
+            ExpressionSyntax value;
+
+            var lengthName = typeArr->DimensionsCount < 2 ? "Length" : "TotalLength";
+            var dimLenPrefix = "LengthD";
+            if (memberChars.Equals (lengthName, StringComparison.Ordinal)) {
+                memberType = typeIndex;
+                value = PointerMemberAccess (parentExpr.Value, IdentifierName (lengthName));
+            } else if (memberChars.Equals ("Rank", StringComparison.Ordinal)) {
+                memberType = env.GetIntType (ES_IntSize.Int8, true);
+                value = PointerMemberAccess (parentExpr.Value, IdentifierName ("Rank"));
+            } else if (memberChars.StartsWith (dimLenPrefix, StringComparison.Ordinal)) {
+                var num = memberChars.Slice (dimLenPrefix.Length);
+
+                if (!int.TryParse (num, 0, null, out var dimIndex))
+                    throw new CompilationException (ES_BackendErrors.FrontendError);
+
+                memberType = typeIndex;
+                value = PointerMemberAccess (parentExpr.Value, IdentifierName (GetArrayDimensionMember (dimIndex)));
+            } else
+                throw new CompilationException (ES_BackendErrors.FrontendError);
+
+            return new ExpressionData { Expr = expr, Type = memberType, Value = value, Constant = false, Addressable = addressable };
         }
 
         private ExpressionData GenerateCode_Expression_MemberAccessStatic_Aggregate (

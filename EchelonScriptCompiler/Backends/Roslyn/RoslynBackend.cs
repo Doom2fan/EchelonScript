@@ -777,6 +777,9 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
         private ExpressionSyntax SimpleMemberAccess (string type, string memberName)
             => MemberAccessExpression (SyntaxKind.SimpleMemberAccessExpression, IdentifierName (type), IdentifierName (memberName));
 
+        private ExpressionSyntax PointerMemberAccess (ExpressionSyntax type, SimpleNameSyntax memberName)
+            => MemberAccessExpression (SyntaxKind.PointerMemberAccessExpression, type, memberName);
+
         private AttributeSyntax Attribute_MethodImpl_AggressiveInlining () {
             return Attribute (
                 IdentifierName (nameof (MethodImplAttribute)),
