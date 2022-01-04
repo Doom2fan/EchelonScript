@@ -87,7 +87,12 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 MethodDeclaration (
                     PredefinedType (Token (SyntaxKind.VoidKeyword)),
                     DefaultStaticConsName
-                ).WithModifiers (TokenList (Token (SyntaxKind.StaticKeyword))).WithBody (BlockSpan (staticConsBody.Span))
+                ).WithModifiers (TokenList (
+                    Token (SyntaxKind.InternalKeyword),
+                    Token (SyntaxKind.StaticKeyword)
+                )).WithBody (
+                    BlockSpan (staticConsBody.Span)
+                )
             );
 
             // Create the struct declaration.

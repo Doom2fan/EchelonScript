@@ -491,6 +491,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                                         IdentifierName (structDecl.Identifier),
                                         IdentifierName (DefaultStaticConsName)
                                     )));
+                                    globalStaticConsBody.Add (staticConsCall);
 
                                     break;
                                 }
