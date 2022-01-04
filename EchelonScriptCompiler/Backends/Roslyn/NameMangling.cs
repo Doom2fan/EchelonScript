@@ -8,6 +8,7 @@
  */
 
 using System;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using ChronosLib.Pooled;
@@ -19,6 +20,8 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
         internal const string DefaultStaticConsName = "_defaultStaticCons";
         internal const string GlobalStaticConsName = "_globalStaticCons";
         internal const string GlobalStorageTypeName = "_globalFunctionsStorageType";
+
+        internal const string ArrayAllocFuncName = "$Allocate";
 
         private static string MangleDefaultConstructorName (ES_TypeInfo* typeName, bool isStatic) {
             // Sample name: "struct.System.Numerics__Vector2"
@@ -85,7 +88,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
         #region Type names
 
         private static string MangleStructName ([DisallowNull] ES_StructData* structData) {
-            // Sample name: "struct.System.Numerics__Vector2"
+            // Sample name: "struct.System.Numerics::Vector2"
             using var mangleChars = new StructPooledList<char> (CL_ClearMode.Auto);
 
             // The prefix.
@@ -135,6 +138,41 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             return mangleChars.Span.GetPooledString ();
         }
 
+        private static string MangleArrayType ([DisallowNull] ES_ArrayTypeData* arrayData) {
+            // Sample name: "array.@generated::global::int32$2D"
+            using var mangleChars = new StructPooledList<char> (CL_ClearMode.Auto);
+
+            // The prefix.
+            mangleChars.AddRange ("array!");
+
+            // The namespace.
+            var namespaceName = arrayData->TypeInfo.Name.NamespaceName.Span;
+            var namespaceSpan = mangleChars.AddSpan (namespaceName.Length);
+            Encoding.ASCII.GetChars (namespaceName, namespaceSpan);
+
+            // The mangled namespace separator.
+            mangleChars.Add (':', 2);
+
+            // The element type name.
+            var elementMangle = MangleTypeNameAny (arrayData->ElementType);
+            mangleChars.AddRange (elementMangle);
+
+            // The dimensions suffix.
+            Debug.Assert (arrayData->DimensionsCount <= byte.MaxValue);
+
+            var dimSuffixSpan = mangleChars.AddSpan (5);
+            dimSuffixSpan [0] = '$';
+
+            if (!arrayData->DimensionsCount.TryFormat (dimSuffixSpan [1..], out var charsWritten))
+                Debug.Fail ("Failed to format dimensions count.");
+
+            dimSuffixSpan [charsWritten + 1] = 'D';
+
+            mangleChars.RemoveEnd (3 - charsWritten);
+
+            return mangleChars.Span.GetPooledString ();
+        }
+
         internal static string MangleTypeName ([DisallowNull] ES_TypeInfo* type) {
             switch (type->TypeTag) {
                 case ES_TypeTag.Struct:
@@ -142,6 +180,9 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
                 case ES_TypeTag.Function:
                     return MangleFunctionType ((ES_FunctionPrototypeData*) type);
+
+                case ES_TypeTag.Array:
+                    return MangleArrayType ((ES_ArrayTypeData*) type);
 
                 case ES_TypeTag.Void:
                 case ES_TypeTag.Bool:
@@ -155,7 +196,6 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 case ES_TypeTag.Reference:
                 case ES_TypeTag.Const:
                 case ES_TypeTag.Immutable:
-                case ES_TypeTag.Array:
                     throw new NotImplementedException ("[TODO] Not implemented yet.");
 
                 default:
@@ -181,18 +221,6 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 default:
                     return MangleTypeName (type);
             }
-        }
-
-        static string MangleArrayAllocFunc (ES_ArrayTypeData* arrayType) {
-            const string functionIdPrefix = "$AllocateArray$";
-
-            var mangledTypeName = MangleTypeNameAny (arrayType->ElementType);
-            using var functionNameArr = PooledArray<char>.GetArray (functionIdPrefix.Length + mangledTypeName.Length);
-
-            functionIdPrefix.AsSpan ().CopyTo (functionNameArr.Span);
-            mangledTypeName.AsSpan ().CopyTo (functionNameArr.Span [functionIdPrefix.Length..]);
-
-            return functionNameArr.Span.GetPooledString ();
         }
 
         #endregion

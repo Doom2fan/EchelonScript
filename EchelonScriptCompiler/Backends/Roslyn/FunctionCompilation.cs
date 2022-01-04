@@ -9,12 +9,9 @@
 
 using System;
 using System.Diagnostics;
-using System.Runtime.CompilerServices;
 using System.Text;
 using ChronosLib.Pooled;
-using EchelonScriptCommon;
 using EchelonScriptCommon.Data.Types;
-using EchelonScriptCommon.GarbageCollection;
 using EchelonScriptCommon.Utilities;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data;
@@ -551,138 +548,6 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 default:
                     throw new NotImplementedException ("Expression type not implemented.");
             }
-        }
-
-        private (MethodDeclarationSyntax, MethodDeclarationSyntax) GenerateCode_AllocArrayFunc (ES_ArrayTypeData* arrayType) {
-            var typeIndex = GetRoslynType (env!.GetArrayIndexType ());
-            var typeIntPtr = IdentifierName (nameof (IntPtr));
-            var typeArrayHeaderPtr = PointerType (IdentifierName (nameof (ES_ArrayHeader)));
-
-            var arrayAllocFuncName = MangleArrayAllocFunc (arrayType);
-
-            var elemIsRef = arrayType->ElementType->TypeTag == ES_TypeTag.Reference;
-            var elemRoslynType = GetRoslynType (arrayType->ElementType);
-
-            var dimsCount = arrayType->DimensionsCount;
-
-            using var dimSizesExpressions = PooledArray<SyntaxNodeOrToken>.GetArray (dimsCount * 2 - 1);
-
-            /** Generate the parameters list **/
-            using var parametersList = new StructPooledList<SyntaxNodeOrToken> (CL_ClearMode.Auto);
-            parametersList.EnsureCapacity (1 + dimsCount * 2 + 2);
-
-            // [Params] "pinned" bool.
-            const string paramNamePinBool = "pinned";
-            parametersList.Add (Parameter (Identifier (paramNamePinBool))
-                .WithType (PredefinedType (Token (SyntaxKind.BoolKeyword)))
-            );
-
-            // Add the rank size params.
-            const string paramNameDimSizePrefix = "dimSize";
-            using var dimSizeNameArr = PooledArray<char>.GetArray (paramNameDimSizePrefix.Length + 3);
-            paramNameDimSizePrefix.AsSpan ().CopyTo (dimSizeNameArr.Span);
-            for (int i = 0; i < dimsCount; i++) {
-                if (!i.TryFormat (dimSizeNameArr.Span [^3..], out var charsWritten))
-                    Debug.Fail ("Too many array dimensions.");
-
-                var dimSizeParamName = dimSizeNameArr.Span [..(paramNameDimSizePrefix.Length + charsWritten)].GetPooledString ();
-
-                parametersList.Add (Token (SyntaxKind.CommaToken));
-                parametersList.Add (Parameter (Identifier (dimSizeParamName)).WithType (typeIndex));
-
-                dimSizesExpressions.Span [i * 2] = IdentifierName (dimSizeParamName);
-                if (i < dimsCount - 1)
-                    dimSizesExpressions.Span [i * 2 + 1] = Token (SyntaxKind.CommaToken);
-            }
-
-            // [Params] Elements value.
-            const string elemValsName = "elemsVal";
-            parametersList.Add (Token (SyntaxKind.CommaToken));
-            parametersList.Add (Parameter (Identifier (elemValsName)).WithType (elemRoslynType));
-
-            /** Generate the args list **/
-            using var argsList = new StructPooledList<SyntaxNodeOrToken> (CL_ClearMode.Auto);
-            argsList.EnsureCapacity (3 + dimsCount * 2 + 2);
-
-            // [Args] Type pointer.
-            var pointerTypeSyntax = PointerType (IdentifierName (nameof (ES_ArrayTypeData)));
-            argsList.Add (Argument (PointerLiteral (arrayType, pointerTypeSyntax)));
-
-            // [Args] Dimensions.
-            argsList.Add (Token (SyntaxKind.CommaToken));
-            argsList.Add (Argument (StackAllocArrayCreationExpression (
-                ArrayType (IdentifierName (nameof (ES_ArrayIndex))).WithRankSpecifiers (
-                    SingletonList (ArrayRankSpecifier (SingletonSeparatedList<ExpressionSyntax> (OmittedArraySizeExpression ())))
-                ),
-                InitializerExpression (
-                    SyntaxKind.ArrayInitializerExpression,
-                    SeparatedListSpan<ExpressionSyntax> (dimSizesExpressions.Span)
-                )
-            )));
-
-            // [Args] "pinned" bool.
-            argsList.Add (Token (SyntaxKind.CommaToken));
-            argsList.Add (Argument (IdentifierName (paramNamePinBool)));
-
-            // [Args] Add the value to assign.
-            argsList.Add (Token (SyntaxKind.CommaToken));
-            if (elemIsRef)
-                argsList.Add (Argument (CastExpression (typeIntPtr, IdentifierName (elemValsName))));
-            else
-                argsList.Add (Argument (IdentifierName (elemValsName)));
-
-            /** Generate the base function definition **/
-            var allocFuncDef = MethodDeclaration (typeArrayHeaderPtr, arrayAllocFuncName);
-            allocFuncDef = allocFuncDef.WithModifiers (TokenList (
-                Token (SyntaxKind.PublicKeyword),
-                Token (SyntaxKind.StaticKeyword)
-            ));
-            allocFuncDef = allocFuncDef.WithAttributeLists (SingletonList (AttributeList (SingletonSeparatedList (Attribute (
-                IdentifierName (nameof (MethodImplAttribute)),
-                AttributeArgumentList (SingletonSeparatedList (
-                    AttributeArgument (MemberAccessExpression (
-                        SyntaxKind.SimpleMemberAccessExpression,
-                        IdentifierName (nameof (MethodImplOptions)),
-                        IdentifierName (nameof (MethodImplOptions.AggressiveInlining))
-                    )
-                ))
-            ))))));
-
-            /** Generate the basic function **/
-            var allocArrayFunctionAccessBasic = MemberAccessExpression (SyntaxKind.SimpleMemberAccessExpression,
-                IdentifierName (nameof (ES_GarbageCollector)),
-                IdentifierName (nameof (ES_GarbageCollector.AllocArray))
-            );
-
-            var allocFuncDefBasic = allocFuncDef;
-            allocFuncDefBasic = allocFuncDefBasic.WithParameterList (ParameterList (SeparatedListSpan<ParameterSyntax> (parametersList.Span [..^2])));
-            allocFuncDefBasic = allocFuncDefBasic.WithExpressionBody (ArrowExpressionClause (
-                InvocationExpression (allocArrayFunctionAccessBasic, ArgumentList (SeparatedListSpan<ArgumentSyntax> (
-                    argsList.Span [..^2]
-                )))
-            ));
-
-            /** Generate the function with element setting **/
-            var allocArrayFunctionAccessElemDefault = MemberAccessExpression (SyntaxKind.SimpleMemberAccessExpression,
-                IdentifierName (nameof (ES_GarbageCollector)),
-                GenericName (Identifier (nameof (ES_GarbageCollector.AllocArray))).WithTypeArgumentList (
-                    TypeArgumentList (SingletonSeparatedList (!elemIsRef ? elemRoslynType : typeIntPtr))
-                )
-            );
-
-            ExpressionSyntax allocFuncDefElemDefaultCall = InvocationExpression (
-                allocArrayFunctionAccessElemDefault,
-                ArgumentList (SeparatedListSpan<ArgumentSyntax> (argsList.Span))
-            );
-
-            if (elemIsRef)
-                allocFuncDefElemDefaultCall = CastExpression (elemRoslynType, allocFuncDefElemDefaultCall);
-
-            var allocFuncDefElemDefault = allocFuncDef;
-            allocFuncDefElemDefault = allocFuncDefElemDefault.WithParameterList (ParameterList (SeparatedListSpan<ParameterSyntax> (parametersList.Span)));
-            allocFuncDefElemDefault = allocFuncDefElemDefault.WithExpressionBody (ArrowExpressionClause (allocFuncDefElemDefaultCall));
-
-            return (allocFuncDefBasic, allocFuncDefElemDefault);
         }
     }
 }

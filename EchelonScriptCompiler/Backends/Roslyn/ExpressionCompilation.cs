@@ -427,11 +427,17 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             var elemRoslynType = GetRoslynType (elemType);
             var elemPtrRoslynType = PointerType (elemRoslynType);
 
+            var typeArrayHeader = IdentifierName (nameof (ES_ArrayHeader));
+            var typeArrayHeaderPtr = PointerType (IdentifierName (nameof (ES_ArrayHeader)));
+
+            var arrayPtr = indexedExpr.Value!;
+            var arrayHeader = CastExpression (typeArrayHeaderPtr, arrayPtr);
+
             // Get the base address of the array's data.
-            var arrayArgumentList = ArgumentList (SingletonSeparatedList (Argument (indexedExpr.Value!)));
+            var arrayArgumentList = ArgumentList (SingletonSeparatedList (Argument (arrayHeader)));
 
             ExpressionSyntax baseAddrExpr = MemberAccessExpression (SyntaxKind.SimpleMemberAccessExpression,
-                IdentifierName (nameof (ES_ArrayHeader)),
+                typeArrayHeader,
                 IdentifierName (nameof (ES_ArrayHeader.GetArrayDataPointer))
             );
             baseAddrExpr = InvocationExpression (baseAddrExpr).WithArgumentList (arrayArgumentList);
@@ -441,18 +447,11 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             using var rankSizeExprs = PooledArray<ExpressionSyntax>.GetArray (dimCount);
             var rankSizeExprsSpan = rankSizeExprs.Span;
 
-            ExpressionSyntax rankSizePtrExpr = MemberAccessExpression (SyntaxKind.SimpleMemberAccessExpression,
-                IdentifierName (nameof (ES_ArrayHeader)),
-                IdentifierName (nameof (ES_ArrayHeader.GetArrayIndicesPointer))
-            );
-            rankSizePtrExpr = InvocationExpression (rankSizePtrExpr).WithArgumentList (arrayArgumentList);
             for (int i = 0; i < dimCount; i++) {
-                rankSizeExprsSpan [i] = ElementAccessExpression (rankSizePtrExpr).WithArgumentList (
-                    BracketedArgumentList (
-                        SingletonSeparatedList (
-                            Argument (LiteralExpression (SyntaxKind.NumericLiteralExpression, Literal (i)))
-                        )
-                    )
+                rankSizeExprsSpan [i] = MemberAccessExpression (
+                    SyntaxKind.PointerMemberAccessExpression,
+                    arrayPtr,
+                    IdentifierName (GetArrayDimensionMember (i))
                 );
             }
 
@@ -550,9 +549,12 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             }
 
             /** Generate the function call **/
-            ExpressionSyntax ret = InvocationExpression (IdentifierName (MangleArrayAllocFunc (arrayType)))
-                .WithArgumentList (ArgumentList (SeparatedListSpan<ArgumentSyntax> (argsList.Span)));
-            ret = CastExpression (PointerType (IdentifierName (nameof (ES_ArrayHeader))), ret);
+            ExpressionSyntax ret =
+                InvocationExpression (MemberAccessExpression (
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    IdentifierName (MangleTypeName (&arrayType->TypeInfo)),
+                    IdentifierName (ArrayAllocFuncName)
+                )).WithArgumentList (ArgumentList (SeparatedListSpan<ArgumentSyntax> (argsList.Span)));
 
             return ret;
         }

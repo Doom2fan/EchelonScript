@@ -433,11 +433,8 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
                         case ES_TypeTag.Array: {
                             var arrayType = (ES_ArrayTypeData*) typePtr;
-                            var allocFuncDefs = GenerateCode_AllocArrayFunc (arrayType);
-
-                            globalFunctions.Add (allocFuncDefs.Item1);
-                            globalFunctions.Add (allocFuncDefs.Item2);
-
+                            var arrayRoslynType = GenerateCode_Array (arrayType);
+                            memberDefinitions.Add (arrayRoslynType);
                             break;
                         }
 
@@ -554,14 +551,11 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 UsingDirective (NamespaceNameSyntax ("EchelonScriptCommon", "GarbageCollection")),
                 UsingDirective (NamespaceNameSyntax ("EchelonScriptCommon", "Utilities")),
 
-                UsingDirective (NameEquals (
-                    IdentifierName (nameof (MethodImplAttribute))),
-                    NamespaceNameSyntax ("System", "Runtime", "CompilerServices", nameof (MethodImplAttribute))
-                ),
-                UsingDirective (NameEquals (
-                    IdentifierName (nameof (MethodImplOptions))),
-                    NamespaceNameSyntax ("System", "Runtime", "CompilerServices", nameof (MethodImplOptions))
-                )
+                SingleImportDirective (NamespaceNameSyntax ("System", "Runtime", "CompilerServices"), nameof (MethodImplAttribute)),
+                SingleImportDirective (NamespaceNameSyntax ("System", "Runtime", "CompilerServices"), nameof (MethodImplOptions)),
+
+                SingleImportDirective (NamespaceNameSyntax ("System", "Runtime", "InteropServices"), nameof (StructLayoutAttribute)),
+                SingleImportDirective (NamespaceNameSyntax ("System", "Runtime", "InteropServices"), nameof (LayoutKind))
             ).NormalizeWhitespace ();
 
             // Create the syntax tree and parse options.
@@ -605,12 +599,17 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             const string assemblyName = "EchelonScriptCodeAssembly"; // TODO: Generate a proper name for the assembly.
             var csComp = CSharpCompilation.Create (assemblyName, new [] { csSyntaxTree }, refApis, csCompOptions);
 
-            const string error_CSError = "The C# compiler reported an error when compiling: {errMsg}";
             foreach (var diagMsg in csComp.GetDiagnostics ()) {
                 if (diagMsg.Severity != DiagnosticSeverity.Error)
                     continue;
 
-                errorList.Add (new (error_CSError.Replace ("{errMsg}", diagMsg.GetMessage ()), 0, 0, 0, 0));
+                var errPos = diagMsg.Location.GetLineSpan ().StartLinePosition;
+                var errMsg = diagMsg.GetMessage ();
+
+                errorList.Add (new (
+                    $"The C# compiler reported an error at line {errPos.Line}, column {errPos.Character} when compiling: {errMsg}",
+                    0, 0, 0, 0
+                ));
             }
 
             if (errorList.Count > 0)
@@ -692,6 +691,13 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             return ret;
         }
 
+        private UsingDirectiveSyntax SingleImportDirective (NameSyntax namespaceName, string typeNameStr) {
+            var typeName = IdentifierName (typeNameStr);
+            var originalName = QualifiedName (namespaceName, typeName);
+
+            return UsingDirective (NameEquals (typeName), originalName);
+        }
+
         private SeparatedSyntaxList<TNode> SeparatedListSpan<TNode> (ReadOnlySpan<SyntaxNodeOrToken> nodes) where TNode : SyntaxNode {
             var nodesList = new SyntaxNodeOrTokenList ();
             foreach (var node in nodes)
@@ -711,12 +717,72 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             return List (nodesList);
         }
 
+        private SyntaxList<TNode> ListParams<TNode> (params TNode [] nodes) where TNode : SyntaxNode => List (nodes);
+
+        private SeparatedSyntaxList<TNode> SimpleSeparatedList<TNode> (ReadOnlySpan<TNode> nodes, SyntaxToken separator)
+            where TNode : SyntaxNode {
+            using var list = new StructPooledList<SyntaxNodeOrToken> (CL_ClearMode.Auto);
+            list.EnsureCapacity (nodes.Length * 2 - 1);
+
+            var isFirst = true;
+            foreach (var node in nodes) {
+                if (!isFirst)
+                    list.Add (separator);
+
+                list.Add (node);
+                isFirst = false;
+            }
+
+            return SeparatedListSpan<TNode> (list.Span);
+        }
+
+        private SeparatedSyntaxList<TNode> SimpleSeparatedList<TNode> (SyntaxToken separator, params TNode [] nodes) where TNode : SyntaxNode
+            => SimpleSeparatedList<TNode> (nodes, separator);
+
         private BlockSyntax BlockSpan (ReadOnlySpan<StatementSyntax> statements) {
             var stmtsList = new SyntaxList<StatementSyntax> ();
             foreach (var stmt in statements)
                 stmtsList = stmtsList.Add (stmt);
 
             return Block (stmtsList);
+        }
+
+        private FieldDeclarationSyntax SimpleFieldDeclaration (TypeSyntax type, SyntaxToken name, ExpressionSyntax? assignValue = null) {
+            var varDeclarator = VariableDeclarator (name);
+            if (assignValue is not null)
+                varDeclarator = varDeclarator.WithInitializer (EqualsValueClause (assignValue));
+
+            var varList = SingletonSeparatedList (varDeclarator);
+            var varDecl = VariableDeclaration (type).WithVariables (varList);
+            var fieldDecl = FieldDeclaration (varDecl);
+
+            return fieldDecl;
+        }
+
+        private AttributeListSyntax SingletonAttributeList (AttributeSyntax attr) => AttributeList (SingletonSeparatedList (attr));
+
+        private AttributeArgumentListSyntax SingletonAttributeArgumentList (AttributeArgumentSyntax attrArg)
+            => AttributeArgumentList (SingletonSeparatedList (attrArg));
+
+        private AttributeArgumentListSyntax SimpleAttributeArgumentList (ReadOnlySpan<AttributeArgumentSyntax> attrArgs)
+            => AttributeArgumentList (SimpleSeparatedList (attrArgs, Token (SyntaxKind.CommaToken)));
+
+        private AttributeArgumentListSyntax SimpleAttributeArgumentList (params AttributeArgumentSyntax [] attrArgs)
+            => AttributeArgumentList (SimpleSeparatedList<AttributeArgumentSyntax> (attrArgs, Token (SyntaxKind.CommaToken)));
+
+        private ExpressionSyntax SimpleMemberAccess (ExpressionSyntax type, SimpleNameSyntax memberName)
+            => MemberAccessExpression (SyntaxKind.SimpleMemberAccessExpression, type, memberName);
+
+        private ExpressionSyntax SimpleMemberAccess (string type, string memberName)
+            => MemberAccessExpression (SyntaxKind.SimpleMemberAccessExpression, IdentifierName (type), IdentifierName (memberName));
+
+        private AttributeSyntax Attribute_MethodImpl_AggressiveInlining () {
+            return Attribute (
+                IdentifierName (nameof (MethodImplAttribute)),
+                SingletonAttributeArgumentList (AttributeArgument (
+                    SimpleMemberAccess (nameof (MethodImplOptions), nameof (MethodImplOptions.AggressiveInlining)
+                )))
+            );
         }
 
         #endregion

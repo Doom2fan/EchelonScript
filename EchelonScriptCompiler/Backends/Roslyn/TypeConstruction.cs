@@ -39,8 +39,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                     return PointerType (pointedType);
                 }
 
-                case ES_TypeTag.Array:
-                    return PointerType (IdentifierName (nameof (ES_ArrayHeader)));
+                case ES_TypeTag.Array: return PointerType (IdentifierName (MangleTypeName (type)));
 
                 case ES_TypeTag.Function:
                 case ES_TypeTag.Class:
