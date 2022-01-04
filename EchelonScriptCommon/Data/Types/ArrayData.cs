@@ -8,6 +8,7 @@
  */
 
 using System.Runtime.InteropServices;
+using ChronosLib.Pooled;
 using EchelonScriptCommon.Utilities;
 
 namespace EchelonScriptCommon.Data.Types {

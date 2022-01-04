@@ -902,10 +902,19 @@ namespace EchelonScriptCompiler.Frontend {
                         return new ExpressionData { Expr = expr, Type = typeUnkn, Constant = false, Addressable = false };
 
                     case ES_TypeTag.Struct: {
-                        return CheckTypes_Expression_MemberAccess_Struct (
+                        return CheckTypes_Expression_MemberAccess_Basic (
                             ref transUnit, symbols, src,
                             expr, type, memberId, expectedType
                         );
+                    }
+
+                    case ES_TypeTag.Array: {
+                        var ret = CheckTypes_Expression_MemberAccess_Basic (
+                            ref transUnit, symbols, src,
+                            expr, type, memberId, expectedType
+                        );
+                        ret.Addressable = false;
+                        return ret;
                     }
 
                     default:
@@ -925,6 +934,16 @@ namespace EchelonScriptCompiler.Frontend {
                         );
                     }
 
+                    case ES_TypeTag.Array: {
+                        errorList.Add (ES_FrontendErrors.GenMemberDoesntExist (
+                            type->Name.GetNameAsTypeString (),
+                            expr.Member.Value.Text.Span.GetPooledString (),
+                            expr.Member.Value
+                        ));
+
+                        return new ExpressionData { Expr = expr, Type = typeUnkn, Constant = false, Addressable = false };
+                    }
+
                     default:
                         throw new NotImplementedException ("Type not implemented yet.");
                 }
@@ -934,7 +953,7 @@ namespace EchelonScriptCompiler.Frontend {
                 throw new CompilationException ("<<Unknown expression type in CheckTypes_Expression_MemberAccess>>");
         }
 
-        protected ExpressionData CheckTypes_Expression_MemberAccess_Struct (
+        protected ExpressionData CheckTypes_Expression_MemberAccess_Basic (
             ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, ReadOnlySpan<char> src,
             ES_AstMemberAccessExpression expr, ES_TypeInfo* type, ArrayPointer<byte> memberId, ES_TypeInfo* expectedType
         ) {

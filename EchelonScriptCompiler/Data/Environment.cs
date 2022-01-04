@@ -739,6 +739,46 @@ namespace EchelonScriptCompiler.Data {
                 return funcType;
             }
 
+            public void GenerateMembersList (
+                ES_TypeMembers.Builder membersBuilder,
+                ReadOnlySpan<ES_MemberData_Variable> varsList,
+                ReadOnlySpan<ES_MemberData_Function> funcsList
+            ) {
+                var varsSize = varsList.Length * sizeof (ES_MemberData_Variable);
+                var funcsSize = funcsList.Length * sizeof (ES_MemberData_Function);
+
+                IntPtr memArea = IntPtr.Zero;
+                var membersList = MemoryManager.GetArray<Pointer<ES_MemberData>> (varsList.Length + funcsList.Length);
+
+                if (varsSize + funcsSize > 0)
+                    memArea = MemoryManager.GetMemory (varsSize + funcsSize);
+
+                var varsSpan = new ArrayPointer<ES_MemberData_Variable> ((ES_MemberData_Variable*) memArea, varsList.Length);
+                var funcsSpan = new ArrayPointer<ES_MemberData_Function> ((ES_MemberData_Function*) (memArea + varsSize), funcsList.Length);
+
+                // Copy the member data structs to their final memory location and set the pointers to said memory location.
+                int membersCount = 0;
+                int idx = 0;
+                foreach (var memberVar in varsList) {
+                    varsSpan.Span [idx] = memberVar;
+                    membersList.Span [membersCount] = (ES_MemberData*) (varsSpan.Elements + idx);
+
+                    membersCount++;
+                    idx++;
+                }
+
+                idx = 0;
+                foreach (var memberFunc in funcsList) {
+                    funcsSpan.Span [idx] = memberFunc;
+                    membersList.Span [idx] = (ES_MemberData*) (funcsSpan.Elements + idx);
+
+                    membersCount++;
+                    idx++;
+                }
+
+                membersBuilder.MembersList = membersList;
+            }
+
             #region Derived type creation
 
             public ES_TypeInfo* CreateReferenceType (ES_TypeInfo* baseType) {
@@ -826,6 +866,43 @@ namespace EchelonScriptCompiler.Data {
 
                 arrType = (ES_TypeInfo*) environment.memManager.GetMemory<ES_ArrayTypeData> ();
                 *((ES_ArrayTypeData*) arrType) = new ES_ArrayTypeData (arrFQN, elementType, dimensionCount);
+
+                /* Create the array's members. */
+                var typeIndex = environment.GetArrayIndexType ();
+
+                using var memberVars = new StructPooledList<ES_MemberData_Variable> (CL_ClearMode.Auto);
+                memberVars.Add (new ES_MemberData_Variable (
+                    environment.IdPool.GetIdentifier (dimensionCount < 2 ? "Length" : "TotalLength"),
+                    ArrayPointer<byte>.Null,
+                    ES_AccessModifier.Public,
+                    0,
+                    0,
+                    typeIndex
+                ));
+
+                memberVars.Add (new ES_MemberData_Variable (
+                    environment.IdPool.GetIdentifier ("Rank"),
+                    ArrayPointer<byte>.Null,
+                    ES_AccessModifier.Public,
+                    0,
+                    0,
+                    environment.GetIntType (ES_IntSize.Int8, true)
+                ));
+
+                for (int i = 0; i < dimensionCount; i++) {
+                    memberVars.Add (new ES_MemberData_Variable (
+                        environment.IdPool.GetIdentifier ($"LengthD{i}"),
+                        ArrayPointer<byte>.Null,
+                        ES_AccessModifier.Public,
+                        0,
+                        0,
+                        typeIndex
+                    ));
+                }
+
+                var membersBuilder = new ES_TypeMembers.Builder (&arrType->MembersList, arrType);
+
+                GenerateMembersList (membersBuilder, memberVars.Span, null);
 
                 GetOrCreateNamespace (environment.GeneratedTypesNamespace).NamespaceData.Types.Add (arrType);
 

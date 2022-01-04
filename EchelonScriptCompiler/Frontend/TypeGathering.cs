@@ -448,8 +448,11 @@ namespace EchelonScriptCompiler.Frontend {
                 return null;
             }
 
+            Debug.Assert (Environment is not null);
+            Debug.Assert (EnvironmentBuilder is not null);
+
             var srcCode = astUnit.Ast.Source.Span;
-            var idPool = Environment!.IdPool;
+            var idPool = Environment.IdPool;
             var symbols = astUnit.Symbols;
 
             using var varsList = new StructPooledList<ES_MemberData_Variable> (CL_ClearMode.Auto);
@@ -490,49 +493,20 @@ namespace EchelonScriptCompiler.Frontend {
                 }
             }
 
-            var varsSize = varsList.Count * sizeof (ES_MemberData_Variable);
-            var funcsSize = funcsList.Count * sizeof (ES_MemberData_Function);
-
-            IntPtr memArea = IntPtr.Zero;
-            var membersList = EnvironmentBuilder!.MemoryManager.GetArray<Pointer<ES_MemberData>> (varsList.Count + funcsList.Count);
-
-            if (varsSize + funcsSize > 0)
-                memArea = EnvironmentBuilder!.MemoryManager.GetMemory (varsSize + funcsSize);
-
-            var varsSpan = new ArrayPointer<ES_MemberData_Variable> ((ES_MemberData_Variable*) memArea, varsList.Count);
-            var funcsSpan = new ArrayPointer<ES_MemberData_Function> ((ES_MemberData_Function*) (memArea + varsSize), funcsList.Count);
-
-            // Copy the member data structs to their final memory location and set the pointers to said memory location.
-            int membersCount = 0;
-            int idx = 0;
-            foreach (var memberVar in varsList) {
-                varsSpan.Span [idx] = memberVar;
-                membersList.Span [membersCount] = (ES_MemberData*) (varsSpan.Elements + idx);
-
-                membersCount++;
-                idx++;
-            }
-
-            idx = 0;
-            foreach (var memberFunc in funcsList) {
-                funcsSpan.Span [idx] = memberFunc;
-                membersList.Span [idx] = (ES_MemberData*) (funcsSpan.Elements + idx);
-
-                membersCount++;
-                idx++;
-            }
+            EnvironmentBuilder.GenerateMembersList (membersBuilder, varsList.Span, funcsList.Span);
+            var membersSpan = membersBuilder.MembersList.Span;
 
             // Add the AST nodes to the Pointer->AST map.
             foreach (var content in typeDef.Contents) {
                 switch (content) {
                     case ES_AstMemberVarDefinition varDef: {
-                        var varPtr = FindMember (idPool.GetIdentifier (varDef.Name.Text.Span), membersList.Span);
+                        var varPtr = FindMember (idPool.GetIdentifier (varDef.Name.Text.Span), membersSpan);
                         EnvironmentBuilder.PointerAstMap.Add ((IntPtr) varPtr, varDef);
                         break;
                     }
 
                     case ES_AstFunctionDefinition funcDef: {
-                        var funcPtr = FindMember (idPool.GetIdentifier (funcDef.Name.Text.Span), membersList.Span);
+                        var funcPtr = FindMember (idPool.GetIdentifier (funcDef.Name.Text.Span), membersSpan);
                         EnvironmentBuilder.PointerAstMap.Add ((IntPtr) funcPtr, funcDef);
                         break;
                     }
@@ -541,8 +515,6 @@ namespace EchelonScriptCompiler.Frontend {
                         throw new NotImplementedException ("Node type not implemented.");
                 }
             }
-
-            membersBuilder.MembersList = membersList;
         }
 
         protected void GatherTypes_Class (ref TranslationUnitData transUnit, ref AstUnitData astUnit, ES_AstClassDefinition classDef, ES_ClassData.Builder builder) {
