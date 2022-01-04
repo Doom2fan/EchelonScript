@@ -68,6 +68,6 @@ namespace EchelonScriptCommon {
 
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
         public static ES_ArrayIndex* GetArrayIndicesPointer ([NotNull] ES_ArrayHeader* arrayPointer)
-            => (ES_ArrayIndex*) ((byte*) arrayPointer + sizeof (ES_ArrayIndex));
+            => (ES_ArrayIndex*) ((byte*) arrayPointer + sizeof (ES_ArrayHeader));
     }
 }
