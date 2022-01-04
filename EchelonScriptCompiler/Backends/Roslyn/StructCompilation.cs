@@ -63,13 +63,15 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                     if (varDef.InitializationExpression is null)
                         initValue = GetDefaultValue (memberPtr->Type);
                     else {
-                        throw new NotImplementedException ("[TODO] Not implemented yet.");
-                        /*var initExpr = GenerateCode_Expression (ref transUnit, symbols, src, varDef.InitializationExpression, memberPtr->Type);
+                        var initExpr = GenerateCode_Expression (ref transUnit, symbols, src, varDef.InitializationExpression, memberPtr->Type);
 
-                        if (!initExpr.Constant || !initExpr.Addressable)
+                        if (!initExpr.Constant)
                             throw new CompilationException (ES_BackendErrors.FrontendError);
 
-                        GenerateCode_EnsureImplicitCompat (ref initExpr, memberPtr->Type);*/
+                        GenerateCode_EnsureImplicitCompat (ref initExpr, memberPtr->Type);
+
+                        Debug.Assert (initExpr.Value is not null);
+                        initValue = initExpr.Value;
                     }
 
                     staticConsBody.Add (ExpressionStatement (AssignmentExpression (
