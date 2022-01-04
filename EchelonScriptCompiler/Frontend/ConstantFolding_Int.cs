@@ -15,6 +15,8 @@ using EchelonScriptCompiler.CompilerCommon;
 namespace EchelonScriptCompiler.Frontend {
     public unsafe partial class CompilerFrontend {
         public ES_IntTypeData* DetermineIntLiteralType (ES_AstIntegerLiteralExpression intLitExpr, ES_TypeInfo* expectedType, bool negated) {
+            Debug.Assert (Environment is not null);
+
             ES_IntTypeData* expectedIntType = null;
 
             bool? unsigned = null;
@@ -123,8 +125,7 @@ namespace EchelonScriptCompiler.Frontend {
             if (unsigned is null)
                 unsigned = false;
 
-            var typeName = Environment!.IdPool.GetIdentifier (ES_PrimitiveTypes.GetIntName (size, unsigned.Value));
-            var intType = Environment.GetFullyQualifiedType (Environment.GlobalTypesNamespace, typeName);
+            var intType = Environment.GetIntType (size, unsigned.Value);
 
             Debug.Assert (intType is not null);
             Debug.Assert (intType->TypeTag == ES_TypeTag.Int);

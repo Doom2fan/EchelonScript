@@ -991,13 +991,15 @@ namespace EchelonScriptCompiler.Data {
             return IdPool.GetIdentifier (charList.Span);
         }
 
-        public ES_TypeInfo* GetArrayIndexType () {
-            var indexName = IdPool.GetIdentifier (ES_PrimitiveTypes.GetIntName (ES_IntSize.Int32, false));
-            var indexType = GetFullyQualifiedType (GlobalTypesNamespace, indexName);
-            Debug.Assert (indexType is not null && indexType->TypeTag == ES_TypeTag.Int);
+        public ES_TypeInfo* GetIntType (ES_IntSize size, bool unsigned) {
+            var intName = IdPool.GetIdentifier (ES_PrimitiveTypes.GetIntName (size, unsigned));
+            var intType = GetFullyQualifiedType (GlobalTypesNamespace, intName);
+            Debug.Assert (intType is not null && intType->TypeTag == ES_TypeTag.Int);
 
-            return indexType;
+            return intType;
         }
+
+        public ES_TypeInfo* GetArrayIndexType () => GetIntType (ES_IntSize.Int32, false);
 
         public ES_TypeInfo* GetFullyQualifiedType (ArrayPointer<byte> namespaceName, ArrayPointer<byte> typeName) {
             return GetFullyQualifiedType (new ES_FullyQualifiedName (namespaceName, typeName));

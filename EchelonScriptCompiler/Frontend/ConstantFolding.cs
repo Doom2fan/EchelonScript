@@ -735,10 +735,8 @@ namespace EchelonScriptCompiler.Frontend {
 
                     var leftType = FoldConstants_Expression (ref transUnit, symbols, src, ref simpleBinaryExpr.Left, expectedType);
 
-                    if (simpleBinaryExpr.ExpressionType.IsBitShift () && leftType.Type->TypeTag == ES_TypeTag.Int) {
-                        var intName = ES_PrimitiveTypes.GetIntName (((ES_IntTypeData*) expectedType)->IntSize, true);
-                        expectedRightType = Environment.GetFullyQualifiedType (Environment.GlobalTypesNamespace, idPool.GetIdentifier (intName));
-                    }
+                    if (simpleBinaryExpr.ExpressionType.IsBitShift () && leftType.Type->TypeTag == ES_TypeTag.Int)
+                        expectedRightType = Environment.GetIntType (((ES_IntTypeData*) expectedType)->IntSize, true);
 
                     var rightType = FoldConstants_Expression (ref transUnit, symbols, src, ref simpleBinaryExpr.Right, expectedRightType);
 

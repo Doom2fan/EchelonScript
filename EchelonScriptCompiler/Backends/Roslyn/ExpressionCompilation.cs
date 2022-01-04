@@ -227,10 +227,8 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
                     var lhs = GenerateCode_Expression (ref transUnit, symbols, src, simpleBinaryExpr.Left, expectedType);
 
-                    if (simpleBinaryExpr.ExpressionType.IsBitShift () && lhs.Type->TypeTag == ES_TypeTag.Int) {
-                        var intName = ES_PrimitiveTypes.GetIntName (((ES_IntTypeData*) expectedType)->IntSize, true);
-                        expectedRHSType = env.GetFullyQualifiedType (env.GlobalTypesNamespace, idPool.GetIdentifier (intName));
-                    }
+                    if (simpleBinaryExpr.ExpressionType.IsBitShift () && lhs.Type->TypeTag == ES_TypeTag.Int)
+                        expectedRHSType = env.GetIntType (((ES_IntTypeData*) expectedType)->IntSize, true);
 
                     var rhs = GenerateCode_Expression (ref transUnit, symbols, src, simpleBinaryExpr.Right, expectedRHSType);
 
