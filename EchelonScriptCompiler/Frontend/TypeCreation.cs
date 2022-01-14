@@ -183,7 +183,7 @@ namespace EchelonScriptCompiler.Frontend {
             var namePtr = Environment!.IdPool.GetIdentifier (name);
             var fqn = new ES_FullyQualifiedName (Environment.GlobalTypesNamespace, namePtr);
 
-            *voidDataPtr = new ES_TypeInfo (tag, ES_AccessModifier.Public, ArrayPointer<byte>.Null, fqn);
+            *voidDataPtr = new ES_TypeInfo (tag, ES_AccessModifier.Public, ES_TypeFlag.NoRefs | ES_TypeFlag.NoNew, ArrayPointer<byte>.Null, fqn);
             voidDataPtr->RuntimeSize = runtimeSize;
 
             return new Pointer<ES_TypeInfo> (voidDataPtr);

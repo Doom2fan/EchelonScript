@@ -127,6 +127,12 @@ namespace EchelonScriptCompiler.Frontend {
                         var varType = GetTypeRef (varDef.ValueType);
                         var flags = (ES_MemberFlags) 0;
 
+                        if (varType->Flags.HasFlag (ES_TypeFlag.NoNew)) {
+                            errorList.Add (ES_FrontendErrors.GenNoTypeNew (
+                                varType->Name.GetNameAsTypeString (), srcCode, varDef.ValueType.NodeBounds
+                            ));
+                        }
+
                         if (varDef.Static)
                             flags |= ES_MemberFlags.Static;
 
@@ -632,6 +638,12 @@ namespace EchelonScriptCompiler.Frontend {
                     var elemType = GetTypeRef (newArrayExpr.ElementType);
                     var arrType = EnvironmentBuilder!.CreateArrayType (elemType, newArrayExpr.Ranks.Length);
 
+                    if (elemType->Flags.HasFlag (ES_TypeFlag.NoNew)) {
+                        errorList.Add (ES_FrontendErrors.GenNoTypeNew (
+                            elemType->Name.GetNameAsTypeString (), src, newArrayExpr.NodeBounds
+                        ));
+                    }
+
                     foreach (var rank in newArrayExpr.Ranks) {
                         Debug.Assert (rank is not null);
                         var rankExpr = CheckTypes_Expression (ref transUnit, symbols, src, rank, indexType);
@@ -842,10 +854,18 @@ namespace EchelonScriptCompiler.Frontend {
             var refType = EnvironmentBuilder!.CreateReferenceType (objType);
             var retType = refType;
 
-            bool argErrorFound = false;
+            var errorFound = false;
+
+            if (objType->Flags.HasFlag (ES_TypeFlag.NoNew)) {
+                errorList.Add (ES_FrontendErrors.GenNoTypeNew (
+                    objType->Name.GetNameAsTypeString (), src, newObjExpr.NodeBounds
+                ));
+
+                errorFound = true;
+            }
 
             // Get the arg types.
-            int argIdx = 0;
+            var argIdx = 0;
             Span<ES_FunctionPrototypeArgData> argsList = stackalloc ES_FunctionPrototypeArgData [newObjExpr.Arguments.Length];
             foreach (var arg in newObjExpr.Arguments) {
                 var argValueExpr = CheckTypes_Expression (ref transUnit, symbols, src, arg.ValueExpression, typeUnkn);
@@ -854,14 +874,14 @@ namespace EchelonScriptCompiler.Frontend {
                 var argValueType = argValueExpr.Type;
 
                 if (argValueExpr.Type is null || argValueExpr.Type->TypeTag == ES_TypeTag.UNKNOWN)
-                    argErrorFound = true;
+                    errorFound = true;
 
                 var argProtoData = new ES_FunctionPrototypeArgData (argType, argValueType);
 
                 argsList [argIdx++] = argProtoData;
             }
 
-            if (argErrorFound)
+            if (errorFound)
                 return new ExpressionData { Expr = newObjExpr, Type = typeUnkn, Constant = false, Addressable = false };
 
             // Get the constructor.

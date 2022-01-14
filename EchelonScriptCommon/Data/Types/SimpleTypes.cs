@@ -41,7 +41,7 @@ namespace EchelonScriptCommon.Data.Types {
             ES_AccessModifier accessMod, ArrayPointer<byte> sourceUnit, ES_FullyQualifiedName fullyQualifiedName,
             ES_IntSize size, bool unsigned
         ) {
-            TypeInfo = new ES_TypeInfo (ES_TypeTag.Int, accessMod, sourceUnit, fullyQualifiedName);
+            TypeInfo = new ES_TypeInfo (ES_TypeTag.Int, accessMod, ES_TypeFlag.NoRefs, sourceUnit, fullyQualifiedName);
 
             IntSize = size;
             Unsigned = unsigned;
@@ -75,7 +75,7 @@ namespace EchelonScriptCommon.Data.Types {
             ES_AccessModifier accessMod, ArrayPointer<byte> sourceUnit, ES_FullyQualifiedName fullyQualifiedName,
             ES_FloatSize size
         ) {
-            TypeInfo = new ES_TypeInfo (ES_TypeTag.Float, accessMod, sourceUnit, fullyQualifiedName);
+            TypeInfo = new ES_TypeInfo (ES_TypeTag.Float, accessMod, ES_TypeFlag.NoRefs, sourceUnit, fullyQualifiedName);
 
             FloatSize = size;
 
@@ -105,7 +105,7 @@ namespace EchelonScriptCommon.Data.Types {
         public ES_ReferenceData (
             ES_FullyQualifiedName fullyQualifiedName, ES_TypeInfo* pointedType
         ) {
-            TypeInfo = new ES_TypeInfo (ES_TypeTag.Reference, ES_AccessModifier.Public, ArrayPointer<byte>.Null, fullyQualifiedName);
+            TypeInfo = new ES_TypeInfo (ES_TypeTag.Reference, ES_AccessModifier.Public, ES_TypeFlag.None, ArrayPointer<byte>.Null, fullyQualifiedName);
             TypeInfo.RuntimeSize = sizeof (void*);
 
             PointedType = pointedType;

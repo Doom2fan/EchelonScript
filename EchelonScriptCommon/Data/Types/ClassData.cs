@@ -46,7 +46,7 @@ namespace EchelonScriptCommon.Data.Types {
                 ES_FullyQualifiedName fullyQualifiedName, ArrayPointer<byte> sourceUnit
             ) {
                 classData = data;
-                data->TypeInfo = new ES_TypeInfo (ES_TypeTag.Class, accessMod, sourceUnit, fullyQualifiedName);
+                data->TypeInfo = new ES_TypeInfo (ES_TypeTag.Class, accessMod, ES_TypeFlag.NoNew, sourceUnit, fullyQualifiedName);
             }
 
             #endregion

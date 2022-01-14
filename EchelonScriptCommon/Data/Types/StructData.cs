@@ -48,7 +48,7 @@ namespace EchelonScriptCommon.Data.Types {
                 ES_FullyQualifiedName fullyQualifiedName, ArrayPointer<byte> sourceUnit
             ) {
                 structData = data;
-                data->TypeInfo = new ES_TypeInfo (ES_TypeTag.Struct, accessMod, sourceUnit, fullyQualifiedName);
+                data->TypeInfo = new ES_TypeInfo (ES_TypeTag.Struct, accessMod, ES_TypeFlag.None, sourceUnit, fullyQualifiedName);
                 membersListBuilder = new ES_TypeMembers.Builder (&structData->TypeInfo.MembersList, &structData->TypeInfo);
             }
 

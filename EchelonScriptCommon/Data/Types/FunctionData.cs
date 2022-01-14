@@ -126,44 +126,6 @@ namespace EchelonScriptCommon.Data.Types {
     [StructLayout (LayoutKind.Sequential, Pack = 1)]
     [ES_ExportAggregate (new [] { "EchelonScript", "Reflection" }, "FunctionTypeData", ES_ExportAttributeBase.AggregateType.Struct)]
     public unsafe struct ES_FunctionPrototypeData {
-        public unsafe sealed class Builder {
-            #region ================== Instance fields
-
-            private ES_FunctionPrototypeData* functionProtoData;
-
-            #endregion
-
-            #region ================== Instance properties
-
-            /// <summary>The pointer to the function prototype this builder is for.</summary>
-            public ES_FunctionPrototypeData* FunctionProtoData => functionProtoData;
-
-            public ES_TypeInfo* ReturnType {
-                get => functionProtoData->returnType;
-                set => functionProtoData->returnType = value;
-            }
-
-            public ArrayPointer<ES_FunctionPrototypeArgData> ArgumentsList {
-                get => functionProtoData->argumentsList;
-                set => functionProtoData->argumentsList = value;
-            }
-
-            #endregion
-
-            #region ================== Constructors
-
-            internal Builder (
-                [DisallowNull] ES_FunctionPrototypeData* data, ES_AccessModifier accessMod,
-                ES_FullyQualifiedName fullyQualifiedName, ArrayPointer<byte> sourceUnit
-            ) {
-                functionProtoData = data;
-                data->TypeInfo = new ES_TypeInfo (ES_TypeTag.Function, accessMod, sourceUnit, fullyQualifiedName);
-                data->TypeInfo.RuntimeSize = IntPtr.Size;
-            }
-
-            #endregion
-        }
-
         #region ================== Instance fields
 
         public ES_TypeInfo TypeInfo;
@@ -178,7 +140,7 @@ namespace EchelonScriptCommon.Data.Types {
             ES_TypeInfo* retType, ArrayPointer<ES_FunctionPrototypeArgData> argsList,
             ES_FullyQualifiedName fullyQualifiedName, ArrayPointer<byte> sourceUnit
         ) {
-            TypeInfo = new ES_TypeInfo (ES_TypeTag.Function, accessMod, sourceUnit, fullyQualifiedName);
+            TypeInfo = new ES_TypeInfo (ES_TypeTag.Function, accessMod, ES_TypeFlag.NoNew, sourceUnit, fullyQualifiedName);
             TypeInfo.RuntimeSize = IntPtr.Size;
 
             returnType = retType;

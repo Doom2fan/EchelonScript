@@ -12,8 +12,6 @@ using CommunityToolkit.HighPerformance.Buffers;
 using EchelonScriptCommon.Utilities;
 
 namespace EchelonScriptCommon.Data.Types {
-    // TODO: Add type flags
-    // TODO: Add a type flag that indicates the type contains no references.
     public enum ES_TypeTag : int {
         UNKNOWN   = 0,
         Void      = 1,
@@ -31,6 +29,14 @@ namespace EchelonScriptCommon.Data.Types {
         Array     = 13,
     }
 
+    public enum ES_TypeFlag : int {
+        None = 0,
+
+        Analyzed = 1 << 0,
+        NoRefs = 1 << 1,
+        NoNew = 1 << 2,
+    }
+
     public unsafe struct ES_TypeInfo {
         #region ================== Instance fields
 
@@ -43,11 +49,17 @@ namespace EchelonScriptCommon.Data.Types {
         /// <summary>The type's access modifier.</summary>
         public readonly ES_AccessModifier AccessModifier;
 
+        /// <summary>The type's flags.</summary>
+        public ES_TypeFlag Flags;
+
         /// <summary>The fully qualified name of the type.</summary>
         public readonly ES_FullyQualifiedName Name;
 
         /// <summary>The source translation unit of the type.</summary>
         public readonly ArrayPointer<byte> SourceUnit;
+
+        /// <summary>A list of all the references in the type.</summary>
+        public ArrayPointer<nint> RefsList;
 
         /// <summary>The members list of the type.</summary>
         public ES_TypeMembers MembersList;
@@ -57,7 +69,7 @@ namespace EchelonScriptCommon.Data.Types {
         #region ================== Constructors
 
         public ES_TypeInfo (
-            ES_TypeTag typeTag, ES_AccessModifier accessMod,
+            ES_TypeTag typeTag, ES_AccessModifier accessMod, ES_TypeFlag flags,
             ArrayPointer<byte> sourceUnit,
             ES_FullyQualifiedName fullyQualifiedName
         ) {
@@ -65,10 +77,12 @@ namespace EchelonScriptCommon.Data.Types {
             RuntimeSize = -1;
 
             AccessModifier = accessMod;
+            Flags = flags;
 
             Name = fullyQualifiedName;
             SourceUnit = sourceUnit;
 
+            RefsList = ArrayPointer<nint>.Null;
             MembersList = new ES_TypeMembers ();
         }
 

@@ -40,7 +40,7 @@ namespace EchelonScriptCommon.Data.Types {
                 ES_FullyQualifiedName fullyQualifiedName, ArrayPointer<byte> sourceUnit
             ) {
                 enumData = data;
-                data->TypeInfo = new ES_TypeInfo (ES_TypeTag.Enum, accessMod, sourceUnit, fullyQualifiedName);
+                data->TypeInfo = new ES_TypeInfo (ES_TypeTag.Enum, accessMod, ES_TypeFlag.NoRefs, sourceUnit, fullyQualifiedName);
             }
 
             #endregion

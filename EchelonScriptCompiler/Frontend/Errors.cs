@@ -190,6 +190,7 @@ namespace EchelonScriptCompiler.Frontend {
         public const string MemberDoesntExist = "The type \"{typeName}\" has no member named \"{memberName}\".";
         public const string StaticAccessOnInst = "The member \"{memberName}\" cannot be accessed through an instance; use \"{typeName}.{memberName}\" instead.";
         public const string InstAccessOnStatic = "The member \"{memberName}\" is not static; it must be accessed through an instance.";
+        public const string NoTypeNew = "The type \"{typeName}\" cannot be constructed with the \"new\" keyword.";
         public const string NoSuchConstructor = "The type \"{typeName}\" has no constructor that takes the parameter types {signature}.";
         public const string CantApplyIndexingToType = "Cannot index expression of type \"{typeName}\".";
         public const string CantApplyIndexing = "Indexed expression must return a type.";
@@ -198,6 +199,8 @@ namespace EchelonScriptCompiler.Frontend {
         public const string UnexpectedReturnValue = "Unexpected return value.";
         public const string MissingReturnValue = "A return value of or convertible to type \"{retType}\" is required.";
         public const string MissingReturnStatement = "Not all code paths return a value.";
+
+        public const string FieldCausesCycle = "Field \"{fieldName}\" causes a cycle in type {typeName}.";
 
         #region Generation functions
 
@@ -361,6 +364,10 @@ namespace EchelonScriptCompiler.Frontend {
             var errorMessage = InstAccessOnStatic.Replace ("{memberName}", memberName);
             return new EchelonScriptErrorMessage (errorToken, errorMessage);
         }
+        public static EchelonScriptErrorMessage GenNoTypeNew (string typeName, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
+            var errorMessage = NoTypeNew.Replace ("{typeName}", typeName);
+            return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
+        }
         public static EchelonScriptErrorMessage GenNoSuchConstructor (string typeName, string signature, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
             var errorMessage = NoSuchConstructor.Replace ("{typeName}", typeName).Replace ("{signature}", signature);
             return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
@@ -369,6 +376,11 @@ namespace EchelonScriptCompiler.Frontend {
         public static EchelonScriptErrorMessage GenMissingReturnValue (string retType, ReadOnlySpan<char> src, ES_AstNodeBounds errorBounds) {
             var errorMessage = MissingReturnValue.Replace ("{retType}", retType);
             return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
+        }
+
+        public static EchelonScriptErrorMessage GenFieldCausesCycle (string fieldName, string typeName, EchelonScriptToken tk) {
+            var errorMessage = FieldCausesCycle.Replace ("{fieldName}", fieldName).Replace ("{typeName}", typeName);
+            return new EchelonScriptErrorMessage (tk, errorMessage);
         }
 
         #endregion

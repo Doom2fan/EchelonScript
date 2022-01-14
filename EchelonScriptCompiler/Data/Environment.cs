@@ -998,7 +998,7 @@ namespace EchelonScriptCompiler.Data {
             var unknTypeId = IdPool.GetIdentifier ("#UNKNOWN_TYPE");
             var unknType = memManager.GetMemory<ES_TypeInfo> ();
             *unknType = new ES_TypeInfo (
-                ES_TypeTag.UNKNOWN, ES_AccessModifier.Public, ArrayPointer<byte>.Null,
+                ES_TypeTag.UNKNOWN, ES_AccessModifier.Public, ES_TypeFlag.None, ArrayPointer<byte>.Null,
                 new ES_FullyQualifiedName (ArrayPointer<byte>.Null, unknTypeId)
             );
             typeUnknownValue = unknType;

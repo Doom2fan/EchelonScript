@@ -477,6 +477,11 @@ namespace EchelonScriptCompiler.Frontend {
             if (errorList.Count > 0)
                 return nullArr;
 
+            PostAnalysis ();
+
+            if (errorList.Count > 0)
+                return nullArr;
+
             return translationUnits.ToPooledArray ();
         }
 

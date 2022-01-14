@@ -32,7 +32,7 @@ namespace EchelonScriptCommon.Data.Types {
                 ES_FullyQualifiedName fullyQualifiedName, ArrayPointer<byte> sourceUnit
             ) {
                 interfaceData = data;
-                data->TypeInfo = new ES_TypeInfo (ES_TypeTag.Interface, accessMod, sourceUnit, fullyQualifiedName);
+                data->TypeInfo = new ES_TypeInfo (ES_TypeTag.Interface, accessMod, ES_TypeFlag.NoNew, sourceUnit, fullyQualifiedName);
             }
 
             #endregion
