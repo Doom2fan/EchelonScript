@@ -99,7 +99,6 @@ namespace EchelonScriptCompiler.Frontend {
                 case ES_TypeTag.Class:
                     break;
 
-                case ES_TypeTag.Array:
                 case ES_TypeTag.Void:
                 case ES_TypeTag.Bool:
                 case ES_TypeTag.Int:
@@ -107,8 +106,10 @@ namespace EchelonScriptCompiler.Frontend {
                 case ES_TypeTag.Function:
                 case ES_TypeTag.Enum:
                 case ES_TypeTag.Interface:
+                case ES_TypeTag.Reference:
                 case ES_TypeTag.Const:
                 case ES_TypeTag.Immutable:
+                case ES_TypeTag.Array:
                     return false;
 
                 default:
