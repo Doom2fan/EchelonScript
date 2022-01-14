@@ -16,9 +16,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="ChronosLib" Version="2.1.0-pre-0006-g40318eba7a" />
+    <PackageReference Include="ChronosLib" Version="3.0.0-pre-0001-g8d9fce528b" />
     <PackageReference Include="Collections.Pooled" Version="2.0.0-preview.27" />
-    <PackageReference Include="NonCopyableAnalyzer" Version="0.6.0" />
+    <PackageReference Include="NonCopyableAnalyzer" Version="0.7.0" />
     <PackageReference Include="TerraFX.Interop.Mimalloc" Version="1.6.0-beta2" />
   </ItemGroup>
 
