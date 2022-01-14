@@ -34,6 +34,8 @@ using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace EchelonScriptCompiler.Backends.RoslynBackend {
     public unsafe sealed class RoslynBackendData : IBackendData {
+        private const string TypesNamespacePrefix = RoslynCompilerBackend.NamespaceName + ".";
+
         #region ================== Instance fields
 
         private EchelonScriptEnvironment environment;
@@ -46,6 +48,8 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
         private Dictionary<Pointer<ES_FunctionData>, MethodInfo> functionMethodMappings;
         private Dictionary<(MethodInfo, Type), Delegate> methodDelegateMappings;
 
+        private ArrayPointer<nint> refListRefType;
+
         #endregion
 
         #region ================== Instance properties
@@ -56,7 +60,10 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
         #region ================== Constructors
 
-        public RoslynBackendData (EchelonScriptEnvironment env, Stream peStream, Stream pdbStream, string name) {
+        public RoslynBackendData (
+            EchelonScriptEnvironment env, EchelonScriptEnvironment.Builder envBuilder,
+            Stream peStream, Stream pdbStream, string name
+        ) {
             environment = env;
 
             dllStream = peStream;
@@ -64,6 +71,9 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
             asmLoadContext = new AssemblyLoadContext ($"{name} load context", true);
             assembly = asmLoadContext.LoadFromStream (dllStream, symbolsStream);
+
+            refListRefType = envBuilder.MemoryManager.GetArray<nint> (1);
+            refListRefType.Span [0] = 0;
 
             SizeTypes ();
 
@@ -81,31 +91,70 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
         private void SizeTypes () {
             Debug.Assert (assembly is not null);
 
-            const string namespacePrefix = RoslynCompilerBackend.NamespaceName + ".";
             foreach (var nmData in environment.Namespaces.Values) {
-                foreach (var typeAddr in nmData.Types) {
-                    var type = typeAddr.Address;
+                foreach (var typeAddr in nmData.Types)
+                    SizeType (typeAddr.Address);
+            }
+        }
 
-                    if (type->RuntimeSize > -1)
-                        continue;
+        private void SizeType ([NotNull] ES_TypeInfo* type) {
+            Debug.Assert (assembly is not null);
 
-                    switch (type->TypeTag) {
-                        case ES_TypeTag.Void:
-                        case ES_TypeTag.Bool:
-                        case ES_TypeTag.Int:
-                        case ES_TypeTag.Float:
-                        case ES_TypeTag.Reference:
-                            continue;
-                    }
-
-                    var mangledName = RoslynCompilerBackend.MangleTypeName (type);
-                    var roslynType = assembly.GetType (namespacePrefix + mangledName, false);
-
-                    if (roslynType is null)
-                        continue;
-
-                    type->RuntimeSize = Marshal.SizeOf (roslynType);
+            switch (type->TypeTag) {
+                case ES_TypeTag.Interface:
+                case ES_TypeTag.Array:
+                case ES_TypeTag.Reference: {
+                    type->RefsList = refListRefType;
+                    return;
                 }
+            }
+
+            if (type->RuntimeSize > -1)
+                return;
+
+            switch (type->TypeTag) {
+                case ES_TypeTag.Void:
+                case ES_TypeTag.Bool:
+                case ES_TypeTag.Int:
+                case ES_TypeTag.Float:
+                case ES_TypeTag.Enum:
+                    return;
+
+                case ES_TypeTag.Struct:
+                case ES_TypeTag.Class:
+                    break;
+
+                default:
+                    throw new NotImplementedException ("Type not implemented yet.");
+            }
+
+            var mangledName = RoslynCompilerBackend.MangleTypeName (type);
+            var roslynType = assembly.GetType (TypesNamespacePrefix + mangledName, false);
+
+            if (roslynType is null)
+                return;
+
+            type->RuntimeSize = Marshal.SizeOf (roslynType);
+
+            using var refsList = new StructPooledList<nint> (CL_ClearMode.Auto);
+            foreach (var memberAddr in type->MembersList.MembersList.Span) {
+                var member = memberAddr.Address;
+
+                if (member->MemberType != ES_MemberType.Field)
+                    continue;
+
+                if (member->Flags.HasFlag (ES_MemberFlags.Static))
+                    continue;
+
+                var field = (ES_MemberData_Variable*) member;
+                var fieldOffs = (nint) Marshal.OffsetOf (roslynType, member->Name.GetPooledString (Encoding.ASCII));
+
+                field->Offset = (int) fieldOffs;
+
+                SizeType (field->Type);
+
+                foreach (var refOffs in field->Type->RefsList.Span)
+                    refsList.Add (fieldOffs + refOffs);
             }
         }
 
@@ -648,7 +697,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
             // Create the backend data and load the assembly.
 
-            envBuilder.BackendData = new RoslynBackendData (env, dllStream, pdbStream, assemblyName);
+            envBuilder.BackendData = new RoslynBackendData (env, envBuilder, dllStream, pdbStream, assemblyName);
 
             return true;
         }
