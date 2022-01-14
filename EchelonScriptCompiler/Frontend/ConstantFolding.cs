@@ -621,6 +621,9 @@ namespace EchelonScriptCompiler.Frontend {
                 case ES_AstCharLiteralExpression:
                     throw new NotImplementedException ("[TODO] Char literals not implemented yet.");
 
+                case ES_AstNullLiteralExpression:
+                    return FoldConstants_NullExpression (ref transUnit, src, ref expr, expectedType);
+
                 #endregion
 
                 #region Constants
@@ -637,6 +640,9 @@ namespace EchelonScriptCompiler.Frontend {
 
                 case ES_AstFloat64ConstantExpression:
                     return new ExpressionData { Expr = expr, Type = Environment.TypeFloat64, Constant = true, Addressable = false };
+
+                case ES_AstNullConstantExpression nullConstExpr:
+                    return new ExpressionData { Expr = expr, Type = nullConstExpr.NullableType, Constant = true, Addressable = false };
 
                 #endregion
 
@@ -772,6 +778,41 @@ namespace EchelonScriptCompiler.Frontend {
                 default:
                     throw new NotImplementedException ("Expression type not implemented.");
             }
+        }
+
+        protected ExpressionData FoldConstants_NullExpression (
+            ref TranslationUnitData transUnit, ReadOnlySpan<char> src,
+            ref ES_AstExpression expr, ES_TypeInfo* expectedType
+        ) {
+            Debug.Assert (Environment is not null);
+            Debug.Assert (expr is ES_AstNullLiteralExpression);
+            Debug.Assert (expectedType is not null);
+
+            var typeUnkn = Environment.TypeUnknownValue;
+            var nullLitExpr = (expr as ES_AstNullLiteralExpression)!;
+
+            ES_TypeInfo* retType;
+            switch (expectedType->TypeTag) {
+                case ES_TypeTag.UNKNOWN:
+                    retType = typeUnkn;
+                    break;
+
+                case ES_TypeTag.Interface:
+                case ES_TypeTag.Reference:
+                case ES_TypeTag.Array:
+                    retType = expectedType;
+                    break;
+
+                default: {
+                    errorList.Add (ES_FrontendErrors.GenTypeNotNullable (
+                        expectedType->Name.GetNameAsTypeString (), nullLitExpr.Token
+                    ));
+                    return new ExpressionData { Expr = expr, Type = typeUnkn };
+                }
+            }
+
+            expr = new ES_AstNullConstantExpression (retType, expr);
+            return new ExpressionData { Expr = expr, Type = retType };
         }
 
         protected ExpressionData FoldConstants_Expression_FunctionCall (

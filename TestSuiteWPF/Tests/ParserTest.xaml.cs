@@ -586,6 +586,13 @@ namespace TestSuiteWPF.Tests {
                     break;
                 }
 
+                case ES_AstNullLiteralExpression nullLiteralExpr: {
+                    var thisItem = AddNodeToTree ("Null", parentItem);
+                    thisItem.Tag = nullLiteralExpr.Token;
+
+                    break;
+                }
+
                 case ES_AstNameExpression nameExpr: {
                     var thisItem = AddNodeToTree ($"Name \"{nameExpr.Value.Text}\"", parentItem);
                     thisItem.Tag = nameExpr.Value;

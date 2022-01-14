@@ -763,6 +763,7 @@ namespace EchelonScriptCompiler.Frontend {
                 case ES_AstFloatLiteralExpression:
                 case ES_AstStringLiteralExpression:
                 case ES_AstCharLiteralExpression:
+                case ES_AstNullLiteralExpression:
                 case ES_AstNameExpression:
                     break;
 

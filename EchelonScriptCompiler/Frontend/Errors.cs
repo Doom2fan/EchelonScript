@@ -179,6 +179,7 @@ namespace EchelonScriptCompiler.Frontend {
         public const string InvalidExprTerm = "Invalid expression term \"{exprTerm}\".";
 
         public const string IntLitTooBigForSize = "The integer literal is too big to fit in {sign} {size}-bit integer.";
+        public const string TypeNotNullable = "Type \"{typeName}\" is not nullable.";
 
         public const string NoCast = "Cannot convert type \"{givenType}\" to \"{destType}\".";
         public const string NoImplicitCast = "Cannot implicitly convert type \"{givenType}\" to \"{destType}\".";
@@ -324,6 +325,10 @@ namespace EchelonScriptCompiler.Frontend {
             }
 
             var errorMessage = IntLitTooBigForSize.Replace ("{sign}", signStr).Replace ("{size}", sizeStr);
+            return new EchelonScriptErrorMessage (errorToken, errorMessage);
+        }
+        public static EchelonScriptErrorMessage GenTypeNotNullable (string typeName, EchelonScriptToken errorToken) {
+            var errorMessage = TypeNotNullable.Replace ("{typeName}", typeName);
             return new EchelonScriptErrorMessage (errorToken, errorMessage);
         }
 

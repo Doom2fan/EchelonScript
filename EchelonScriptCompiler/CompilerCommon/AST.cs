@@ -1246,6 +1246,23 @@ namespace EchelonScriptCompiler.CompilerCommon {
         }
     }
 
+    public class ES_AstNullLiteralExpression : ES_AstExpression {
+        public override ES_AstNodeBounds NodeBounds {
+            get {
+                return new ES_AstNodeBounds {
+                    StartPos = Token.TextStartPos,
+                    EndPos = Token.TextEndPos,
+                };
+            }
+        }
+
+        public readonly EchelonScriptToken Token;
+
+        public ES_AstNullLiteralExpression (EchelonScriptToken tk) : base (1) {
+            Token = tk;
+        }
+    }
+
     public unsafe class ES_AstIntegerConstantExpression : ES_AstExpression {
         public override ES_AstNodeBounds NodeBounds => OriginalExpression.NodeBounds;
 
@@ -1324,6 +1341,18 @@ namespace EchelonScriptCompiler.CompilerCommon {
         public ES_AstFloat64ConstantExpression (double value, ES_AstExpression origExpr) : base (1) {
             OriginalExpression = origExpr;
             Value = value;
+        }
+    }
+
+    public unsafe class ES_AstNullConstantExpression : ES_AstExpression {
+        public override ES_AstNodeBounds NodeBounds => OriginalExpression.NodeBounds;
+
+        public readonly ES_AstExpression OriginalExpression;
+        public readonly ES_TypeInfo* NullableType;
+
+        public ES_AstNullConstantExpression (ES_TypeInfo* type, ES_AstExpression origExpr) : base (1) {
+            OriginalExpression = origExpr;
+            NullableType = type;
         }
     }
 

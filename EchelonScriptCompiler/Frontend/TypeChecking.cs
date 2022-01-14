@@ -657,6 +657,7 @@ namespace EchelonScriptCompiler.Frontend {
                 case ES_AstIntegerLiteralExpression:
                 case ES_AstBooleanLiteralExpression:
                 case ES_AstFloatLiteralExpression:
+                case ES_AstNullLiteralExpression:
                     throw new CompilationException (ES_FrontendErrors.ConstFoldFailure);
 
                 case ES_AstStringLiteralExpression:
@@ -676,6 +677,10 @@ namespace EchelonScriptCompiler.Frontend {
 
                 case ES_AstFloat64ConstantExpression:
                     return new ExpressionData { Expr = expr, Type = Environment.TypeFloat64, Constant = true, Addressable = false };
+
+                case ES_AstNullConstantExpression nullConstExpr:
+                    Debug.Assert (nullConstExpr.NullableType is not null);
+                    return new ExpressionData { Expr = expr, Type = nullConstExpr.NullableType, Constant = true, Addressable = false };
 
                 case ES_AstNameExpression nameExpr: {
                     var id = idPool.GetIdentifier (nameExpr.Value.Text.Span);

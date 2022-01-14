@@ -520,6 +520,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                 return
                     token.Type == EchelonScriptTokenType.Identifier &&
                     !token.Text.Span.Equals (ES_Keywords.New, StringComparison.Ordinal) &&
+                    !token.Text.Span.Equals (ES_Keywords.Null, StringComparison.Ordinal) &&
                     !token.Text.Span.Equals (ES_Keywords.Cast, StringComparison.Ordinal);
             }
 
@@ -634,6 +635,27 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                 var ranks = parser.ParseArrayRanks (out _, out int endPos, false);
 
                 return new ES_AstNewArrayExpression (typeDecl, ranks, newTk, endPos);
+            }
+
+            #endregion
+        }
+
+        protected class NullExpressionParselet : IPrefixExpressionParselet {
+            #region ================== Instance properties
+
+            public ExpressionPrecedence PrefixPrecedence => ExpressionPrecedence.Primary;
+
+            #endregion
+
+            #region ================== Instance methods
+
+            public bool CheckCanParse (EchelonScriptParser parser, EchelonScriptToken token)
+                => token.Type == EchelonScriptTokenType.Identifier && token.Text.Span.Equals (ES_Keywords.Null, StringComparison.Ordinal);
+
+            public ES_AstExpression Parse (EchelonScriptParser parser, EchelonScriptToken token) {
+                parser.tokenizer.NextToken ();
+
+                return new ES_AstNullLiteralExpression (token);
             }
 
             #endregion
@@ -876,13 +898,14 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                 AddPrefixParselet (EchelonScriptTokenType.CharacterLiteral, literalExprParselet);
                 AddPrefixParselet (EchelonScriptTokenType.Identifier, literalExprParselet);
             }
+            AddPrefixParselet (EchelonScriptTokenType.Identifier, new NewExpressionParselet ());
+            AddPrefixParselet (EchelonScriptTokenType.Identifier, new NullExpressionParselet ());
             AddPrefixParselet (EchelonScriptTokenType.Identifier, new NameExpressionParselet ());
             AddPostfixParselet (EchelonScriptTokenType.Dot, new MemberAccessExpressionParselet ());
             AddPostfixParselet (EchelonScriptTokenType.ParenOpen, new FunctionCallExpressionParselet ());
             AddPostfixParselet (EchelonScriptTokenType.BracketOpen, new IndexingExpressionParselet ());
             AddPostfixParselet (EchelonScriptTokenType.PlusPlus, incDecParselet);
             AddPostfixParselet (EchelonScriptTokenType.MinusMinus, incDecParselet);
-            AddPrefixParselet (EchelonScriptTokenType.Identifier, new NewExpressionParselet ());
 
             #endregion
 
