@@ -103,6 +103,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 case ES_AstIntegerLiteralExpression:
                 case ES_AstBooleanLiteralExpression:
                 case ES_AstFloatLiteralExpression:
+                case ES_AstNullLiteralExpression:
                     throw new CompilationException (ES_BackendErrors.FrontendError);
 
                 case ES_AstIntegerConstantExpression intConstExpr: {
@@ -156,6 +157,22 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
                 case ES_AstCharLiteralExpression:
                     throw new NotImplementedException ("[TODO] Character literals not implemented yet.");
+
+                case ES_AstNullConstantExpression nullConstExpr: {
+                    Debug.Assert (nullConstExpr.NullableType is not null);
+
+                    switch (nullConstExpr.NullableType->TypeTag) {
+                        case ES_TypeTag.Array:
+                        case ES_TypeTag.Reference:
+                        case ES_TypeTag.Interface: {
+                            var value = LiteralExpression (SyntaxKind.NullLiteralExpression);
+                            return new ExpressionData { Expr = expr, Type = nullConstExpr.NullableType, Value = value, Constant = true, Addressable = false };
+                        }
+
+                        default:
+                            throw new NotImplementedException ("Type not implemented yet.");
+                    }
+                }
 
                 case ES_AstNameExpression nameExpr: {
                     var id = idPool.GetIdentifier (nameExpr.Value.Text.Span);
