@@ -327,6 +327,9 @@ namespace EchelonScriptCompiler.Data {
                     return true;
                 }
 
+                if (lhsType->TypeTag == ES_TypeTag.Null || rhsType->TypeTag == ES_TypeTag.Null)
+                    return BinaryOpCompat_Null (lhsType, rhsType, exprType, out finalType, out isConst);
+
                 if (lhsType->TypeTag == ES_TypeTag.Int && rhsType->TypeTag == ES_TypeTag.Int)
                     return BinaryOpCompat_IntInt (lhsType, rhsType, exprType, out finalType, out isConst);
 
@@ -344,6 +347,37 @@ namespace EchelonScriptCompiler.Data {
 
                 isConst = false;
                 return false;
+            }
+
+            private bool BinaryOpCompat_Null (ES_TypeInfo* lhsType, ES_TypeInfo* rhsType, SimpleBinaryExprType exprType, out ES_TypeInfo* finalType, out bool isConst) {
+                Debug.Assert (lhsType->TypeTag == ES_TypeTag.Null || rhsType->TypeTag == ES_TypeTag.Null);
+
+                switch (exprType) {
+                    case SimpleBinaryExprType.Equals:
+                    case SimpleBinaryExprType.NotEquals:
+                        if (!lhsType->IsReferenceType ())
+                            goto default;
+
+                        finalType = TypeBool;
+                        isConst = false;
+                        return true;
+
+                    case SimpleBinaryExprType.Assign:
+                        if (lhsType->IsReferenceType ())
+                            finalType = lhsType;
+                        else if (rhsType->IsReferenceType ())
+                            finalType = rhsType;
+                        else
+                            goto default;
+
+                        isConst = false;
+                        return true;
+
+                    default:
+                        finalType = environment.TypeUnknownValue;
+                        isConst = false;
+                        return false;
+                }
             }
 
             private bool BinaryOpCompat_IntInt (ES_TypeInfo* lhsType, ES_TypeInfo* rhsType, SimpleBinaryExprType exprType, out ES_TypeInfo* finalType, out bool isConst) {

@@ -102,6 +102,18 @@ namespace EchelonScriptCommon.Data.Types {
 
         #endregion
 
+        public bool IsReferenceType () {
+            switch (TypeTag) {
+                case ES_TypeTag.Reference:
+                case ES_TypeTag.Array:
+                case ES_TypeTag.Interface:
+                    return true;
+
+                default:
+                    return false;
+            }
+        }
+
         #endregion
     }
 }

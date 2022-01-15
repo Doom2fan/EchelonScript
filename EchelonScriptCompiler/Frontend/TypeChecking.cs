@@ -368,25 +368,6 @@ namespace EchelonScriptCompiler.Frontend {
             }
         }
 
-        protected ExpressionData CheckTypes_NullExpression (
-            ref TranslationUnitData transUnit, SourceData src,
-            ES_AstNullLiteralExpression nullLitExpr, ES_TypeInfo* expectedType
-        ) {
-            Debug.Assert (Environment is not null);
-            Debug.Assert (expectedType is not null);
-
-            var typeUnkn = Environment.TypeUnknownValue;
-
-            if (!CheckTypes_IsNullable (expectedType, out var retType)) {
-                errorList.Add (ES_FrontendErrors.GenTypeNotNullable (
-                    expectedType->Name.GetNameAsTypeString (), nullLitExpr.Token
-                ));
-                return new ExpressionData { Expr = nullLitExpr, Type = typeUnkn };
-            }
-
-            return new ExpressionData { Expr = nullLitExpr, Type = retType, Constant = true, Addressable = false, };
-        }
-
         protected ES_FunctionData* CheckTypes_FindConstructor (ES_TypeInfo* objType, ReadOnlySpan<ES_FunctionPrototypeArgData> arguments) {
             return null;
         }
@@ -741,10 +722,7 @@ namespace EchelonScriptCompiler.Frontend {
                     return new ExpressionData { Expr = expr, Type = Environment.TypeFloat64, Constant = true, Addressable = false };
 
                 case ES_AstNullLiteralExpression nullLitExpr:
-                    if (expectedType is null || expectedType->TypeTag == ES_TypeTag.UNKNOWN)
-                        return new ExpressionData { Expr = expr, Type = Environment.TypeNull, Constant = true, Addressable = false };
-
-                    return CheckTypes_NullExpression (ref transUnit, src, nullLitExpr, expectedType);
+                    return new ExpressionData { Expr = expr, Type = Environment.TypeNull, Constant = true, Addressable = false };
 
                 case ES_AstNameExpression nameExpr: {
                     var id = idPool.GetIdentifier (nameExpr.Value.Text.Span);
