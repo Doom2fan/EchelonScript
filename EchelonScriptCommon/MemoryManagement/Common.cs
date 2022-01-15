@@ -7,11 +7,12 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using EchelonScriptCommon.Data.Types;
-
+using EchelonScriptCommon.GarbageCollection.Immix;
 using ES_ArrayIndexBase = System.Int32;
 
 namespace EchelonScriptCommon {
@@ -42,6 +43,42 @@ namespace EchelonScriptCommon {
     }
 
     [StructLayout (LayoutKind.Sequential, Pack = 1)]
+    public unsafe struct ES_ObjectAddress {
+        public void* Address;
+
+        public ES_ObjectHeader* Header {
+            [MethodImpl (MethodImplOptions.AggressiveInlining)]
+            get => ((ES_ObjectHeader*) Address) - 1;
+        }
+
+        internal ImmixBlockHeader* ImmixBlock {
+            [MethodImpl (MethodImplOptions.AggressiveInlining)]
+            get => (ImmixBlockHeader*) ((nint) Header & ImmixConstants.BlockStartMask);
+        }
+
+        internal int ImmixStartLine {
+            [MethodImpl (MethodImplOptions.AggressiveInlining)]
+            get => (int) (((nint) Header & ImmixConstants.BlockMask) / ImmixConstants.LineSize - ImmixConstants.HeaderLines);
+        }
+
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
+        public ES_ObjectAddress (void* addr) => Address = addr;
+
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
+        public static implicit operator ES_ObjectAddress (void* obj) => new (obj);
+
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
+        [DebuggerNonUserCode]
+        [ES_ExcludeFromStackTrace]
+        public static T* NullCheck<T> (T* ptr) where T : unmanaged {
+            if (ptr == null)
+                throw new EchelonScriptNullAccessException ();
+
+            return ptr;
+        }
+    }
+
+    [StructLayout (LayoutKind.Sequential, Pack = 1)]
     public struct ES_ArrayIndex {
         public ES_ArrayIndexBase Value;
 
@@ -49,6 +86,17 @@ namespace EchelonScriptCommon {
         public static implicit operator ES_ArrayIndexBase (ES_ArrayIndex idx) => idx.Value;
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
         public static implicit operator ES_ArrayIndex (ES_ArrayIndexBase idx) => new ES_ArrayIndex { Value = idx };
+
+        [ES_ExcludeFromStackTrace]
+        [DebuggerNonUserCode]
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
+        public static void CheckBounds (int dimCount, int maxBounds, int val) {
+            if (val < 0)
+                throw new EchelonScriptOutOfBoundsException ($"Array access out of bounds. Negative index, index #{dimCount} = {val}.");
+            else if (val >= maxBounds)
+                throw new EchelonScriptOutOfBoundsException ($"Array access out of bounds. Index #{dimCount} = {val}, max = {maxBounds}.");
+
+        }
     }
 
     [StructLayout (LayoutKind.Sequential, Pack = 1)]
@@ -69,5 +117,21 @@ namespace EchelonScriptCommon {
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
         public static ES_ArrayIndex* GetArrayIndicesPointer ([NotNull] ES_ArrayHeader* arrayPointer)
             => (ES_ArrayIndex*) ((byte*) arrayPointer + sizeof (ES_ArrayHeader));
+
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
+        public static int GetArraySize ([NotNull] ES_ObjectAddress arrayPointer) {
+            var arrayType = (ES_ArrayTypeData*) arrayPointer.Header->TypeData;
+            var arrayHeader = (ES_ArrayHeader*) arrayPointer.Address;
+
+            return (
+                sizeof (ES_ObjectHeader) +
+                GetArrayHeaderSize (arrayHeader->Rank) +
+                arrayType->ElementType->RuntimeSize * arrayHeader->Length
+            );
+        }
+
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
+        public static int GetArrayHeaderSize (int dimsCount)
+            => sizeof (ES_ArrayHeader) + dimsCount * sizeof (ES_ArrayIndex);
     }
 }

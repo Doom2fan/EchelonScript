@@ -27,6 +27,7 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
 
     public unsafe struct ImmixConstants {
         // Make sure BlockSize is < 64KB, and is a multiple of LineSize.
+        // Must be a power of two.
         public const int BlockSize = 32 * 1024;
         public const int LineSize = 128;
         public static int TrueBlockSize => LinesCount * LineSize;
@@ -39,6 +40,7 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
         public static int HeaderLines => (sizeof (ImmixBlockHeader) + (LineSize - 1)) / LineSize;
         public static int LinesCount => BareLinesCount - HeaderLines;
 
+        public const nint BlockMask = BlockSize - 1;
         public const nint BlockStartMask = ~(BlockSize - 1);
     }
 
