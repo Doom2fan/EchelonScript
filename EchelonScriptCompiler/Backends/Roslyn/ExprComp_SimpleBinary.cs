@@ -81,8 +81,27 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             if (!envBuilder!.BinaryOpCompat (lhs.Type, rhs.Type, exprOp, out _, out _))
                 throw new CompilationException (ES_BackendErrors.FrontendError);
 
-            Debug.Assert (lhs.Value != null);
-            Debug.Assert (rhs.Value != null);
+            var lhsNull = lhs.Type->TypeTag == ES_TypeTag.Null;
+            var rhsNull = rhs.Type->TypeTag == ES_TypeTag.Null;
+
+            Debug.Assert (lhs.Value != null || lhsNull);
+            Debug.Assert (rhs.Value != null || rhsNull);
+
+            if (lhsNull || rhsNull) {
+                if (lhsNull && rhsNull)
+                    throw new CompilationException (ES_BackendErrors.FrontendError);
+
+                ref var nullSide = ref lhs;
+                var refType = rhs.Type;
+
+                if (rhsNull) {
+                    nullSide = ref rhs;
+                    refType = lhs.Type;
+                }
+
+                nullSide.Value = LiteralExpression (SyntaxKind.NullLiteralExpression);
+                nullSide.Type = refType;
+            }
 
             if (lhs.Type->TypeTag == ES_TypeTag.Int && rhs.Type->TypeTag == ES_TypeTag.Int)
                 return GenerateCode_BinaryExpr_IntInt (lhs, rhs, exprOp);

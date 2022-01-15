@@ -132,13 +132,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                     throw new CompilationException (ES_BackendErrors.FrontendError);
 
                 case ES_AstNullLiteralExpression:
-                    if (expectedType is null || expectedType->TypeTag == ES_TypeTag.UNKNOWN)
-                        return new ExpressionData { Expr = expr, Type = env.TypeNull, Value = null, Constant = true, Addressable = false };
-                    else {
-                        var value = GenerateCode_IsNullable (expectedType, out var retType, true);
-
-                        return new ExpressionData { Expr = expr, Type = retType, Value = value, Constant = true, Addressable = false };
-                    }
+                    return new ExpressionData { Expr = expr, Type = env.TypeNull, Value = null, Constant = true, Addressable = false };
 
                 case ES_AstIntegerConstantExpression intConstExpr: {
                     Debug.Assert (intConstExpr.IntType->TypeTag == ES_TypeTag.Int);
