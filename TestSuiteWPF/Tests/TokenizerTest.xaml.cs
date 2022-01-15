@@ -71,7 +71,7 @@ namespace TestSuiteWPF.Tests {
         private void codeText_TextChanged (object sender, EventArgs e) {
             string code = codeText.Text;
             errors.Clear ();
-            tokenizer.SetSource (code.AsMemory ());
+            tokenizer.SetSource ("Buffer".AsMemory (), code.AsMemory ());
 
             textMarkerService.Clear ();
             errorsList.Items.Clear ();

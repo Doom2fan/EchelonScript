@@ -18,7 +18,7 @@ using EchelonScriptCompiler.Utilities;
 
 namespace EchelonScriptCompiler.Frontend {
     public unsafe partial class CompilerFrontend {
-        protected ES_TypeInfo* GetType (SymbolStack<FrontendSymbol> symbols, ReadOnlySpan<char> src, ES_AstTypeDeclaration_TypeName typeName) {
+        protected ES_TypeInfo* GetType (SymbolStack<FrontendSymbol> symbols, SourceData src, ES_AstTypeDeclaration_TypeName typeName) {
             var idPool = Environment!.IdPool;
 
             Debug.Assert (typeName.TypeName.Parts.Length > 0);
@@ -71,7 +71,7 @@ namespace EchelonScriptCompiler.Frontend {
         }
 
         protected ES_TypeInfo* ResolveTypeDeclaration (
-            ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, ReadOnlySpan<char> src,
+            ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, SourceData src,
             ES_AstTypeDeclaration typeDecl
         ) {
             Debug.Assert (EnvironmentBuilder is not null);
@@ -137,7 +137,7 @@ namespace EchelonScriptCompiler.Frontend {
         }
 
         protected ES_AstTypeDeclaration_TypeReference GenerateASTTypeRef (
-            ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, ReadOnlySpan<char> src,
+            ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, SourceData src,
             ES_AstTypeDeclaration typeDecl
         ) {
             Debug.Assert (typeDecl is not null);
@@ -153,7 +153,7 @@ namespace EchelonScriptCompiler.Frontend {
             return new ES_AstTypeDeclaration_TypeReference (typeDecl, type);
         }
 
-        protected ES_NamespaceData? GetNamespace (ReadOnlySpan<char> src, ES_AstNodeBounds nodeBounds, ReadOnlySpan<char> namespaceStr) {
+        protected ES_NamespaceData? GetNamespace (SourceData src, ES_AstNodeBounds nodeBounds, ReadOnlySpan<char> namespaceStr) {
             var namespaceName = Environment!.IdPool.GetIdentifier (namespaceStr);
 
             if (!Environment!.Namespaces.TryGetValue (namespaceName, out var namespaceData)) {
@@ -176,7 +176,7 @@ namespace EchelonScriptCompiler.Frontend {
                 symbols.AddSymbol (funcKVP.Key, NewSymbolFunction (funcKVP.Value));
         }
 
-        protected void AST_HandleImport (SymbolStack<FrontendSymbol> symbols, ReadOnlySpan<char> src, ES_AstImportStatement import) {
+        protected void AST_HandleImport (SymbolStack<FrontendSymbol> symbols, SourceData src, ES_AstImportStatement import) {
             using var nmNameString = import.NamespaceName.ToPooledChars ();
             var namespaceData = GetNamespace (src, import.NamespaceName.NodeBounds, nmNameString);
 
@@ -242,7 +242,7 @@ namespace EchelonScriptCompiler.Frontend {
             }
         }
 
-        protected void AST_HandleAlias (ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, ReadOnlySpan<char> src, ES_AstTypeAlias alias) {
+        protected void AST_HandleAlias (ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, SourceData src, ES_AstTypeAlias alias) {
             var aliasName = alias.AliasName.Text.Span;
             var aliasId = Environment!.IdPool.GetIdentifier (aliasName);
 
@@ -290,7 +290,7 @@ namespace EchelonScriptCompiler.Frontend {
             foreach (ref var astUnit in transUnit.AstUnits.Span) {
                 var ast = astUnit.Ast;
                 var symbols = astUnit.Symbols;
-                var src = ast.Source.Span;
+                var src = new SourceData { Code = ast.Source.Span, FileName = ast.FileName };
 
                 // Add built-in symbols
                 symbols.Push ();
@@ -371,14 +371,14 @@ namespace EchelonScriptCompiler.Frontend {
         ) {
             baseClass = null;
 
-            var srcCode = astUnit.Ast.Source;
+            var srcCode = astUnit.SourceData;
             var idPool = Environment!.IdPool;
             var symbols = astUnit.Symbols;
 
             using var interfacesList = new StructPooledList<Pointer<ES_InterfaceData>> (CL_ClearMode.Auto);
 
             foreach (var inheritId in inheritanceList) {
-                var type = ResolveTypeDeclaration (ref transUnit, symbols, srcCode.Span, inheritId);
+                var type = ResolveTypeDeclaration (ref transUnit, symbols, srcCode, inheritId);
 
                 if (type == null)
                     continue;
@@ -386,7 +386,7 @@ namespace EchelonScriptCompiler.Frontend {
                 var typeTag = type->TypeTag;
                 if (isClass && typeTag == ES_TypeTag.Class) {
                     if (baseClass is not null) {
-                        var err = new EchelonScriptErrorMessage (srcCode.Span, inheritId.NodeBounds, ES_FrontendErrors.MultipleBaseClasses);
+                        var err = new EchelonScriptErrorMessage (srcCode, inheritId.NodeBounds, ES_FrontendErrors.MultipleBaseClasses);
                         errorList.Add (err);
                         continue;
                     }
@@ -401,7 +401,7 @@ namespace EchelonScriptCompiler.Frontend {
 
                     if (interfaceInList) {
                         var interfaceFqnStr = type->Name.GetNameAsTypeString ();
-                        errorList.Add (ES_FrontendErrors.GenRepeatedInterfaceInList (interfaceFqnStr, srcCode.Span, inheritId.NodeBounds));
+                        errorList.Add (ES_FrontendErrors.GenRepeatedInterfaceInList (interfaceFqnStr, srcCode, inheritId.NodeBounds));
                         continue;
                     }
 
@@ -411,7 +411,7 @@ namespace EchelonScriptCompiler.Frontend {
                     inheritId.ToString (charsPool.Span);
 
                     var symbolStr = charsPool.Span.GetPooledString ();
-                    errorList.Add (ES_FrontendErrors.GenInvalidInheritance (symbolStr, srcCode.Span, inheritId.NodeBounds));
+                    errorList.Add (ES_FrontendErrors.GenInvalidInheritance (symbolStr, srcCode, inheritId.NodeBounds));
                     continue;
                 }
             }
@@ -451,7 +451,7 @@ namespace EchelonScriptCompiler.Frontend {
             Debug.Assert (Environment is not null);
             Debug.Assert (EnvironmentBuilder is not null);
 
-            var srcCode = astUnit.Ast.Source.Span;
+            var srcCode = astUnit.SourceData;
             var idPool = Environment.IdPool;
             var symbols = astUnit.Symbols;
 
@@ -521,7 +521,7 @@ namespace EchelonScriptCompiler.Frontend {
             if (builder.ClassData->TypeInfo.RuntimeSize > -1)
                 return;
 
-            var srcCode = astUnit.Ast.Source;
+            var srcCode = astUnit.SourceData;
             var idPool = Environment!.IdPool;
             ref var symbols = ref astUnit.Symbols;
 
@@ -545,7 +545,7 @@ namespace EchelonScriptCompiler.Frontend {
 
         protected void GatherTypes_Function (ref TranslationUnitData transUnit, ref AstUnitData astUnit, ES_AstFunctionDefinition funcDef) {
             var symbols = astUnit.Symbols;
-            var unitSrc = astUnit.Ast.Source.Span;
+            var unitSrc = astUnit.SourceData;
 
             // Guarantee some conditions.
             // These should have been validated and resolved by the function creation pass.
@@ -574,7 +574,7 @@ namespace EchelonScriptCompiler.Frontend {
             symbols.Pop ();
         }
 
-        protected void GatherTypes_Statement (ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, ReadOnlySpan<char> src, ES_AstStatement stmt) {
+        protected void GatherTypes_Statement (ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, SourceData src, ES_AstStatement stmt) {
             Debug.Assert (stmt is not null);
 
             switch (stmt) {
@@ -709,7 +709,7 @@ namespace EchelonScriptCompiler.Frontend {
             }
         }
 
-        protected void GatherTypes_Expression (ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, ReadOnlySpan<char> src, ES_AstExpression expr) {
+        protected void GatherTypes_Expression (ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, SourceData src, ES_AstExpression expr) {
             Debug.Assert (expr is not null);
 
             switch (expr) {

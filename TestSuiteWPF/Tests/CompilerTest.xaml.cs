@@ -24,6 +24,7 @@ using EchelonScriptCompiler.Backends.RoslynBackend;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Frontend;
 using ICSharpCode.AvalonEdit.Document;
+using EchelonScriptCommon;
 
 namespace TestSuiteWPF.Tests {
     /// <summary>
@@ -43,6 +44,7 @@ namespace TestSuiteWPF.Tests {
             public int StartPos { get; }
             public int Length { get; }
 
+            public string FileName { get; }
             public int Line { get; }
             public int Column { get; }
 
@@ -53,6 +55,7 @@ namespace TestSuiteWPF.Tests {
                 StartPos = msg.StartPos;
                 Length = msg.Length;
 
+                FileName = msg.FileName;
                 Line = msg.Line;
                 Column = msg.Column;
             }
@@ -218,8 +221,8 @@ namespace TestSuiteWPF.Tests {
         private unsafe void CompileCode () {
             var code = codeText.Text;
 
-            using var codeUnits = new StructPooledList<ReadOnlyMemory<char>> (CL_ClearMode.Auto);
-            codeUnits.Add (code.AsMemory ());
+            using var codeUnits = new StructPooledList<(ReadOnlyMemory<char>, ReadOnlyMemory<char>)> (CL_ClearMode.Auto);
+            codeUnits.Add (("Buffer".AsMemory (), code.AsMemory ()));
 
             var compiler = (compilerComboBox.SelectedItem as ComboBoxItem)!.Tag as EchelonScript_Compiler;
             var frontendOnly = !compiler.HasBackend;
@@ -346,14 +349,20 @@ namespace TestSuiteWPF.Tests {
                     if (fp != null) {
                         var a = rand.Next (int.MinValue, int.MaxValue);
                         var b = rand.Next (int.MinValue, int.MaxValue);
-                        int ret = fp (a, b);
 
-                        var infoStr = string.Format (cultureInfo, $"{testI32Name} ({{0:n0}}, {{1:n0}}) returned {{2:n0}}.", a, b, ret);
-                        errList.Add (new CompilerMessage ("Output", new EchelonScriptErrorMessage (infoStr, 0, 0, 0, 0)));
+                        string infoStr;
+                        try {
+                            var ret = fp (a, b);
+                            infoStr = string.Format (cultureInfo, $"{testI32Name} ({{0:n0}}, {{1:n0}}) returned {{2:n0}}.", a, b, ret);
+                        } catch (EchelonScriptException e) {
+                            infoStr = $"{testI32Name} exception: {GetExceptionString (e)}";
+                        }
+
+                        errList.Add (new CompilerMessage ("Output", new EchelonScriptErrorMessage (infoStr, 0, 0, string.Empty.AsMemory (), 0, 0)));
                     } else if (matchSig)
-                        errList.Add (new CompilerMessage ("Output", new EchelonScriptErrorMessage ($"{testI32Name} had a null function pointer.", 0, 0, 0, 0)));
+                        errList.Add (new CompilerMessage ("Output", new EchelonScriptErrorMessage ($"{testI32Name} had a null function pointer.", 0, 0, string.Empty.AsMemory (), 0, 0)));
                     else
-                        errList.Add (new CompilerMessage ("Output", new EchelonScriptErrorMessage ($"{testI32Name} didn't match signature.", 0, 0, 0, 0)));
+                        errList.Add (new CompilerMessage ("Output", new EchelonScriptErrorMessage ($"{testI32Name} didn't match signature.", 0, 0, string.Empty.AsMemory (), 0, 0)));
                 }
 
                 if (namespaceData.Functions.TryGetValue (idTestF32, out func)) {
@@ -372,16 +381,30 @@ namespace TestSuiteWPF.Tests {
                     if (fp != null) {
                         var a = (float) (rand.NextDouble () * int.MaxValue);
                         var b = (float) (rand.NextDouble () * int.MaxValue);
-                        float ret = fp (a, b);
 
-                        var infoStr = string.Format (cultureInfo, $"{testF32Name} ({{0:n}}, {{1:n}}) returned {{2:n}}.", a, b, ret);
-                        errList.Add (new CompilerMessage ("Output", new EchelonScriptErrorMessage (infoStr, 0, 0, 0, 0)));
+                        string infoStr;
+                        try {
+                            var ret = fp (a, b);
+                            infoStr = string.Format (cultureInfo, $"{testF32Name} ({{0:n}}, {{1:n}}) returned {{2:n}}.", a, b, ret);
+                        } catch (EchelonScriptException e) {
+                            infoStr = $"{testF32Name} exception: {GetExceptionString (e)}";
+                        }
+
+                        errList.Add (new CompilerMessage ("Output", new EchelonScriptErrorMessage (infoStr, 0, 0, string.Empty.AsMemory (), 0, 0)));
                     } else if (matchSig)
-                        errList.Add (new CompilerMessage ("Output", new EchelonScriptErrorMessage ($"{testF32Name} had a null function pointer.", 0, 0, 0, 0)));
+                        errList.Add (new CompilerMessage ("Output", new EchelonScriptErrorMessage ($"{testF32Name} had a null function pointer.", 0, 0, string.Empty.AsMemory (), 0, 0)));
                     else
-                        errList.Add (new CompilerMessage ("Output", new EchelonScriptErrorMessage ($"{testF32Name} didn't match signature.", 0, 0, 0, 0)));
+                        errList.Add (new CompilerMessage ("Output", new EchelonScriptErrorMessage ($"{testF32Name} didn't match signature.", 0, 0, string.Empty.AsMemory (), 0, 0)));
                 }
             }
+        }
+
+        private string GetExceptionString (EchelonScriptException e) {
+            Console.WriteLine (e.Message);
+            foreach (var line in e.GetESStackTrace (true))
+                Console.WriteLine (line);
+
+            return e.Message;
         }
 
         #endregion

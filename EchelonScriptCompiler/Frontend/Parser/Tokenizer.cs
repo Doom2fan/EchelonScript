@@ -186,14 +186,18 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                     if (c == '"')
                         break;
                     else if (c == null) {
-                        tokenizer.Errors.Add (new EchelonScriptErrorMessage (ES_FrontendErrors.UnclosedStringLiteral, startPos, tokenizer.curPos - startPos, retToken.TextLine, retToken.TextColumn));
+                        tokenizer.Errors.Add (new EchelonScriptErrorMessage (
+                            ES_FrontendErrors.UnclosedStringLiteral,
+                            startPos, tokenizer.curPos - startPos,
+                            tokenizer.fileName, retToken.TextLine, retToken.TextColumn
+                        ));
                         unclosed = true;
                         break;
                     } else if (c == '\\' && tokenizer.PeekChar () == '"')
                         tokenizer.ReadChar ();
                     else if (!verbatim && (c == '\r' || c == '\n')) {
                         var err = new EchelonScriptErrorMessage (c == '\r' ? ES_FrontendErrors.NoCRInRegularStrings : ES_FrontendErrors.NoLFInRegularStrings,
-                            tokenizer.curPos, 1, tokenizer.curLine, tokenizer.CalcColumn (tokenizer.curLineStartPos, tokenizer.curPos)
+                            tokenizer.curPos, 1, tokenizer.fileName, tokenizer.curLine, tokenizer.CalcColumn (tokenizer.curLineStartPos, tokenizer.curPos)
                         );
                         tokenizer.Errors.Add (err);
                     }
@@ -234,14 +238,18 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                     if (c == '\'')
                         break;
                     else if (c == null) {
-                        tokenizer.Errors.Add (new EchelonScriptErrorMessage (ES_FrontendErrors.UnclosedCharLiteral, startPos, tokenizer.curPos - startPos, retToken.TextLine, retToken.TextColumn));
+                        tokenizer.Errors.Add (new EchelonScriptErrorMessage (
+                            ES_FrontendErrors.UnclosedCharLiteral,
+                            startPos, tokenizer.curPos - startPos,
+                            tokenizer.fileName, retToken.TextLine, retToken.TextColumn
+                        ));
                         unclosed = true;
                         break;
                     } else if (c == '\\' && tokenizer.PeekChar () == '\'')
                         tokenizer.ReadChar ();
                     else if (c == '\r' || c == '\n') {
                         var err = new EchelonScriptErrorMessage (c == '\r' ? ES_FrontendErrors.NoCRInCharLiterals : ES_FrontendErrors.NoLFInCharLiterals,
-                            tokenizer.curPos, 1, tokenizer.curLine, tokenizer.CalcColumn (tokenizer.curLineStartPos, tokenizer.curPos)
+                            tokenizer.curPos, 1, tokenizer.fileName, tokenizer.curLine, tokenizer.CalcColumn (tokenizer.curLineStartPos, tokenizer.curPos)
                         );
                         tokenizer.Errors.Add (err);
                     }
@@ -381,6 +389,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
         #region ================== Instance fields
 
         protected int curPos;
+        protected ReadOnlyMemory<char> fileName;
         protected ReadOnlyMemory<char> data;
         protected StructPooledList<(EchelonScriptToken, EchelonScriptToken?)> tokenBuffer;
 
@@ -415,6 +424,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
 
         public EchelonScriptTokenizer (List<EchelonScriptErrorMessage> errorsList) {
             curPos = 0;
+            fileName = null;
             data = null;
             tokenBuffer = new StructPooledList<(EchelonScriptToken, EchelonScriptToken?)> (CL_ClearMode.Auto);
 
@@ -515,8 +525,9 @@ namespace EchelonScriptCompiler.Frontend.Parser {
 
         /// <summary>Sets the source data for the input text.</summary>
         /// <param name="newData">The new source data.</param>
-        public void SetSource (ReadOnlyMemory<char> newData) {
+        public void SetSource (ReadOnlyMemory<char> newName, ReadOnlyMemory<char> newData) {
             Reset ();
+            fileName = newName;
             data = newData;
         }
 
@@ -565,6 +576,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             var docTk = SkipWhitespace ();
             var retToken = new EchelonScriptToken ();
             retToken.Type = EchelonScriptTokenType.Invalid;
+            retToken.FileName = fileName;
             retToken.Text = null;
             retToken.TextStartPos = curPos;
             retToken.TextLine = curLine;
@@ -858,7 +870,11 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                 }
 
                 if (!IsIntegerDigit (PeekChar ())) {
-                    Errors.Add (new EchelonScriptErrorMessage (ES_FrontendErrors.InvalidFloatLiteral, startPos, curPos - startPos, line, column));
+                    Errors.Add (new EchelonScriptErrorMessage (
+                        ES_FrontendErrors.InvalidFloatLiteral,
+                        startPos, curPos - startPos,
+                        fileName, line, column
+                    ));
                     curPos -= hasSign ? 2 : 1;
                     return;
                 }
@@ -896,9 +912,8 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             int curLine, int lineStartPos, int curPos,
             bool verbatim
         ) {
-            void EmitError (string message, int line, int col, int pos, int len) {
-                Errors.Add (new EchelonScriptErrorMessage (message, pos, len, line, col));
-            }
+            void EmitError (string message, int line, int col, int pos, int len)
+                => Errors.Add (new EchelonScriptErrorMessage (message, pos, len, fileName, line, col));
 
             using var charList = new StructPooledList<(int Line, int Col, int Pos, Rune Rune)> (CL_ClearMode.Auto);
             using var newCharList = new StructPooledList<Rune> (CL_ClearMode.Auto);

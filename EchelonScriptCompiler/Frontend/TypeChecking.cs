@@ -114,7 +114,7 @@ namespace EchelonScriptCompiler.Frontend {
             ref TranslationUnitData transUnit, ref AstUnitData astUnit,
             ES_TypeMembers.Builder membersBuilder, ES_AstAggregateDefinition typeDef, bool isClass
         ) {
-            var srcCode = astUnit.Ast.Source.Span;
+            var srcCode = astUnit.SourceData;
             var idPool = Environment!.IdPool;
             var symbols = astUnit.Symbols;
 
@@ -178,7 +178,7 @@ namespace EchelonScriptCompiler.Frontend {
 
         protected void CheckTypes_Function (ref TranslationUnitData transUnit, ref AstUnitData astUnit, ES_AstFunctionDefinition funcDef) {
             var idPool = Environment!.IdPool;
-            var unitSrc = astUnit.Ast.Source.Span;
+            var unitSrc = astUnit.SourceData;
             var symbols = astUnit.Symbols;
 
             symbols.Push ();
@@ -309,7 +309,7 @@ namespace EchelonScriptCompiler.Frontend {
             return false;
         }
 
-        protected bool CheckTypes_EnsureCompat (ES_TypeInfo* destType, ES_TypeInfo* givenType, ReadOnlySpan<char> src, ES_AstNodeBounds bounds, out bool isConstant) {
+        protected bool CheckTypes_EnsureCompat (ES_TypeInfo* destType, ES_TypeInfo* givenType, SourceData src, ES_AstNodeBounds bounds, out bool isConstant) {
             if (!CheckTypes_MustBeCompat (destType, givenType, out isConstant)) {
                 if (CheckTypes_ExplicitCast (destType, givenType, out _, out _)) {
                     errorList.Add (ES_FrontendErrors.GenNoImplicitCast (
@@ -342,7 +342,7 @@ namespace EchelonScriptCompiler.Frontend {
         }
 
         protected StatementData CheckTypes_Statement (
-            ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, ReadOnlySpan<char> src,
+            ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, SourceData src,
             ES_TypeInfo* retType, ES_AstStatement stmt
         ) {
             Debug.Assert (stmt is not null);
@@ -568,7 +568,7 @@ namespace EchelonScriptCompiler.Frontend {
         }
 
         protected ExpressionData CheckTypes_Expression (
-            ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, ReadOnlySpan<char> src,
+            ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, SourceData src,
             ES_AstExpression expr, ES_TypeInfo* expectedType
         ) {
             Debug.Assert (expr is not null);
@@ -850,7 +850,7 @@ namespace EchelonScriptCompiler.Frontend {
         }
 
         protected ExpressionData CheckTypes_Expression_NewObject (
-            ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, ReadOnlySpan<char> src,
+            ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, SourceData src,
             ES_AstNewObjectExpression newObjExpr, ES_TypeInfo* expectedType
         ) {
             var typeUnkn = Environment!.TypeUnknownValue;
@@ -905,7 +905,7 @@ namespace EchelonScriptCompiler.Frontend {
         }
 
         protected ExpressionData CheckTypes_Expression_MemberAccess (
-            ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, ReadOnlySpan<char> src,
+            ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, SourceData src,
             ES_AstMemberAccessExpression expr, ES_TypeInfo* expectedType
         ) {
             Debug.Assert (Environment is not null);
@@ -979,7 +979,7 @@ namespace EchelonScriptCompiler.Frontend {
         }
 
         protected ExpressionData CheckTypes_Expression_MemberAccess_Basic (
-            ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, ReadOnlySpan<char> src,
+            ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, SourceData src,
             ES_AstMemberAccessExpression expr, ES_TypeInfo* type, ArrayPointer<byte> memberId, ES_TypeInfo* expectedType
         ) {
             Debug.Assert (Environment is not null);
@@ -1028,7 +1028,7 @@ namespace EchelonScriptCompiler.Frontend {
         }
 
         protected ExpressionData CheckTypes_Expression_MemberAccessStatic_Aggregate (
-            ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, ReadOnlySpan<char> src,
+            ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, SourceData src,
             ES_AstMemberAccessExpression expr, ES_TypeInfo* type, ArrayPointer<byte> memberId, ES_TypeInfo* expectedType
         ) {
             Debug.Assert (Environment is not null);
@@ -1076,7 +1076,7 @@ namespace EchelonScriptCompiler.Frontend {
         }
 
         protected ExpressionData CheckTypes_Expression_FunctionCall (
-            ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, ReadOnlySpan<char> src,
+            ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, SourceData src,
             ES_AstFunctionCallExpression funcCallExpr, ES_TypeInfo* expectedType
         ) {
             Debug.Assert (Environment is not null);

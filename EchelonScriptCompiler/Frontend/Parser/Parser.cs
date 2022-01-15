@@ -811,6 +811,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
 
         protected List<EchelonScriptErrorMessage> errorsList;
         protected EchelonScriptTokenizer tokenizer;
+        protected ReadOnlyMemory<char> fileName;
         protected ReadOnlyMemory<char> sourceText;
 
         #endregion
@@ -1008,15 +1009,17 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             CheckDisposed ();
 
             tokenizer.Reset ();
+            fileName = null;
             sourceText = null;
         }
 
-        public ES_AbstractSyntaxTree ParseCode (ReadOnlyMemory<char> codeData) {
+        public ES_AbstractSyntaxTree ParseCode (ReadOnlyMemory<char> name, ReadOnlyMemory<char> codeData) {
             CheckDisposed ();
 
             Reset ();
+            fileName = name;
             sourceText = codeData;
-            tokenizer.SetSource (codeData);
+            tokenizer.SetSource (name, codeData);
 
             var astTree = ParseCodeUnit ();
 
@@ -1446,7 +1449,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             }
 
             var codeUnit = new ES_AbstractSyntaxTree (
-                sourceText,
+                sourceText, fileName,
                 importsList.ToArray (),
                 aliasesList.ToArray (),
                 namespacesList.ToArray (),
@@ -2468,7 +2471,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
 
                     if (ret.Endpoint is ES_AstEmptyStatement) {
                         errorsList.Add (new EchelonScriptErrorMessage (
-                            sourceText.Span, ret.Endpoint.NodeBounds, ES_FrontendErrors.LabelOnEmptyStatement
+                            sourceText.Span, fileName, ret.Endpoint.NodeBounds, ES_FrontendErrors.LabelOnEmptyStatement
                         ));
                     }
 
@@ -2563,7 +2566,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             }
 
             if (!isAllowedExpression)
-                errorsList.Add (new EchelonScriptErrorMessage (sourceText.Span, expr.NodeBounds, ES_FrontendErrors.IllegalExpressionStatement));
+                errorsList.Add (new EchelonScriptErrorMessage (sourceText.Span, fileName, expr.NodeBounds, ES_FrontendErrors.IllegalExpressionStatement));
 
             return expr;
         }
@@ -2578,7 +2581,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                 statement is ES_AstTypeAlias ||
                 statement is ES_AstLabeledStatement
             ) {
-                errorsList.Add (new EchelonScriptErrorMessage (sourceText.Span, statement.NodeBounds, ES_FrontendErrors.IllegalEmbeddedStatement));
+                errorsList.Add (new EchelonScriptErrorMessage (sourceText.Span, fileName, statement.NodeBounds, ES_FrontendErrors.IllegalEmbeddedStatement));
             }
 
             return statement;

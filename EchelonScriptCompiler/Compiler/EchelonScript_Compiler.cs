@@ -90,7 +90,7 @@ namespace EchelonScriptCompiler {
             env = environment;
         }
 
-        public void AddTranslationUnit (string unitName, ReadOnlySpan<ReadOnlyMemory<char>> codeTransUnit) {
+        public void AddTranslationUnit (string unitName, ReadOnlySpan<(ReadOnlyMemory<char>, ReadOnlyMemory<char>)> codeTransUnit) {
             CheckDisposed ();
 
             bool foundErrors = false;
@@ -100,7 +100,7 @@ namespace EchelonScriptCompiler {
                 foreach (var codeUnit in codeTransUnit) {
                     parser.Reset ();
 
-                    var astUnit = parser.ParseCode (codeUnit);
+                    var astUnit = parser.ParseCode (codeUnit.Item1, codeUnit.Item2);
                     astUnitsList.Add (astUnit);
 
                     foundErrors |= !astUnit.Valid;

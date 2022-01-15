@@ -99,6 +99,8 @@ namespace EchelonScriptCompiler.CompilerCommon {
         public int TextColumn;
         public int TextEndPos => TextStartPos + Text.Length;
 
+        public ReadOnlyMemory<char> FileName;
+
         public ReadOnlyMemory<char> Text;
         public string DecodedStringUTF16;
         public int [] DecodedStringUTF32;

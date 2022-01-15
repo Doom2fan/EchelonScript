@@ -658,7 +658,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
                 errorList.Add (new (
                     $"The C# compiler reported an error at line {errPos.Line}, column {errPos.Character} when compiling: {errMsg}",
-                    0, 0, 0, 0
+                    0, 0, string.Empty.AsMemory (), 0, 0
                 ));
             }
 
@@ -686,11 +686,11 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 if (diagMsg.Severity != DiagnosticSeverity.Error)
                     continue;
 
-                errorList.Add (new (error_EmitError.Replace ("{errMsg}", diagMsg.GetMessage ()), 0, 0, 0, 0));
+                errorList.Add (new (error_EmitError.Replace ("{errMsg}", diagMsg.GetMessage ()), 0, 0, string.Empty.AsMemory (), 0, 0));
             }
 
             if (!emitResult.Success && errorList.Count < 1)
-                errorList.Add (new ("Unknown Roslyn Emit error. Success was false but no errors reported.", 0, 0, 0, 0));
+                errorList.Add (new ("Unknown Roslyn Emit error. Success was false but no errors reported.", 0, 0, string.Empty.AsMemory (), 0, 0));
 
             if (errorList.Count > 0)
                 return false;

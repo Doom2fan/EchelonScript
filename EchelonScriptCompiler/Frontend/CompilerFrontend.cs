@@ -45,10 +45,11 @@ namespace EchelonScriptCompiler.Frontend {
     }
 
     public struct AstUnitData : IDisposable {
-        #region ================== Instance fields
+        #region ================== Instance fields and properties
 
         public ES_AbstractSyntaxTree Ast;
         public SymbolStack<FrontendSymbol> Symbols;
+        public SourceData SourceData => new SourceData { Code = Ast.Source.Span, FileName = Ast.FileName };
 
         #endregion
 

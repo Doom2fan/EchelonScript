@@ -30,6 +30,7 @@ namespace EchelonScriptCompiler.CompilerCommon {
     }
 
     public class ES_AbstractSyntaxTree : ES_AstNode {
+        public readonly ReadOnlyMemory<char> FileName;
         public readonly ReadOnlyMemory<char> Source;
 
         public override ES_AstNodeBounds NodeBounds => bounds;
@@ -41,11 +42,12 @@ namespace EchelonScriptCompiler.CompilerCommon {
         public ES_AstNamespace [] Namespaces;
 
         public ES_AbstractSyntaxTree (
-            ReadOnlyMemory<char> source,
+            ReadOnlyMemory<char> source, ReadOnlyMemory<char> fileName,
             ES_AstImportStatement [] imports, ES_AstTypeAlias [] aliases, ES_AstNamespace [] namespaces,
             ES_AstNodeBounds bounds
         ) : base (1) {
             Source = source;
+            FileName = fileName;
 
             ImportStatements = imports;
             TypeAliases = aliases;

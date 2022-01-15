@@ -73,7 +73,7 @@ namespace EchelonScriptCompiler.Frontend {
         }
 
         protected void FoldConstants_Struct (ref TranslationUnitData transUnit, ref AstUnitData astUnit, ES_AstStructDefinition structDef) {
-            var srcCode = astUnit.Ast.Source.Span;
+            var srcCode = astUnit.SourceData;
             var symbols = astUnit.Symbols;
 
             foreach (var member in structDef.Contents) {
@@ -98,7 +98,7 @@ namespace EchelonScriptCompiler.Frontend {
 
         protected void FoldConstants_Function (ref TranslationUnitData transUnit, ref AstUnitData astUnit, ES_AstFunctionDefinition funcDef) {
             var idPool = Environment!.IdPool;
-            var unitSrc = astUnit.Ast.Source.Span;
+            var unitSrc = astUnit.SourceData;
             var symbols = astUnit.Symbols;
 
             symbols.Push ();
@@ -144,7 +144,7 @@ namespace EchelonScriptCompiler.Frontend {
         }
 
         protected void FoldConstants_Statement (
-            ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, ReadOnlySpan<char> src,
+            ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, SourceData src,
             ES_TypeInfo* retType, ES_AstStatement stmt
         ) {
             Debug.Assert (stmt is not null);
@@ -508,7 +508,7 @@ namespace EchelonScriptCompiler.Frontend {
         }
 
         protected ExpressionData FoldConstants_Expression (
-            ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, ReadOnlySpan<char> src,
+            ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, SourceData src,
             ref ES_AstExpression expr, ES_TypeInfo* expectedType
         ) {
             Debug.Assert (expr is not null);
@@ -781,7 +781,7 @@ namespace EchelonScriptCompiler.Frontend {
         }
 
         protected ExpressionData FoldConstants_NullExpression (
-            ref TranslationUnitData transUnit, ReadOnlySpan<char> src,
+            ref TranslationUnitData transUnit, SourceData src,
             ref ES_AstExpression expr, ES_TypeInfo* expectedType
         ) {
             Debug.Assert (Environment is not null);
@@ -816,7 +816,7 @@ namespace EchelonScriptCompiler.Frontend {
         }
 
         protected ExpressionData FoldConstants_Expression_FunctionCall (
-            ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, ReadOnlySpan<char> src,
+            ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, SourceData src,
             ES_AstFunctionCallExpression funcCallExpr, ES_TypeInfo* expectedType
         ) {
             Debug.Assert (Environment is not null);

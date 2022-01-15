@@ -25,7 +25,7 @@ namespace EchelonScriptCompiler.Frontend {
             foreach (ref var astUnit in transUnit.AstUnits.Span) {
                 foreach (var nm in astUnit.Ast.Namespaces) {
                     var symbols = astUnit.Symbols;
-                    var unitSrc = astUnit.Ast.Source.Span;
+                    var unitSrc = astUnit.SourceData;
 
                     ArrayPointer<byte> namespaceName;
                     using (var nameArr = nm.NamespaceName.ToPooledChars ())
@@ -70,7 +70,7 @@ namespace EchelonScriptCompiler.Frontend {
 
         protected void CreateFunctions_Function (
             ref TranslationUnitData transUnit, ES_NamespaceData.Builder namespaceBuilder,
-            SymbolStack<FrontendSymbol> symbols, ReadOnlySpan<char> unitSrc,
+            SymbolStack<FrontendSymbol> symbols, SourceData unitSrc,
             ES_TypeInfo* parentType, ES_AstFunctionDefinition funcDef
         ) {
             Debug.Assert (Environment is not null);

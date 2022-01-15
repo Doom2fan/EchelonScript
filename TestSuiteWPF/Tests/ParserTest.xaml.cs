@@ -79,7 +79,7 @@ namespace TestSuiteWPF.Tests {
 
             errList.Clear ();
             parser.Reset ();
-            var astTree = parser.ParseCode (code.AsMemory ());
+            var astTree = parser.ParseCode ("Buffer".AsMemory (), code.AsMemory ());
 
             foreach (var error in errList) {
                 errorsList.Items.Add ($"Line {error.Line}, column {error.Column}: {error.Message}");

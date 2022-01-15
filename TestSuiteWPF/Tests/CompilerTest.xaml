@@ -36,6 +36,7 @@
                 <GridView AllowsColumnReorder="True">
                     <GridViewColumn DisplayMemberBinding="{Binding Path=Type}" Header="Type" />
                     <GridViewColumn DisplayMemberBinding="{Binding Path=Message}" Header="Message" />
+                    <GridViewColumn DisplayMemberBinding="{Binding Path=FileName}" Header="File name" />
                     <GridViewColumn DisplayMemberBinding="{Binding Path=Line}" Header="Line" />
                     <GridViewColumn DisplayMemberBinding="{Binding Path=Column}" Header="Column" />
                 </GridView>
