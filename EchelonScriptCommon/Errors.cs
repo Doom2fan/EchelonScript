@@ -134,7 +134,11 @@ namespace EchelonScriptCommon {
 
     public class EchelonScriptNullAccessException : EchelonScriptException {
         public EchelonScriptNullAccessException ()
-            : base ("Tried to access a null reference.") {
-        }
+            : base ("Tried to access a null reference.") { }
+    }
+
+    public class EchelonScriptIntegerDivisionByZeroException : EchelonScriptException {
+        public EchelonScriptIntegerDivisionByZeroException ()
+            : base ("Integer division by zero.") { }
     }
 }

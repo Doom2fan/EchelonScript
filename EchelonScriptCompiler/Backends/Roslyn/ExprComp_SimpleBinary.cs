@@ -9,6 +9,8 @@
 
 using System;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
+using EchelonScriptCommon;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Frontend;
@@ -100,6 +102,28 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             throw new CompilationException (ES_BackendErrors.FrontendError);
         }
 
+        private ExpressionSyntax GenerateCode_BinaryExpr_IntIntDiv ([NotNull] ES_TypeInfo* type, ExpressionSyntax lhs, ExpressionSyntax rhs, bool mod) {
+            Debug.Assert (type->TypeTag == ES_TypeTag.Int);
+
+            var roslynType = GetRoslynType (type);
+
+            return CastExpression (
+                roslynType,
+                InvocationExpression (
+                    SimpleMemberAccess (
+                        nameof (ES_DotNetIntrinsicsImpl),
+                        !mod ? nameof (ES_DotNetIntrinsicsImpl.IntegerDivision) : nameof (ES_DotNetIntrinsicsImpl.IntegerModulo)
+                    )
+                ).WithArgumentList (ArgumentList (
+                    SimpleSeparatedList (
+                        Token (SyntaxKind.CommaToken),
+                        Argument (lhs),
+                        Argument (rhs)
+                    )
+                ))
+            );
+        }
+
         private ExpressionData GenerateCode_BinaryExpr_IntInt (ExpressionData lhs, ExpressionData rhs, SimpleBinaryExprType exprOp) {
             var boolType = env!.TypeBool;
 
@@ -143,7 +167,16 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             Debug.Assert (rhs.Value is not null);
 
             ExpressionSyntax value;
-            if (GetSimpleBinaryExprSyntaxKind (exprOp, out var simpleBinarySyntaxKind))
+            if (exprOp == SimpleBinaryExprType.Divide || exprOp == SimpleBinaryExprType.AssignDivide ||
+                exprOp == SimpleBinaryExprType.Modulo || exprOp == SimpleBinaryExprType.AssignModulo
+            ) {
+                var mod = exprOp == SimpleBinaryExprType.Modulo || exprOp == SimpleBinaryExprType.AssignModulo;
+
+                value = GenerateCode_BinaryExpr_IntIntDiv (lhs.Type, lhs.Value, rhs.Value, mod);
+
+                if (isAssignment)
+                    value = AssignmentExpression (SyntaxKind.SimpleAssignmentExpression, lhs.Value, value);
+            } else if (GetSimpleBinaryExprSyntaxKind (exprOp, out var simpleBinarySyntaxKind))
                 value = BinaryExpression (simpleBinarySyntaxKind, lhs.Value, rhs.Value);
             else if (GetSimpleBinaryExprAssignSyntaxKind (exprOp, out var simpleBinaryAssignSyntaxKind))
                 value = AssignmentExpression (simpleBinaryAssignSyntaxKind, lhs.Value, rhs.Value);
