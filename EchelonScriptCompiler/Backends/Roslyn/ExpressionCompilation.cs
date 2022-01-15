@@ -46,6 +46,30 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             }
         }
 
+        private ExpressionSyntax? GenerateCode_IsNullable (ES_TypeInfo* destType, out ES_TypeInfo* retType, bool genValue) {
+            Debug.Assert (env is not null);
+            Debug.Assert (destType is not null);
+
+            var typeUnkn = env.TypeUnknownValue;
+
+            switch (destType->TypeTag) {
+                case ES_TypeTag.Interface:
+                case ES_TypeTag.Reference:
+                case ES_TypeTag.Array: {
+                    retType = destType;
+
+                    if (genValue)
+                        return LiteralExpression (SyntaxKind.NullLiteralExpression);
+
+                    return null;
+                }
+
+                case ES_TypeTag.UNKNOWN:
+                default:
+                    throw new CompilationException (ES_BackendErrors.FrontendError);
+            }
+        }
+
         private void GenerateCode_EnsureImplicitCompat (ref ExpressionData exprData, ES_TypeInfo* dstType) {
             var srcType = exprData.Type;
 
@@ -54,7 +78,9 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             if (exprData.Type == dstType)
                 return;
 
-            if (dstType->TypeTag == ES_TypeTag.Int && dstType->TypeTag == ES_TypeTag.Int) {
+            if (exprData.Type->TypeTag == ES_TypeTag.Null) {
+                exprData.Value = GenerateCode_IsNullable (dstType, out exprData.Type, true);
+            } else if (dstType->TypeTag == ES_TypeTag.Int && dstType->TypeTag == ES_TypeTag.Int) {
                 var dstIntType = (ES_IntTypeData*) dstType;
                 var srcIntType = (ES_IntTypeData*) srcType;
 
@@ -103,8 +129,16 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 case ES_AstIntegerLiteralExpression:
                 case ES_AstBooleanLiteralExpression:
                 case ES_AstFloatLiteralExpression:
-                case ES_AstNullLiteralExpression:
                     throw new CompilationException (ES_BackendErrors.FrontendError);
+
+                case ES_AstNullLiteralExpression:
+                    if (expectedType is null || expectedType->TypeTag == ES_TypeTag.UNKNOWN)
+                        return new ExpressionData { Expr = expr, Type = env.TypeNull, Value = null, Constant = true, Addressable = false };
+                    else {
+                        var value = GenerateCode_IsNullable (expectedType, out var retType, true);
+
+                        return new ExpressionData { Expr = expr, Type = retType, Value = value, Constant = true, Addressable = false };
+                    }
 
                 case ES_AstIntegerConstantExpression intConstExpr: {
                     Debug.Assert (intConstExpr.IntType->TypeTag == ES_TypeTag.Int);
@@ -157,22 +191,6 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
                 case ES_AstCharLiteralExpression:
                     throw new NotImplementedException ("[TODO] Character literals not implemented yet.");
-
-                case ES_AstNullConstantExpression nullConstExpr: {
-                    Debug.Assert (nullConstExpr.NullableType is not null);
-
-                    switch (nullConstExpr.NullableType->TypeTag) {
-                        case ES_TypeTag.Array:
-                        case ES_TypeTag.Reference:
-                        case ES_TypeTag.Interface: {
-                            var value = LiteralExpression (SyntaxKind.NullLiteralExpression);
-                            return new ExpressionData { Expr = expr, Type = nullConstExpr.NullableType, Value = value, Constant = true, Addressable = false };
-                        }
-
-                        default:
-                            throw new NotImplementedException ("Type not implemented yet.");
-                    }
-                }
 
                 case ES_AstNameExpression nameExpr: {
                     var id = idPool.GetIdentifier (nameExpr.Value.Text.Span);
