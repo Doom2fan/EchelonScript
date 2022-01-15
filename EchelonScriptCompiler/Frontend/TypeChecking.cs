@@ -252,6 +252,9 @@ namespace EchelonScriptCompiler.Frontend {
             if (destType->TypeTag == ES_TypeTag.UNKNOWN || givenType->TypeTag == ES_TypeTag.UNKNOWN) {
                 isConstant = false;
                 return true;
+            } else if (givenType->TypeTag == ES_TypeTag.Null) {
+                cantConvert = !CheckTypes_IsNullable (destType, out _);
+                isConstant = true;
             } else if (destType->TypeTag == ES_TypeTag.Int && givenType->TypeTag == ES_TypeTag.Int) {
                 var destIntType = (ES_IntTypeData*) destType;
                 var givenIntType = (ES_IntTypeData*) givenType;
@@ -310,7 +313,19 @@ namespace EchelonScriptCompiler.Frontend {
         }
 
         protected bool CheckTypes_EnsureCompat (ES_TypeInfo* destType, ES_TypeInfo* givenType, SourceData src, ES_AstNodeBounds bounds, out bool isConstant) {
-            if (!CheckTypes_MustBeCompat (destType, givenType, out isConstant)) {
+            if (givenType->TypeTag == ES_TypeTag.Null) {
+                if (!CheckTypes_IsNullable (destType, out var retType)) {
+                    errorList.Add (ES_FrontendErrors.GenTypeNotNullable (
+                        destType->Name.GetNameAsTypeString (), src, bounds
+                    ));
+
+                    isConstant = false;
+                    return false;
+                }
+
+                isConstant = false;
+                return true;
+            } else if (!CheckTypes_MustBeCompat (destType, givenType, out isConstant)) {
                 if (CheckTypes_ExplicitCast (destType, givenType, out _, out _)) {
                     errorList.Add (ES_FrontendErrors.GenNoImplicitCast (
                         destType->Name.GetNameAsTypeString (), givenType->Name.GetNameAsTypeString (),
@@ -327,6 +342,49 @@ namespace EchelonScriptCompiler.Frontend {
             }
 
             return true;
+        }
+
+        protected bool CheckTypes_IsNullable (ES_TypeInfo* destType, out ES_TypeInfo* retType) {
+            Debug.Assert (Environment is not null);
+            Debug.Assert (destType is not null);
+
+            var typeUnkn = Environment.TypeUnknownValue;
+
+            switch (destType->TypeTag) {
+                case ES_TypeTag.UNKNOWN:
+                    retType = typeUnkn;
+                    return true;
+
+                case ES_TypeTag.Interface:
+                case ES_TypeTag.Reference:
+                case ES_TypeTag.Array:
+                    retType = destType;
+                    return true;
+
+                default: {
+                    retType = typeUnkn;
+                    return false;
+                }
+            }
+        }
+
+        protected ExpressionData CheckTypes_NullExpression (
+            ref TranslationUnitData transUnit, SourceData src,
+            ES_AstNullLiteralExpression nullLitExpr, ES_TypeInfo* expectedType
+        ) {
+            Debug.Assert (Environment is not null);
+            Debug.Assert (expectedType is not null);
+
+            var typeUnkn = Environment.TypeUnknownValue;
+
+            if (!CheckTypes_IsNullable (expectedType, out var retType)) {
+                errorList.Add (ES_FrontendErrors.GenTypeNotNullable (
+                    expectedType->Name.GetNameAsTypeString (), nullLitExpr.Token
+                ));
+                return new ExpressionData { Expr = nullLitExpr, Type = typeUnkn };
+            }
+
+            return new ExpressionData { Expr = nullLitExpr, Type = retType, Constant = true, Addressable = false, };
         }
 
         protected ES_FunctionData* CheckTypes_FindConstructor (ES_TypeInfo* objType, ReadOnlySpan<ES_FunctionPrototypeArgData> arguments) {
@@ -422,6 +480,11 @@ namespace EchelonScriptCompiler.Frontend {
                         } else {
                             Debug.Assert (variable.InitializationExpression is not null);
                             var exprData = CheckTypes_Expression (ref transUnit, symbols, src, variable.InitializationExpression, typeUnkn);
+
+                            if (exprData.Type is not null && exprData.Type->TypeTag == ES_TypeTag.Null) {
+                                exprData.Type = typeUnkn;
+                                errorList.Add (new (src, exprData.Expr.NodeBounds, ES_FrontendErrors.NoImplicitNullVars));
+                            }
 
                             if (!symbols.AddSymbol (varNameId, NewSymbolVariable (exprData.Type, symbolFlags))) {
                                 errorList.Add (ES_FrontendErrors.GenDuplicateSymbolDef (
@@ -657,7 +720,6 @@ namespace EchelonScriptCompiler.Frontend {
                 case ES_AstIntegerLiteralExpression:
                 case ES_AstBooleanLiteralExpression:
                 case ES_AstFloatLiteralExpression:
-                case ES_AstNullLiteralExpression:
                     throw new CompilationException (ES_FrontendErrors.ConstFoldFailure);
 
                 case ES_AstStringLiteralExpression:
@@ -678,9 +740,11 @@ namespace EchelonScriptCompiler.Frontend {
                 case ES_AstFloat64ConstantExpression:
                     return new ExpressionData { Expr = expr, Type = Environment.TypeFloat64, Constant = true, Addressable = false };
 
-                case ES_AstNullConstantExpression nullConstExpr:
-                    Debug.Assert (nullConstExpr.NullableType is not null);
-                    return new ExpressionData { Expr = expr, Type = nullConstExpr.NullableType, Constant = true, Addressable = false };
+                case ES_AstNullLiteralExpression nullLitExpr:
+                    if (expectedType is null || expectedType->TypeTag == ES_TypeTag.UNKNOWN)
+                        return new ExpressionData { Expr = expr, Type = Environment.TypeNull, Constant = true, Addressable = false };
+
+                    return CheckTypes_NullExpression (ref transUnit, src, nullLitExpr, expectedType);
 
                 case ES_AstNameExpression nameExpr: {
                     var id = idPool.GetIdentifier (nameExpr.Value.Text.Span);

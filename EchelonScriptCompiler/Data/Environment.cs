@@ -959,6 +959,7 @@ namespace EchelonScriptCompiler.Data {
 
         protected ES_TypeInfo* typeUnknownValue;
         protected ES_TypeInfo* typeVoid;
+        protected ES_TypeInfo* typeNull;
         protected ES_TypeInfo* typeBool;
         protected ES_TypeInfo* typeFloat32;
         protected ES_TypeInfo* typeFloat64;
@@ -976,6 +977,7 @@ namespace EchelonScriptCompiler.Data {
 
         public ES_TypeInfo* TypeUnknownValue => typeUnknownValue;
         public ES_TypeInfo* TypeVoid => typeVoid;
+        public ES_TypeInfo* TypeNull => typeNull;
         public ES_TypeInfo* TypeBool => typeBool;
         public ES_TypeInfo* TypeFloat32 => typeFloat32;
         public ES_TypeInfo* TypeFloat64 => typeFloat64;
@@ -1002,6 +1004,14 @@ namespace EchelonScriptCompiler.Data {
                 new ES_FullyQualifiedName (ArrayPointer<byte>.Null, unknTypeId)
             );
             typeUnknownValue = unknType;
+
+            var nullTypeId = IdPool.GetIdentifier ("#NULL");
+            var nullType = memManager.GetMemory<ES_TypeInfo> ();
+            *nullType = new ES_TypeInfo (
+                ES_TypeTag.Null, ES_AccessModifier.Public, ES_TypeFlag.None, ArrayPointer<byte>.Null,
+                new ES_FullyQualifiedName (ArrayPointer<byte>.Null, nullTypeId)
+            );
+            typeNull = nullType;
         }
 
         #endregion

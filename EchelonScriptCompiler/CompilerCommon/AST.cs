@@ -1346,18 +1346,6 @@ namespace EchelonScriptCompiler.CompilerCommon {
         }
     }
 
-    public unsafe class ES_AstNullConstantExpression : ES_AstExpression {
-        public override ES_AstNodeBounds NodeBounds => OriginalExpression.NodeBounds;
-
-        public readonly ES_AstExpression OriginalExpression;
-        public readonly ES_TypeInfo* NullableType;
-
-        public ES_AstNullConstantExpression (ES_TypeInfo* type, ES_AstExpression origExpr) : base (1) {
-            OriginalExpression = origExpr;
-            NullableType = type;
-        }
-    }
-
     public class ES_AstNameExpression : ES_AstExpression {
         public override ES_AstNodeBounds NodeBounds {
             get {

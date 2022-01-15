@@ -180,6 +180,7 @@ namespace EchelonScriptCompiler.Frontend {
 
         public const string IntLitTooBigForSize = "The integer literal is too big to fit in {sign} {size}-bit integer.";
         public const string TypeNotNullable = "Type \"{typeName}\" is not nullable.";
+        public const string NoImplicitNullVars = "Cannot assign [null] to an implicitly-typed variable.";
 
         public const string NoCast = "Cannot convert type \"{givenType}\" to \"{destType}\".";
         public const string NoImplicitCast = "Cannot implicitly convert type \"{givenType}\" to \"{destType}\".";
@@ -330,6 +331,10 @@ namespace EchelonScriptCompiler.Frontend {
         public static EchelonScriptErrorMessage GenTypeNotNullable (string typeName, EchelonScriptToken errorToken) {
             var errorMessage = TypeNotNullable.Replace ("{typeName}", typeName);
             return new EchelonScriptErrorMessage (errorToken, errorMessage);
+        }
+        public static EchelonScriptErrorMessage GenTypeNotNullable (string typeName, SourceData src, ES_AstNodeBounds errorBounds) {
+            var errorMessage = TypeNotNullable.Replace ("{typeName}", typeName);
+            return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
         }
 
         public static EchelonScriptErrorMessage GenNoCast (string destType, string givenType, SourceData src, ES_AstNodeBounds errorBounds) {

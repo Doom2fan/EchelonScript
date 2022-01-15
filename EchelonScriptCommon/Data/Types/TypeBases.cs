@@ -14,19 +14,20 @@ using EchelonScriptCommon.Utilities;
 namespace EchelonScriptCommon.Data.Types {
     public enum ES_TypeTag : int {
         UNKNOWN   = 0,
-        Void      = 1,
-        Bool      = 2,
-        Int       = 3,
-        Float     = 4,
-        Function  = 5,
-        Struct    = 6,
-        Class     = 7,
-        Enum      = 8,
-        Interface = 9,
-        Reference = 10,
-        Const     = 11,
-        Immutable = 12,
-        Array     = 13,
+        Null,
+        Void,
+        Bool,
+        Int,
+        Float,
+        Function,
+        Struct,
+        Class,
+        Enum,
+        Interface,
+        Reference,
+        Const,
+        Immutable,
+        Array,
     }
 
     public enum ES_TypeFlag : int {
