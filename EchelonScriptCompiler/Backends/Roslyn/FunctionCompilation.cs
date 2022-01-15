@@ -11,6 +11,7 @@ using System;
 using System.Diagnostics;
 using System.Text;
 using ChronosLib.Pooled;
+using EchelonScriptCommon;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.Utilities;
 using EchelonScriptCompiler.CompilerCommon;
@@ -171,7 +172,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
         }
 
         private MethodDeclarationSyntax GenerateCode_Function (
-            ref TranslationUnitData transUnit, ES_NamespaceData? namespaceData,
+            ref TranslationUnitData transUnit, ref AstUnitData astUnit, ES_NamespaceData? namespaceData,
             SymbolStack<Symbol> symbols, ReadOnlySpan<char> src,
             ES_TypeInfo* parentType, ES_AstFunctionDefinition funcDef
         ) {
@@ -186,6 +187,28 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 namespaceData, parentType, env.IdPool.GetIdentifier (funcDef.Name.Text.Span),
                 out funcInfo.Data
             );
+
+            var namespaceName = parentType is not null ? parentType->Name.NamespaceNameString : namespaceData!.NamespaceNameString;
+            var parentTypeAttrExpr = parentType is not null
+                ? LiteralExpression (SyntaxKind.StringLiteralExpression, Literal (parentType->Name.GetNameAsTypeString ()))
+                : LiteralExpression (SyntaxKind.NullLiteralExpression);
+
+            funcInfo.Definition = funcInfo.Definition.AddAttributeLists (SingletonAttributeList (Attribute (
+                IdentifierName (nameof (ES_MethodTraceDataAttribute)),
+                SimpleAttributeArgumentList (
+                    AttributeArgument (LiteralExpression (SyntaxKind.StringLiteralExpression, Literal (NamespaceName))),
+                    AttributeArgument (LiteralExpression (SyntaxKind.StringLiteralExpression, Literal (funcDef.Name.Text.Span.GetPooledString ()))),
+
+                    AttributeArgument (
+                        NameEquals (IdentifierName (nameof (ES_MethodTraceDataAttribute.ParentType))), null,
+                        parentTypeAttrExpr
+                    ),
+                    AttributeArgument (
+                        NameEquals (IdentifierName (nameof (ES_MethodTraceDataAttribute.FileName))), null,
+                        LiteralExpression (SyntaxKind.StringLiteralExpression, Literal (astUnit.Ast.FileName.Span.GetPooledString ()))
+                    )
+                )
+            )));
 
             funcInfo.Type = funcInfo.Data->FunctionType;
             var retType = funcInfo.Type->ReturnType;

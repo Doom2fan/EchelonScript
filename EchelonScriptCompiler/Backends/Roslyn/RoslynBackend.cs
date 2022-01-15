@@ -549,7 +549,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                                     break;
 
                                 case ES_AstFunctionDefinition funcDef: {
-                                    var funcDecl = GenerateCode_Function (ref transUnit, namespaceData, symbols, src, null, funcDef);
+                                    var funcDecl = GenerateCode_Function (ref transUnit, ref astUnit, namespaceData, symbols, src, null, funcDef);
                                     globalFunctions.Add (funcDecl);
                                     break;
                                 }

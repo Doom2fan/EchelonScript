@@ -11,6 +11,7 @@ using System;
 using System.Diagnostics;
 using System.Text;
 using ChronosLib.Pooled;
+using EchelonScriptCommon;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.Utilities;
 using EchelonScriptCompiler.CompilerCommon;
@@ -73,6 +74,16 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 throw new CompilationException ("<<Unknown expression type in GenerateCode_Expression_MemberAccess>>");
         }
 
+        private ExpressionSyntax GenerateCode_NullCheck (ExpressionSyntax ptrExpr) {
+            return (
+                InvocationExpression (
+                    SimpleMemberAccess (nameof (ES_ObjectAddress), nameof (ES_ObjectAddress.NullCheck))
+                ).WithArgumentList (ArgumentList (
+                    SingletonSeparatedList (Argument (ptrExpr))
+                ))
+            );
+        }
+
         private ExpressionData GenerateCode_Expression_MemberAccess_Struct (
             ReadOnlySpan<char> src, ES_AstMemberAccessExpression expr,
             ref ExpressionData parentExpr, ArrayPointer<byte> memberId
@@ -83,9 +94,13 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             var type = parentExpr.Type;
             var isRef = false;
 
+            var structExpr = parentExpr.Value;
+
             if (type->TypeTag == ES_TypeTag.Reference) {
                 type = ((ES_ReferenceData*) parentExpr.Type)->PointedType;
                 isRef = true;
+
+                structExpr = GenerateCode_NullCheck (structExpr);
             }
 
             var membersArr = type->MembersList.MembersList;
@@ -107,7 +122,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
                         var value = MemberAccessExpression (
                             !isRef ? SyntaxKind.SimpleMemberAccessExpression : SyntaxKind.PointerMemberAccessExpression,
-                            parentExpr.Value, IdentifierName (memberId.GetPooledString (Encoding.ASCII))
+                            structExpr, IdentifierName (memberId.GetPooledString (Encoding.ASCII))
                         );
 
                         return new ExpressionData { Expr = expr, Type = memberVar->Type, Value = value, Constant = false, Addressable = addressable };
@@ -136,6 +151,8 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             var typeArr = (ES_ArrayTypeData*) parentExpr.Type;
             var typeIndex = env.GetArrayIndexType ();
 
+            var arrExpr = GenerateCode_NullCheck (parentExpr.Value);
+
             var addressable = false;
             ES_TypeInfo* memberType;
             ExpressionSyntax value;
@@ -144,10 +161,10 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             var dimLenPrefix = "LengthD";
             if (memberChars.Equals (lengthName, StringComparison.Ordinal)) {
                 memberType = typeIndex;
-                value = PointerMemberAccess (parentExpr.Value, IdentifierName (lengthName));
+                value = PointerMemberAccess (arrExpr, IdentifierName (lengthName));
             } else if (memberChars.Equals ("Rank", StringComparison.Ordinal)) {
                 memberType = env.GetIntType (ES_IntSize.Int8, true);
-                value = PointerMemberAccess (parentExpr.Value, IdentifierName ("Rank"));
+                value = PointerMemberAccess (arrExpr, IdentifierName ("Rank"));
             } else if (memberChars.StartsWith (dimLenPrefix, StringComparison.Ordinal)) {
                 var num = memberChars.Slice (dimLenPrefix.Length);
 
@@ -155,7 +172,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                     throw new CompilationException (ES_BackendErrors.FrontendError);
 
                 memberType = typeIndex;
-                value = PointerMemberAccess (parentExpr.Value, IdentifierName (GetArrayDimensionMember (dimIndex)));
+                value = PointerMemberAccess (arrExpr, IdentifierName (GetArrayDimensionMember (dimIndex)));
             } else
                 throw new CompilationException (ES_BackendErrors.FrontendError);
 

@@ -400,9 +400,12 @@ namespace TestSuiteWPF.Tests {
         }
 
         private string GetExceptionString (EchelonScriptException e) {
+            Console.Write ("EchelonScript error: ");
             Console.WriteLine (e.Message);
-            foreach (var line in e.GetESStackTrace (true))
+            foreach (var line in e.GetESStackTrace (false)) {
+                Console.Write ("  ");
                 Console.WriteLine (line);
+            }
 
             return e.Message;
         }
