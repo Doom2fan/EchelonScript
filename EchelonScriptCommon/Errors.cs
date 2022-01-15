@@ -141,4 +141,9 @@ namespace EchelonScriptCommon {
         public EchelonScriptIntegerDivisionByZeroException ()
             : base ("Integer division by zero.") { }
     }
+
+    public class EchelonScriptOutOfBoundsException : EchelonScriptException {
+        public EchelonScriptOutOfBoundsException (string message)
+            : base (message) { }
+    }
 }

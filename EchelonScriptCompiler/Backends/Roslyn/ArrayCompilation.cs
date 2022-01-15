@@ -38,6 +38,21 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             return chars [..charCount].GetPooledString ();
         }
 
+        private ExpressionSyntax GenerateCode_BoundsCheck (
+            int dimNum, ExpressionSyntax boundsExpr, ExpressionSyntax valExpr
+        ) {
+            return (InvocationExpression (
+                    SimpleMemberAccess (nameof (ES_ArrayIndex), nameof (ES_ArrayIndex.CheckBounds))
+                ).WithArgumentList (ArgumentList (SimpleSeparatedList (
+                    Token (SyntaxKind.CommaToken),
+
+                    Argument (LiteralExpression (SyntaxKind.NumericLiteralExpression, Literal (dimNum))),
+                    Argument (boundsExpr),
+                    Argument (valExpr)
+                )))
+            );
+        }
+
         private MemberDeclarationSyntax GenerateCode_Array (ES_ArrayTypeData* arrayType) {
             Debug.Assert (env is not null);
             Debug.Assert (envBuilder is not null);
@@ -91,10 +106,13 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 ))).WithModifiers (TokenList (Token (SyntaxKind.PublicKeyword)))
             );
 
-            // Add the alloc functions to the members.
+            // Add the alloc functions.
             var allocFuncs = GenerateCode_Array_AllocFunc (arrayType);
             memberTypes.Add (allocFuncs.Item1);
             memberTypes.Add (allocFuncs.Item2);
+
+            // Add the index function.
+            memberTypes.Add (GenerateCode_Array_IndexFunc (arrayType));
 
             // Create the declaration.
             var arrayDecl = StructDeclaration (
@@ -194,29 +212,30 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 argsList.Add (Argument (IdentifierName (elemValsName)));
 
             /** Generate the base function definition **/
-            var allocFuncDef = MethodDeclaration (typeArray, ArrayAllocFuncName);
-            allocFuncDef = allocFuncDef.WithModifiers (TokenList (
-                Token (SyntaxKind.PublicKeyword),
-                Token (SyntaxKind.StaticKeyword)
-            ));
-            allocFuncDef = allocFuncDef.WithAttributeLists (SingletonList (
-                SingletonAttributeList (Attribute_MethodImpl_AggressiveInlining ())
-            ));
-
-            /*Attribute (
-                IdentifierName (nameof (MethodImplAttribute)),
-                */
+            var allocFuncDef = (
+                MethodDeclaration (
+                    typeArray,
+                    ArrayAllocFuncName
+                ).WithModifiers (TokenList (
+                    Token (SyntaxKind.PublicKeyword),
+                    Token (SyntaxKind.StaticKeyword)
+                )).WithAttributeLists (SingletonList (
+                    SingletonAttributeList (Attribute_MethodImpl_AggressiveInlining ())
+                ))
+            );
 
             /** Generate the basic function **/
             var allocArrayFunctionAccessBasic = SimpleMemberAccess (nameof (ES_GarbageCollector), nameof (ES_GarbageCollector.AllocArray));
 
-            var allocFuncDefBasic = allocFuncDef;
-            allocFuncDefBasic = allocFuncDefBasic.WithParameterList (ParameterList (SeparatedListSpan<ParameterSyntax> (parametersList.Span [..^2])));
-            allocFuncDefBasic = allocFuncDefBasic.WithExpressionBody (ArrowExpressionClause (
-                CastExpression (typeArray, InvocationExpression (allocArrayFunctionAccessBasic, ArgumentList (SeparatedListSpan<ArgumentSyntax> (
-                    argsList.Span [..^2]
-                ))))
-            ));
+            var allocFuncDefBasic = (allocFuncDef
+                .WithParameterList (ParameterList (
+                    SeparatedListSpan<ParameterSyntax> (parametersList.Span [..^2])
+                )).WithExpressionBody (ArrowExpressionClause (
+                    CastExpression (typeArray, InvocationExpression (allocArrayFunctionAccessBasic, ArgumentList (SeparatedListSpan<ArgumentSyntax> (
+                        argsList.Span [..^2]
+                    ))))
+                ))
+            );
 
             /** Generate the function with element setting **/
             var allocArrayFunctionAccessElemDefault = SimpleMemberAccess (
@@ -231,11 +250,128 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 ArgumentList (SeparatedListSpan<ArgumentSyntax> (argsList.Span))
             ));
 
-            var allocFuncDefElemDefault = allocFuncDef;
-            allocFuncDefElemDefault = allocFuncDefElemDefault.WithParameterList (ParameterList (SeparatedListSpan<ParameterSyntax> (parametersList.Span)));
-            allocFuncDefElemDefault = allocFuncDefElemDefault.WithExpressionBody (ArrowExpressionClause (allocFuncDefElemDefaultCall));
+            var allocFuncDefElemDefault = (allocFuncDef
+                .WithParameterList (ParameterList (
+                    SeparatedListSpan<ParameterSyntax> (parametersList.Span)
+                )).WithExpressionBody (
+                    ArrowExpressionClause (allocFuncDefElemDefaultCall)
+                )
+            );
 
             return (allocFuncDefBasic, allocFuncDefElemDefault);
+        }
+
+        private MethodDeclarationSyntax GenerateCode_Array_IndexFunc (ES_ArrayTypeData* arrayType) {
+            const string arrayArgName = "arrayPtr";
+
+            var elemType = arrayType->ElementType;
+            var dimCount = arrayType->DimensionsCount;
+
+            var elemRoslynType = GetRoslynType (elemType);
+            var elemPtrRoslynType = PointerType (elemRoslynType);
+
+            var typeArray = GetRoslynType (&arrayType->TypeInfo);
+            var typeArrayHeader = IdentifierName (nameof (ES_ArrayHeader));
+            var typeIndex = GetRoslynType (env!.GetArrayIndexType ());
+
+            using var paramsList = new StructPooledList<ParameterSyntax> (CL_ClearMode.Auto);
+            using var funcBody = new StructPooledList<StatementSyntax> (CL_ClearMode.Auto);
+
+            // Generate the null check.
+            funcBody.Add (ExpressionStatement (GenerateCode_NullCheck (IdentifierName (arrayArgName))));
+
+            // Calculate the rank sizes.
+            using var rankSizeExprs = PooledArray<ExpressionSyntax>.GetArray (dimCount);
+            var rankSizeExprsSpan = rankSizeExprs.Span;
+
+            for (int i = 0; i < dimCount; i++) {
+                rankSizeExprsSpan [i] = MemberAccessExpression (
+                    SyntaxKind.PointerMemberAccessExpression,
+                    IdentifierName (arrayArgName),
+                    IdentifierName (GetArrayDimensionMember (i))
+                );
+            }
+
+            // Add the array parameter.
+            paramsList.Add (Parameter (Identifier (arrayArgName)).WithType (typeArray));
+
+            // Generate the parameters, dimension expressions and bounds checks.
+            const string paramNameDimValuePrefix = "dimVal";
+            using var dimValueNameArr = PooledArray<char>.GetArray (paramNameDimValuePrefix.Length + 3);
+            using var rankExprs = PooledArray<ExpressionSyntax>.GetArray (dimCount);
+            paramNameDimValuePrefix.AsSpan ().CopyTo (dimValueNameArr.Span);
+            for (int i = 0; i < dimCount; i++) {
+                if (!i.TryFormat (dimValueNameArr.Span [^3..], out var charsWritten))
+                    Debug.Fail ("Too many array dimensions.");
+
+                var dimValueParamName = dimValueNameArr.Span [..(paramNameDimValuePrefix.Length + charsWritten)].GetPooledString ();
+
+                paramsList.Add (Parameter (Identifier (dimValueParamName)).WithType (typeIndex));
+
+                var rankExpr = IdentifierName (dimValueParamName);
+                rankExprs.Span [i] = rankExpr;
+
+                funcBody.Add (ExpressionStatement (GenerateCode_BoundsCheck (i, rankSizeExprsSpan [i], rankExpr)));
+            }
+
+            // Get the base address of the array's data.
+            var arrayArgumentList = ArgumentList (SingletonSeparatedList (Argument (IdentifierName (arrayArgName))));
+
+            var baseAddrExpr = (
+                CastExpression (elemPtrRoslynType,
+                    InvocationExpression (
+                        MemberAccessExpression (SyntaxKind.SimpleMemberAccessExpression,
+                            typeArrayHeader,
+                            IdentifierName (nameof (ES_ArrayHeader.GetArrayDataPointer))
+                        )
+                    ).WithArgumentList (ArgumentList (
+                        SingletonSeparatedList (Argument (
+                            CastExpression (PointerType (typeArrayHeader), IdentifierName (arrayArgName))
+                        ))
+                    ))
+                )
+            );
+
+            // Calculate the flattened index.
+            var flattenedIndex = rankExprs.Span [0];
+            for (int i = 1; i < dimCount; i++) {
+                var rankIndex = rankExprs.Span [i];
+
+                for (int j = 0; j < i; j++)
+                    rankIndex = BinaryExpression (SyntaxKind.MultiplyExpression, rankIndex, rankSizeExprsSpan [j]);
+
+                flattenedIndex = BinaryExpression (SyntaxKind.AddExpression, flattenedIndex, rankIndex);
+            }
+
+            funcBody.Add (ReturnStatement (
+                RefExpression (
+                    ElementAccessExpression (
+                        baseAddrExpr
+                    ).WithArgumentList (BracketedArgumentList (
+                        SingletonSeparatedList (Argument (flattenedIndex))
+                    ))
+                )
+            ));
+
+            return (
+                MethodDeclaration (
+                    RefType (elemRoslynType),
+                    ArrayIndexFuncName
+                ).WithModifiers (TokenList (
+                    Token (SyntaxKind.PublicKeyword),
+                    Token (SyntaxKind.StaticKeyword)
+                )).WithAttributeLists (ListParams (
+                    SingletonAttributeList (Attribute (IdentifierName (nameof (ES_ExcludeFromStackTraceAttribute)))),
+                    SingletonAttributeList (Attribute_MethodImpl_AggressiveInlining ())
+                )).WithParameterList (ParameterList (
+                    SimpleSeparatedList<ParameterSyntax> (
+                        paramsList.Span,
+                        Token (SyntaxKind.CommaToken)
+                    )
+                )).WithBody (
+                    Block (ListSpan (funcBody.Span))
+                )
+            );
         }
     }
 }

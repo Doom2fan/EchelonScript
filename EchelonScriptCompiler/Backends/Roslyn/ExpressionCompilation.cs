@@ -446,46 +446,25 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             var typeArrayHeaderPtr = PointerType (IdentifierName (nameof (ES_ArrayHeader)));
 
             var arrayPtr = indexedExpr.Value!;
-            var arrayHeader = CastExpression (typeArrayHeaderPtr, arrayPtr);
 
-            // Get the base address of the array's data.
-            var arrayArgumentList = ArgumentList (SingletonSeparatedList (Argument (arrayHeader)));
+            // Get the arguments.
+            using var argsList = new StructPooledList<ArgumentSyntax> (CL_ClearMode.Auto);
+            argsList.Add (Argument (arrayPtr));
 
-            ExpressionSyntax baseAddrExpr = MemberAccessExpression (SyntaxKind.SimpleMemberAccessExpression,
-                typeArrayHeader,
-                IdentifierName (nameof (ES_ArrayHeader.GetArrayDataPointer))
-            );
-            baseAddrExpr = InvocationExpression (baseAddrExpr).WithArgumentList (arrayArgumentList);
-            baseAddrExpr = CastExpression (elemPtrRoslynType, baseAddrExpr);
+            for (int i = 0; i < dimCount; i++)
+                argsList.Add (Argument (rankExprs [i].Value!));
 
-            // Calculate the rank sizes.
-            using var rankSizeExprs = PooledArray<ExpressionSyntax>.GetArray (dimCount);
-            var rankSizeExprsSpan = rankSizeExprs.Span;
-
-            for (int i = 0; i < dimCount; i++) {
-                rankSizeExprsSpan [i] = MemberAccessExpression (
-                    SyntaxKind.PointerMemberAccessExpression,
-                    arrayPtr,
-                    IdentifierName (GetArrayDimensionMember (i))
-                );
-            }
-
-            // Calculate the flattened index.
-            var flattenedIndex = rankExprs [0].Value!;
-            for (int i = 1; i < dimCount; i++) {
-                var rankIndex = rankExprs [i].Value!;
-
-                for (int j = 0; j < i; j++)
-                    rankIndex = BinaryExpression (SyntaxKind.MultiplyExpression, rankIndex, rankSizeExprsSpan [j]);
-
-                flattenedIndex = BinaryExpression (SyntaxKind.AddExpression, flattenedIndex, rankIndex);
-            }
-
-            var returnExpr = ElementAccessExpression (baseAddrExpr).WithArgumentList (
-                BracketedArgumentList (SingletonSeparatedList (Argument (flattenedIndex)))
+            var ret = (
+                InvocationExpression (MemberAccessExpression (
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    IdentifierName (MangleTypeName (&arrayType->TypeInfo)),
+                    IdentifierName (ArrayIndexFuncName)
+                )).WithArgumentList (ArgumentList (
+                    SimpleSeparatedList<ArgumentSyntax> (argsList.Span, Token (SyntaxKind.CommaToken))
+                ))
             );
 
-            return new ExpressionData { Expr = expr, Type = elemType, Value = returnExpr, Constant = false, Addressable = true };
+            return new ExpressionData { Expr = expr, Type = elemType, Value = ret, Constant = false, Addressable = true };
         }
 
         private ExpressionSyntax GenerateCode_NewObject (ES_TypeInfo* type, ExpressionSyntax assignValue) {
@@ -564,7 +543,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             }
 
             /** Generate the function call **/
-            ExpressionSyntax ret =
+            var ret =
                 InvocationExpression (MemberAccessExpression (
                     SyntaxKind.SimpleMemberAccessExpression,
                     IdentifierName (MangleTypeName (&arrayType->TypeInfo)),
