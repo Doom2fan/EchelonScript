@@ -24,16 +24,18 @@ namespace EchelonScriptCommon {
         LargeObject = 1 << 1,
         /// <summary>Object is pinned and cannot be moved or evacuated.</summary>
         Pinned = 1 << 2,
+        /// <summary>The object is an array.</summary>
+        IsArray = 1 << 3,
         /// <summary>The object contains no references within itself.</summary>
-        NoRefs = 1 << 3,
+        NoRefs = 1 << 4,
 
         /// <summary>Object has been marked by the garbage collector and is reachable from the roots.</summary>
-        Marked = 1 << 4,
+        Marked = 1 << 5,
         /// <summary>Object has been forwarded by the garbage collector and has been replaced with a forwarding
         /// pointer.</summary>
-        Forwarded = 1 << 5,
+        Forwarded = 1 << 6,
         /// <summary>Object has been marked for removal in the next collection, regardless of liveness.</summary>
-        DoRemove = 1 << 6,
+        DoRemove = 1 << 7,
     }
 
     [StructLayout (LayoutKind.Sequential, Pack = 1)]

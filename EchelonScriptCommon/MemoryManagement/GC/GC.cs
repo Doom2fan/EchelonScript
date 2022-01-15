@@ -248,13 +248,13 @@ namespace EchelonScriptCommon.GarbageCollection {
 
             // Calculate the array's sizes.
             var arrSize = elemSize * totalElemsCount;
-            var arrHeaderSize = sizeof (ES_ArrayHeader) + dimSizes.Length * sizeof (ES_ArrayIndex);
+            var arrHeaderSize = ES_ArrayHeader.GetArrayHeaderSize (dimSizes.Length);
 
             var objSize = Math.Max (arrHeaderSize + arrSize, sizeof (void*));
             var allocSize = sizeof (ES_ObjectHeader) + objSize;
 
             // Determine the array's flags.
-            var objFlags = (ES_ObjectFlags) 0;//ES_ObjectFlags.IsArray;
+            var objFlags = ES_ObjectFlags.IsArray;
 
             if (allocSize > LargeObjectSize)
                 objFlags |= ES_ObjectFlags.LargeObject;
