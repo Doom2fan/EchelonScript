@@ -123,12 +123,10 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 Token (SyntaxKind.PublicKeyword),
                 Token (SyntaxKind.UnsafeKeyword)
             )).WithAttributeLists (SingletonList (
-                SingletonAttributeList (Attribute (
-                    IdentifierName (nameof (StructLayoutAttribute)),
-                    SimpleAttributeArgumentList (
-                        AttributeArgument (SimpleMemberAccess (nameof (LayoutKind), nameof (LayoutKind.Sequential))),
-                        AttributeArgument (NameEquals ("Pack"), null, LiteralExpression (SyntaxKind.NumericLiteralExpression, Literal (1)))
-                    )
+                SingletonAttributeList (Attribute_StructLayout (
+                    nameof (LayoutKind.Sequential),
+                    LiteralExpression (SyntaxKind.NumericLiteralExpression, Literal (1)),
+                    null
                 ))
             ));
 
@@ -361,7 +359,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                     Token (SyntaxKind.PublicKeyword),
                     Token (SyntaxKind.StaticKeyword)
                 )).WithAttributeLists (ListParams (
-                    SingletonAttributeList (Attribute (IdentifierName (nameof (ES_ExcludeFromStackTraceAttribute)))),
+                    SingletonAttributeList (Attribute_ExcludeFromStackTrace ()),
                     SingletonAttributeList (Attribute_MethodImpl_AggressiveInlining ())
                 )).WithParameterList (ParameterList (
                     SimpleSeparatedList<ParameterSyntax> (

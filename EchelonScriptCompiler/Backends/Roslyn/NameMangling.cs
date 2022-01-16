@@ -20,6 +20,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
         internal const string DefaultStaticConsName = "_defaultStaticCons";
         internal const string GlobalStaticConsName = "_globalStaticCons";
         internal const string GlobalStorageTypeName = "_globalFunctionsStorageType";
+        internal const string StaticVarsMemName = "$_staticVarsMem";
 
         internal const string ArrayAllocFuncName = "$Allocate";
         internal const string ArrayIndexFuncName = "$Index";

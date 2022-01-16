@@ -19,7 +19,9 @@ using System.Runtime.Loader;
 using System.Text;
 using ChronosLib.Pooled;
 using Collections.Pooled;
+using EchelonScriptCommon;
 using EchelonScriptCommon.Data.Types;
+using EchelonScriptCommon.GarbageCollection;
 using EchelonScriptCommon.Utilities;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data;
@@ -48,7 +50,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
         private Dictionary<Pointer<ES_FunctionData>, MethodInfo> functionMethodMappings;
         private Dictionary<(MethodInfo, Type), Delegate> methodDelegateMappings;
 
-        private ArrayPointer<nint> refListRefType;
+        private ArrayPointer<Pointer<ES_ObjectAddress>> rootsArray;
 
         #endregion
 
@@ -62,20 +64,18 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
         public RoslynBackendData (
             EchelonScriptEnvironment env, EchelonScriptEnvironment.Builder envBuilder,
+            ArrayPointer<Pointer<ES_ObjectAddress>> rootsArr,
             Stream peStream, Stream pdbStream, string name
         ) {
             environment = env;
+
+            rootsArray = rootsArr;
 
             dllStream = peStream;
             symbolsStream = pdbStream;
 
             asmLoadContext = new AssemblyLoadContext ($"{name} load context", true);
             assembly = asmLoadContext.LoadFromStream (dllStream, symbolsStream);
-
-            refListRefType = envBuilder.MemoryManager.GetArray<nint> (1);
-            refListRefType.Span [0] = 0;
-
-            SizeTypes ();
 
             functionMethodMappings = new Dictionary<Pointer<ES_FunctionData>, MethodInfo> ();
             methodDelegateMappings = new Dictionary<(MethodInfo, Type), Delegate> ();
@@ -87,76 +87,6 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
         #endregion
 
         #region ================== Instance methods
-
-        private void SizeTypes () {
-            Debug.Assert (assembly is not null);
-
-            foreach (var nmData in environment.Namespaces.Values) {
-                foreach (var typeAddr in nmData.Types)
-                    SizeType (typeAddr.Address);
-            }
-        }
-
-        private void SizeType ([NotNull] ES_TypeInfo* type) {
-            Debug.Assert (assembly is not null);
-
-            switch (type->TypeTag) {
-                case ES_TypeTag.Interface:
-                case ES_TypeTag.Array:
-                case ES_TypeTag.Reference: {
-                    type->RefsList = refListRefType;
-                    return;
-                }
-            }
-
-            if (type->RuntimeSize > -1)
-                return;
-
-            switch (type->TypeTag) {
-                case ES_TypeTag.Void:
-                case ES_TypeTag.Bool:
-                case ES_TypeTag.Int:
-                case ES_TypeTag.Float:
-                case ES_TypeTag.Enum:
-                    return;
-
-                case ES_TypeTag.Struct:
-                case ES_TypeTag.Class:
-                    break;
-
-                default:
-                    throw new NotImplementedException ("Type not implemented yet.");
-            }
-
-            var mangledName = RoslynCompilerBackend.MangleTypeName (type);
-            var roslynType = assembly.GetType (TypesNamespacePrefix + mangledName, false);
-
-            if (roslynType is null)
-                return;
-
-            type->RuntimeSize = Marshal.SizeOf (roslynType);
-
-            using var refsList = new StructPooledList<nint> (CL_ClearMode.Auto);
-            foreach (var memberAddr in type->MembersList.MembersList.Span) {
-                var member = memberAddr.Address;
-
-                if (member->MemberType != ES_MemberType.Field)
-                    continue;
-
-                if (member->Flags.HasFlag (ES_MemberFlags.Static))
-                    continue;
-
-                var field = (ES_MemberData_Variable*) member;
-                var fieldOffs = (nint) Marshal.OffsetOf (roslynType, member->Name.GetPooledString (Encoding.ASCII));
-
-                field->Offset = (int) fieldOffs;
-
-                SizeType (field->Type);
-
-                foreach (var refOffs in field->Type->RefsList.Span)
-                    refsList.Add (fieldOffs + refOffs);
-            }
-        }
 
         private MethodInfo GetFunctionMethodInfo ([DisallowNull] ES_FunctionData* func) {
             if (false) {
@@ -223,6 +153,9 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
         private void DoDispose () {
             if (IsDisposed)
                 return;
+
+            if (rootsArray.Elements != null)
+                ES_GarbageCollector.RemoveRoots ((ES_ObjectAddress**) rootsArray.Elements);
 
             dllStream.Dispose ();
             symbolsStream?.Dispose ();
@@ -566,6 +499,34 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 EndTranslationUnit ();
             }
 
+            envBuilder.AllocateStaticVarsMem (out var staticVarsMem, out var rootsPooledArray);
+            var rootsArray = ArrayPointer<Pointer<ES_ObjectAddress>>.Null;
+            if (rootsPooledArray.RealLength > 0) {
+                rootsArray = envBuilder.MemoryManager.GetArrayAligned<Pointer<ES_ObjectAddress>> (rootsPooledArray.RealLength, sizeof (nint));
+                rootsPooledArray.Span.CopyTo (rootsArray.Span);
+                ES_GarbageCollector.AddRoots ((ES_ObjectAddress**) rootsArray.Elements, rootsArray.Length);
+            }
+
+            globalFunctions.Add (
+                PropertyDeclaration (
+                    PointerType (PredefinedType (Token (SyntaxKind.ByteKeyword))),
+                    StaticVarsMemName
+                ).WithModifiers (TokenList (
+                    Token (SyntaxKind.PublicKeyword),
+                    Token (SyntaxKind.StaticKeyword)
+                )).WithAccessorList (AccessorList (ListParams (
+                    AccessorDeclaration (
+                        SyntaxKind.GetAccessorDeclaration
+                    ).WithAttributeLists (SingletonList (AttributeList (SimpleSeparatedList (
+                        Token (SyntaxKind.CommaToken),
+                        Attribute_MethodImpl_AggressiveInlining (),
+                        Attribute_ExcludeFromStackTrace ()
+                    )))).WithExpressionBody (ArrowExpressionClause (
+                        PointerLiteral (staticVarsMem, PointerType (PredefinedType (Token (SyntaxKind.ByteKeyword))))
+                    ))
+                )))
+            );
+
             // Add the global constructor to the global functions list.
             globalFunctions.Add (
                 MethodDeclaration (
@@ -605,7 +566,8 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 SingleImportDirective (NamespaceNameSyntax ("System", "Runtime", "CompilerServices"), nameof (MethodImplOptions)),
 
                 SingleImportDirective (NamespaceNameSyntax ("System", "Runtime", "InteropServices"), nameof (StructLayoutAttribute)),
-                SingleImportDirective (NamespaceNameSyntax ("System", "Runtime", "InteropServices"), nameof (LayoutKind))
+                SingleImportDirective (NamespaceNameSyntax ("System", "Runtime", "InteropServices"), nameof (LayoutKind)),
+                SingleImportDirective (NamespaceNameSyntax ("System", "Runtime", "InteropServices"), nameof (FieldOffsetAttribute))
             ).NormalizeWhitespace ();
 
             // Create the syntax tree and parse options.
@@ -697,7 +659,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
             // Create the backend data and load the assembly.
 
-            envBuilder.BackendData = new RoslynBackendData (env, envBuilder, dllStream, pdbStream, assemblyName);
+            envBuilder.BackendData = new RoslynBackendData (env, envBuilder, rootsArray, dllStream, pdbStream, assemblyName);
 
             return true;
         }
@@ -835,6 +797,35 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 SingletonAttributeArgumentList (AttributeArgument (
                     SimpleMemberAccess (nameof (MethodImplOptions), nameof (MethodImplOptions.AggressiveInlining)
                 )))
+            );
+        }
+
+        private AttributeSyntax Attribute_ExcludeFromStackTrace ()
+            => Attribute (IdentifierName (nameof (ES_ExcludeFromStackTraceAttribute)));
+
+        private AttributeSyntax Attribute_StructLayout (string layoutKind, ExpressionSyntax? pack, ExpressionSyntax? size) {
+            using var args = new StructPooledList<AttributeArgumentSyntax> (CL_ClearMode.Auto);
+            args.Add (AttributeArgument (SimpleMemberAccess (nameof (LayoutKind), layoutKind)));
+
+            if (pack is not null)
+                args.Add (AttributeArgument (NameEquals ("Pack"), null, pack));
+
+            if (size is not null)
+                args.Add (AttributeArgument (NameEquals ("Size"), null, size));
+
+            return Attribute (
+                IdentifierName (nameof (StructLayoutAttribute)),
+                SimpleAttributeArgumentList (args.Span)
+            );
+        }
+
+        private AttributeSyntax Attribute_FieldOffset (int value)
+            => Attribute_FieldOffset (LiteralExpression (SyntaxKind.NumericLiteralExpression, Literal (value)));
+
+        private AttributeSyntax Attribute_FieldOffset (ExpressionSyntax value) {
+            return Attribute (
+                IdentifierName (nameof (FieldOffsetAttribute)),
+                SingletonAttributeArgumentList (AttributeArgument (value))
             );
         }
 
@@ -1003,6 +994,8 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 return;
 
             env = null;
+            envBuilder = null;
+
             IsDisposed = true;
         }
 

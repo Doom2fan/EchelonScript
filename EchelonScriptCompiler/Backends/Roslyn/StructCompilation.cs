@@ -10,6 +10,7 @@
 using System;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.InteropServices;
 using System.Text;
 using ChronosLib.Pooled;
 using EchelonScriptCommon.Data.Types;
@@ -33,6 +34,8 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             using var memberTypes = new StructPooledList<SyntaxNode> (CL_ClearMode.Auto);
             using var staticConsBody = new StructPooledList<StatementSyntax> (CL_ClearMode.Auto);
 
+            var mangledStructName = MangleStructName (structData);
+
             // Create the struct's members.
             foreach (var memberAddr in structData->TypeInfo.MembersList.MembersList.Span) {
                 // Skip anything that isn't a field.
@@ -44,18 +47,40 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 var roslynType = GetRoslynType (memberPtr->Type);
                 var variableName = memberPtr->Info.Name.GetPooledString (Encoding.ASCII);
 
-                var variablesList = SingletonSeparatedList (VariableDeclarator (Identifier (variableName)));
-                var fieldDeclaration = FieldDeclaration (VariableDeclaration (roslynType).WithVariables (variablesList))
-                    .WithModifiers (TokenList (Token (SyntaxKind.PublicKeyword)));
-
+                MemberDeclarationSyntax varDeclaration;
                 if (memberPtr->Info.Flags.HasFlag (ES_MemberFlags.Static)) {
                     if (!envBuilder.PointerAstMap.TryGetValue ((IntPtr) memberPtr, out var varDefNode))
                         throw new CompilationException (ES_BackendErrors.FrontendError);
 
-                    fieldDeclaration = fieldDeclaration.WithModifiers (TokenList (
-                        Token (SyntaxKind.PublicKeyword),
-                        Token (SyntaxKind.StaticKeyword)
-                    ));
+                    var varOffset = envBuilder.AllocateStaticVar (memberPtr->Type);
+
+                    var pointerExpr = PrefixUnaryExpression (
+                        SyntaxKind.PointerIndirectionExpression,
+                        CastExpression (
+                            PointerType (roslynType),
+                            BinaryExpression (
+                                SyntaxKind.AddExpression,
+                                GenerateCode_StaticVarsMem (),
+                                LiteralExpression (SyntaxKind.NumericLiteralExpression, Literal (varOffset))
+                            )
+                        )
+                    );
+
+                    varDeclaration = (
+                        PropertyDeclaration (
+                            RefType (roslynType),
+                            variableName
+                        ).WithModifiers (TokenList (
+                            Token (SyntaxKind.PublicKeyword),
+                            Token (SyntaxKind.StaticKeyword)
+                        )).WithAccessorList (AccessorList (SingletonList (
+                            AccessorDeclaration (SyntaxKind.GetAccessorDeclaration).WithExpressionBody (
+                                ArrowExpressionClause (RefExpression (pointerExpr))
+                            ).WithAttributeLists (SingletonList (
+                                SingletonAttributeList (Attribute_MethodImpl_AggressiveInlining ())
+                            ))
+                        )))
+                    );
 
                     ExpressionSyntax initValue;
 
@@ -79,9 +104,22 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                         IdentifierName (variableName),
                         initValue
                     )));
+                } else {
+                    var variablesList = SingletonSeparatedList (VariableDeclarator (Identifier (variableName)));
+                    varDeclaration = (
+                        FieldDeclaration (
+                            VariableDeclaration (
+                            roslynType
+                            ).WithVariables (variablesList)
+                        ).WithModifiers (TokenList (
+                            Token (SyntaxKind.PublicKeyword)
+                        )).WithAttributeLists (SingletonList (SingletonAttributeList (
+                            Attribute_FieldOffset (memberPtr->Offset)
+                        )))
+                    );
                 }
 
-                memberTypes.Add (fieldDeclaration);
+                memberTypes.Add (varDeclaration);
             }
 
             // Add the static constructor to the members list.
@@ -98,12 +136,17 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             );
 
             // Create the struct declaration.
-            var structDecl = StructDeclaration (MangleStructName (structData))
+            var structDecl = StructDeclaration (mangledStructName)
                 .WithMembers (ListSpan (memberTypes.Span))
                 .WithModifiers (TokenList (
                     Token (SyntaxKind.PublicKeyword),
                     Token (SyntaxKind.UnsafeKeyword)
-                ));
+                ))
+                .WithAttributeLists (SingletonList (SingletonAttributeList (Attribute_StructLayout (
+                    nameof (LayoutKind.Explicit),
+                    null,
+                    LiteralExpression (SyntaxKind.NumericLiteralExpression, Literal (structData->TypeInfo.RuntimeSize))
+                ))));
 
             return structDecl;
         }

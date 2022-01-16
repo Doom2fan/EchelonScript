@@ -46,6 +46,9 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             }
         }
 
+        private ExpressionSyntax GenerateCode_StaticVarsMem ()
+            => SimpleMemberAccess (GlobalStorageTypeName, StaticVarsMemName);
+
         private ExpressionSyntax? GenerateCode_IsNullable (ES_TypeInfo* destType, out ES_TypeInfo* retType, bool genValue) {
             Debug.Assert (env is not null);
             Debug.Assert (destType is not null);
