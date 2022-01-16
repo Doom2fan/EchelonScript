@@ -11,7 +11,9 @@ using System;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
+using ChronosLib.Pooled;
 using EchelonScriptCommon.Data.Types;
+using EchelonScriptCommon.Utilities;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Utilities;
 
@@ -19,41 +21,36 @@ namespace EchelonScriptCompiler.Frontend {
     public unsafe partial class CompilerFrontend {
         private void PostAnalysis () {
             Debug.Assert (Environment is not null);
+            Debug.Assert (EnvironmentBuilder is not null);
+
+            var refListRefType = EnvironmentBuilder.MemoryManager.GetArrayAligned<nint> (1, sizeof (nint));
+            refListRefType.Span [0] = 0;
 
             foreach (var nmData in Environment.Namespaces.Values) {
                 foreach (var type in nmData.Types) {
                     if (PostAnalysis_AnalyzeCycles (type))
                         continue;
 
-                    PostAnalysis_AnalyzeRefs (type);
+                    PostAnalysis_SizeType (type, refListRefType);
                 }
             }
         }
 
-        private void PostAnalysis_AnalyzeRefs ([NotNull] ES_TypeInfo* type) {
-            if (type->Flags.HasFlag (ES_TypeFlag.Analyzed))
-                return;
+        private void PostAnalysis_SizeType ([NotNull] ES_TypeInfo* type, ArrayPointer<nint> refListRefType) {
+            Debug.Assert (Environment is not null);
+            Debug.Assert (EnvironmentBuilder is not null);
 
             var hasRefs = !type->Flags.HasFlag (ES_TypeFlag.NoRefs);
 
-            var checkMembers = false;
             switch (type->TypeTag) {
-                case ES_TypeTag.Array: {
-                    var arrayData = (ES_ArrayTypeData*) type;
-                    PostAnalysis_AnalyzeRefs (arrayData->ElementType);
-                    type->Flags |= arrayData->ElementType->Flags & ES_TypeFlag.NoRefs;
-
-                    break;
+                case ES_TypeTag.Array:
+                case ES_TypeTag.Interface:
+                case ES_TypeTag.Reference: {
+                    type->RuntimeSize = sizeof (void*);
+                    type->RefsList = refListRefType;
+                    type->Flags &= ~ES_TypeFlag.NoRefs;
+                    return;
                 }
-
-                case ES_TypeTag.Struct:
-                case ES_TypeTag.Class:
-                    checkMembers = true;
-                    break;
-
-                case ES_TypeTag.Reference:
-                    hasRefs = true;
-                    break;
 
                 case ES_TypeTag.Void:
                 case ES_TypeTag.Bool:
@@ -61,31 +58,51 @@ namespace EchelonScriptCompiler.Frontend {
                 case ES_TypeTag.Float:
                 case ES_TypeTag.Function:
                 case ES_TypeTag.Enum:
-                case ES_TypeTag.Interface:
                 case ES_TypeTag.Const:
                 case ES_TypeTag.Immutable:
+                    return;
+
+                case ES_TypeTag.Struct:
+                case ES_TypeTag.Class:
                     break;
 
                 default:
                     throw new NotImplementedException ("Type not implemented yet.");
             }
 
-            if (checkMembers) {
-                foreach (var memberAddr in type->MembersList.MembersList.Span) {
-                    var member = memberAddr.Address;
+            if (type->RuntimeSize > -1)
+                return;
 
-                    if (member->Flags.HasFlag (ES_MemberFlags.Static))
-                        continue;
+            using var refsList = new StructPooledList<nint> (CL_ClearMode.Auto);
+            var curOffs = 0;
+            foreach (var memberAddr in type->MembersList.MembersList.Span) {
+                var member = memberAddr.Address;
 
-                    if (member->MemberType != ES_MemberType.Field)
-                        continue;
+                if (member->MemberType != ES_MemberType.Field)
+                    continue;
 
-                    var field = (ES_MemberData_Variable*) member;
+                if (member->Flags.HasFlag (ES_MemberFlags.Static))
+                    continue;
 
-                    PostAnalysis_AnalyzeRefs (field->Type);
+                var field = (ES_MemberData_Variable*) member;
 
-                    hasRefs |= !field->Type->Flags.HasFlag (ES_TypeFlag.NoRefs);
-                }
+                field->Offset = curOffs;
+
+                PostAnalysis_SizeType (field->Type, refListRefType);
+
+                curOffs += field->Type->RuntimeSize;
+
+                foreach (var refOffs in field->Type->RefsList.Span)
+                    refsList.Add (field->Offset + refOffs);
+
+                hasRefs |= !field->Type->Flags.HasFlag (ES_TypeFlag.NoRefs);
+            }
+
+            type->RuntimeSize = curOffs;
+            type->RefsList = ArrayPointer<nint>.Null;
+            if (refsList.Count > 0) {
+                type->RefsList = EnvironmentBuilder.MemoryManager.GetArrayAligned<nint> (refsList.Count, sizeof (nint));
+                refsList.Span.CopyTo (type->RefsList.Span);
             }
 
             type->Flags &= ~ES_TypeFlag.NoRefs;
@@ -160,6 +177,7 @@ namespace EchelonScriptCompiler.Frontend {
                 case ES_TypeTag.Function:
                 case ES_TypeTag.Enum:
                 case ES_TypeTag.Interface:
+                case ES_TypeTag.Reference:
                 case ES_TypeTag.Const:
                 case ES_TypeTag.Immutable:
                     return false;
