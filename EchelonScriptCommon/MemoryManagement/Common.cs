@@ -53,7 +53,7 @@ namespace EchelonScriptCommon {
             get => ((ES_ObjectHeader*) Address) - 1;
         }
 
-        internal ImmixBlockHeader* ImmixBlock {
+        internal ImmixBlockAddress ImmixBlock {
             [MethodImpl (MethodImplOptions.AggressiveInlining)]
             get => (ImmixBlockHeader*) ((nint) Header & ImmixConstants.BlockStartMask);
         }
@@ -97,7 +97,6 @@ namespace EchelonScriptCommon {
                 throw new EchelonScriptOutOfBoundsException ($"Array access out of bounds. Negative index, index #{dimCount} = {val}.");
             else if (val >= maxBounds)
                 throw new EchelonScriptOutOfBoundsException ($"Array access out of bounds. Index #{dimCount} = {val}, max = {maxBounds}.");
-
         }
     }
 

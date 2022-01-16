@@ -8,14 +8,22 @@
  */
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using ChronosLib.Pooled;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.GarbageCollection.Immix;
+using EchelonScriptCommon.Utilities;
 
 namespace EchelonScriptCommon.GarbageCollection {
-    public unsafe sealed class ES_GarbageCollector : IDisposable {
+    public unsafe sealed partial class ES_GarbageCollector : IDisposable {
+        private struct RootCollectionPair {
+            public ES_ObjectAddress** Roots;
+            public int Count;
+        }
+
         #region ================== Constants
 
         // Make sure this is under ImmixGC.BlockSize!
@@ -47,12 +55,17 @@ namespace EchelonScriptCommon.GarbageCollection {
 
         private ImmixGC immixGC;
 
+        private List<RootCollectionPair> gcRoots;
+        private bool markFlipped;
+
         #endregion
 
         #region ================== Constructors
 
         internal ES_GarbageCollector () {
             immixGC = new ImmixGC ();
+
+            gcRoots = new List<RootCollectionPair> ();
         }
 
         #endregion
@@ -73,6 +86,8 @@ namespace EchelonScriptCommon.GarbageCollection {
             garbageCollector!.CheckDisposed ();
             garbageCollector!.immixGC.GetInfo (out info, out overflowInfo);
         }
+
+        #region Collection
 
         /// <summary>Performs a garbage collection for the specified generations.</summary>
         /// <param name="gen">What generations to collect. Use -1 to collect all generations.</param>
@@ -98,6 +113,10 @@ namespace EchelonScriptCommon.GarbageCollection {
             EnsureInitialized ();
             garbageCollector!.CheckCollectionInternal (gen);
         }
+
+        #endregion
+
+        #region Allocation
 
         [UnmanagedCallersOnly (CallConvs = new [] { typeof (CallConvCdecl) })]
         public static void* AllocObjectUnmanaged (ES_TypeInfo* type, byte pinned) {
@@ -145,6 +164,24 @@ namespace EchelonScriptCommon.GarbageCollection {
             return garbageCollector!.AllocateArray (arrayType, dimSizes, pinned, true);
         }
 
+        #endregion
+
+        #region Roots
+
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
+        public static void AddRoots (ES_ObjectAddress** roots, int count) {
+            EnsureInitialized ();
+            garbageCollector!.AddRootsInternal (roots, count);
+        }
+
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
+        public static void RemoveRoots (ES_ObjectAddress** roots) {
+            EnsureInitialized ();
+            garbageCollector!.RemoveRootsInternal (roots);
+        }
+
+        #endregion
+
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
         private static ES_ArrayIndex CalculateTotalArrayLength (ReadOnlySpan<ES_ArrayIndex> dimSizes) {
             var totalElemsCount = dimSizes [0];
@@ -162,6 +199,8 @@ namespace EchelonScriptCommon.GarbageCollection {
         private void CheckDisposed () {
             Debug.Assert (!disposedValue, "GC object was disposed.");
         }
+
+        #region Collection
 
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
         private void CheckCollectionInternal (int gen) {
@@ -189,8 +228,61 @@ namespace EchelonScriptCommon.GarbageCollection {
 
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
         private void CollectGarbage (int gen) {
-            throw new NotImplementedException ("[TODO] Garbage collection not implemented yet.");
+            using var rootsList = new StructPooledList<Pointer<ES_ObjectAddress>> (CL_ClearMode.Auto);
+
+            foreach (var rootsSet in gcRoots) {
+                var rootsSetSpan = new Span<Pointer<ES_ObjectAddress>> (rootsSet.Roots, rootsSet.Count);
+
+                foreach (var root in rootsSetSpan) {
+                    if (root.Address->Address != null)
+                        rootsList.Add (root);
+                }
+            }
+
+            immixGC.ClearMarks ();
+
+            DoMarking (gen, rootsList.Span);
+
+            immixGC.Sweep ();
         }
+
+        #endregion
+
+        #region Roots
+
+        private void AddRootsInternal (ES_ObjectAddress** roots, int count) {
+            Debug.Assert (roots is not null);
+            Debug.Assert (count >= 0);
+
+            lock (gcRoots) {
+                gcRoots.Add (new RootCollectionPair {
+                    Roots = roots,
+                    Count = count,
+                });
+            }
+        }
+
+        private void RemoveRootsInternal (ES_ObjectAddress** roots) {
+            Debug.Assert (roots is not null);
+
+            lock (gcRoots) {
+                Debug.Assert (gcRoots.Count > 0);
+
+                for (int i = 0; i < gcRoots.Count; i++) {
+                    if (gcRoots [i].Roots != roots)
+                        continue;
+
+                    gcRoots.RemoveAt (i);
+                    return;
+                }
+            }
+
+            Debug.Fail ("Roots set not present in the list.");
+        }
+
+        #endregion
+
+        #region Allocation
 
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
         private void* AllocateObject (ES_TypeInfo* type, bool pinned) {
@@ -206,6 +298,9 @@ namespace EchelonScriptCommon.GarbageCollection {
                 objFlags |= ES_ObjectFlags.LargeObject;
             else if (allocSize > ImmixConstants.LineSize)
                 objFlags |= ES_ObjectFlags.MediumObject;
+
+            if (markFlipped)
+                objFlags |= ES_ObjectFlags.Marked;
 
             if (pinned)
                 objFlags |= ES_ObjectFlags.Pinned;
@@ -261,6 +356,9 @@ namespace EchelonScriptCommon.GarbageCollection {
             else if (allocSize > ImmixConstants.LineSize)
                 objFlags |= ES_ObjectFlags.MediumObject;
 
+            if (markFlipped)
+                objFlags |= ES_ObjectFlags.Marked;
+
             if (pinned)
                 objFlags |= ES_ObjectFlags.Pinned;
 
@@ -297,6 +395,8 @@ namespace EchelonScriptCommon.GarbageCollection {
 
             return arrHeader;
         }
+
+        #endregion
 
         #endregion
 

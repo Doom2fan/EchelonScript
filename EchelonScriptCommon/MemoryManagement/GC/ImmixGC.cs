@@ -14,6 +14,7 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
+using ChronosLib.Pooled;
 using ChronosLib.Unmanaged;
 using EchelonScriptCommon.Utilities;
 using static TerraFX.Interop.Mimalloc;
@@ -46,11 +47,13 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
 
     [StructLayout (LayoutKind.Sequential, Pack = 1)]
     internal unsafe struct ImmixChunkHeader {
+        public int ChunkIndex;
         public int FreeBlocks;
         public fixed byte BlockUsed [ImmixConstants.BlocksPerChunk];
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Initialize () {
+        public void Initialize (int idx) {
+            ChunkIndex = idx;
             FreeBlocks = ImmixConstants.BlocksPerChunk;
 
             for (int i = 0; i < ImmixConstants.BlocksPerChunk; i++)
@@ -58,23 +61,49 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
         }
 
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
-        public static ImmixBlockHeader* GetBlock (ImmixChunkHeader* chunk, int idx)
+        public static ImmixBlockAddress GetBlock (ImmixChunkHeader* chunk, int idx)
             => (ImmixBlockHeader*) ((byte*) chunk + ImmixConstants.ChunkMetadataSize + ImmixConstants.BlockSize * idx);
     }
 
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     internal unsafe struct ImmixBlockHeader {
         public ImmixBlockUsage UsageLevel;
+        public int BlockNumber;
 
         public readonly byte* LineMap;
         public Span<byte> LineMapSpan => new Span<byte> (LineMap, ImmixConstants.LinesCount);
 
-        public ImmixBlockHeader (byte* lineMapPtr) {
+        public ImmixBlockHeader (int blockNum, byte* lineMapPtr) {
             UsageLevel = ImmixBlockUsage.Empty;
+            BlockNumber = blockNum;
 
             LineMap = lineMapPtr;
             LineMapSpan.Clear ();
         }
+
+        internal void ClearMarks () => LineMapSpan.Clear ();
+    }
+
+    internal unsafe struct ImmixBlockAddress {
+        public ImmixBlockHeader* Header;
+
+        public void* Data => (byte*) Header + ImmixConstants.HeaderLines * ImmixConstants.LineSize;
+
+        public ImmixChunkHeader* ChunkHeader {
+            [MethodImpl (MethodImplOptions.AggressiveInlining)]
+            get {
+                return (ImmixChunkHeader*) (
+                    (byte*) Header - ImmixConstants.BlockSize * Header->BlockNumber
+                    - ImmixConstants.ChunkMetadataSize
+                );
+            }
+        }
+
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
+        public ImmixBlockAddress (void* addr) => Header = (ImmixBlockHeader*) addr;
+
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
+        public static implicit operator ImmixBlockAddress (void* obj) => new (obj);
     }
 
     public struct ImmixDebugInfo {
@@ -96,7 +125,7 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
 
             #region ================== Instance fields
 
-            private Pointer<ImmixBlockHeader> [] blocks;
+            private ImmixBlockAddress [] blocks;
 
             #endregion
 
@@ -109,7 +138,7 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
                 private set;
             }
 
-            public Span<Pointer<ImmixBlockHeader>> Span {
+            public Span<ImmixBlockAddress> Span {
                 [MethodImpl (MethodImplOptions.AggressiveInlining)]
                 get => blocks.AsSpan (0, Count);
             }
@@ -118,7 +147,7 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
 
             #region ================== Indexers
 
-            public ref Pointer<ImmixBlockHeader> this [int index] {
+            public ref ImmixBlockAddress this [int index] {
                 [MethodImpl (MethodImplOptions.AggressiveInlining)]
                 get {
                     Debug.Assert (index < Count);
@@ -134,7 +163,7 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
             public static BlockList Create () {
                 var ret = new BlockList ();
 
-                ret.blocks = Array.Empty<Pointer<ImmixBlockHeader>> ();
+                ret.blocks = Array.Empty<ImmixBlockAddress> ();
                 ret.Count = 0;
 
                 return ret;
@@ -152,16 +181,25 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
                 var oldBlocks = blocks;
                 var newCount = 1 << (sizeof (int) * 8 - BitOperations.LeadingZeroCount ((uint) (Count + num - 1)));
 
-                blocks = new Pointer<ImmixBlockHeader> [newCount];
+                blocks = new ImmixBlockAddress [newCount];
                 Array.Copy (oldBlocks, blocks, Count);
             }
 
             [MethodImpl (MethodImplOptions.AggressiveInlining)]
-            public void Add (Pointer<ImmixBlockHeader> block) {
+            public void Add (ImmixBlockAddress block) {
                 if (Count >= blocks.Length)
                     EnsureHeadroom (MinHeadroomCount);
 
                 blocks [Count++] = block;
+            }
+
+            [MethodImpl (MethodImplOptions.AggressiveInlining)]
+            public void AddRange (ReadOnlySpan<ImmixBlockAddress> newBlocks) {
+                if (Count - 1 + newBlocks.Length >= blocks.Length)
+                    EnsureHeadroom (newBlocks.Length + MinHeadroomCount);
+
+                newBlocks.CopyTo (blocks.AsSpan (Count, newBlocks.Length));
+                Count += newBlocks.Length;
             }
 
             [MethodImpl (MethodImplOptions.AggressiveInlining)]
@@ -197,11 +235,11 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
                 get => (int) (BumpLimit - BumpPointer);
             }
 
-            public ImmixBlockHeader* CurrentBlock {
+            public ImmixBlockAddress CurrentBlock {
                 [MethodImpl (MethodImplOptions.AggressiveInlining)]
                 get => BlocksList! [CurBlockIndex];
             }
-            public ref Pointer<ImmixBlockHeader> CurrentBlockRef {
+            public ref ImmixBlockAddress CurrentBlockRef {
                 [MethodImpl (MethodImplOptions.AggressiveInlining)]
                 get => ref BlocksList! [CurBlockIndex];
             }
@@ -215,7 +253,7 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
                 BlocksList = BlockList.Create ();
 
                 var newBlock = ImmixGC_GlobalAllocator.GetBlock ();
-                newBlock->UsageLevel = ImmixBlockUsage.Filled;
+                newBlock.Header->UsageLevel = ImmixBlockUsage.Filled;
                 BlocksList.Add (newBlock);
 
                 CurBlockIndex = 0;
@@ -223,26 +261,32 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
             }
 
             [MethodImpl (MethodImplOptions.AggressiveInlining)]
+            public void Reset () {
+                CurBlockIndex = 0;
+                SetNewAllocData (0, 0);
+            }
+
+            [MethodImpl (MethodImplOptions.AggressiveInlining)]
             private void SetNewAllocData (int holeOffs, int holeSize) {
-                BumpPointer = (byte*) CurrentBlock + ((ImmixConstants.HeaderLines + holeOffs) * ImmixConstants.LineSize);
+                BumpPointer = (byte*) CurrentBlock.Data + (holeOffs * ImmixConstants.LineSize);
                 BumpLimit = BumpPointer + (holeSize * ImmixConstants.LineSize);
             }
 
             [MethodImpl (MethodImplOptions.AggressiveInlining)]
             private bool ScanForHole (int minSize, out int holeOffs, out int holeSize) {
                 // If the block is empty, return the whole block's length as a hole.
-                if (CurrentBlock->UsageLevel == ImmixBlockUsage.Empty) {
+                if (CurrentBlock.Header->UsageLevel == ImmixBlockUsage.Empty) {
                     holeOffs = 0;
-                    holeSize = ImmixConstants.TrueBlockSize;
+                    holeSize = ImmixConstants.LinesCount;
                     return true;
                 }
 
-                int posOffs = (int) (BumpPointer - (byte*) CurrentBlock + ImmixConstants.HeaderLines);
+                int posOffs = (int) (BumpPointer - (byte*) CurrentBlock.Data);
                 int startPos = posOffs / ImmixConstants.LineSize;
                 if (startPos * ImmixConstants.LineSize < posOffs)
                     startPos++;
 
-                var lineMapSpan = CurrentBlock->LineMapSpan;
+                var lineMapSpan = CurrentBlock.Header->LineMapSpan;
                 bool lastLineMarked = false; // Used for skipping implicit marks
                 for (int i = startPos; i < ImmixConstants.LinesCount; i++) {
                     int curHoleSize = 0;
@@ -263,8 +307,8 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
                     }
 
                     if (curHoleSize > 0 && (curHoleSize * ImmixConstants.LineSize) >= minSize) {
-                        holeOffs = ImmixConstants.LineSize * i;
-                        holeSize = ImmixConstants.LineSize * curHoleSize;
+                        holeOffs = i;
+                        holeSize = curHoleSize;
                         return true;
                     }
                 }
@@ -276,6 +320,8 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
 
             [MethodImpl (MethodImplOptions.AggressiveInlining)]
             public void EnsureAllocatable (int minSize) {
+                Debug.Assert (CurrentBlock.Header->UsageLevel != ImmixBlockUsage.Empty);
+
                 if (ScanForHole (minSize, out var holeOffs, out var holeSize)) {
                     SetNewAllocData (holeOffs, holeSize);
                     return;
@@ -283,27 +329,29 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
 
                 // Try to find a block with a hole big enough.
                 while (CurBlockIndex < BlocksList.Count) {
-                    if (CurrentBlock->UsageLevel != ImmixBlockUsage.Recyclable) {
+                    if (CurrentBlock.Header->UsageLevel == ImmixBlockUsage.Filled) {
                         CurBlockIndex++;
+                        if (CurBlockIndex < BlocksList.Count)
+                            SetNewAllocData (0, 0);
                         continue;
                     }
 
                     if (ScanForHole (minSize, out holeOffs, out holeSize)) {
                         SetNewAllocData (holeOffs, holeSize);
-                        CurrentBlock->UsageLevel = ImmixBlockUsage.Filled;
+                        CurrentBlock.Header->UsageLevel = ImmixBlockUsage.Filled;
                         return;
                     }
 
-                    SetNewAllocData (0, 0);
                     CurBlockIndex++;
+                    SetNewAllocData (0, 0);
                 }
 
                 // If we didn't find one, allocate a new one.
                 BlocksList.Add (ImmixGC_GlobalAllocator.GetBlock ());
                 CurBlockIndex = BlocksList.Count - 1;
+                CurrentBlock.Header->UsageLevel = ImmixBlockUsage.Filled;
 
                 SetNewAllocData (0, ImmixConstants.LinesCount);
-                CurrentBlock->UsageLevel = ImmixBlockUsage.Filled;
             }
 
             public void Dispose () {
@@ -347,9 +395,75 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
         }
 
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
+        public void ClearMarks () {
+            foreach (var block in allocData.BlocksList.Span)
+                block.Header->ClearMarks ();
+            foreach (var block in overflowAllocData.BlocksList.Span)
+                block.Header->ClearMarks ();
+        }
+
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
+        public void Sweep () {
+            SweepBlocks (ref allocData);
+            SweepBlocks (ref overflowAllocData);
+
+            if (overflowAllocData.BlocksList.Count > 1) {
+                var overflowBlock = overflowAllocData.BlocksList [overflowAllocData.BlocksList.Count - 1];
+                allocData.BlocksList.AddRange (overflowAllocData.BlocksList.Span [..^1]);
+
+                overflowAllocData.BlocksList.RemoveAll ();
+                overflowAllocData.BlocksList.Add (overflowBlock);
+            }
+
+            allocData.Reset ();
+            overflowAllocData.Reset ();
+        }
+
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
+        private void SweepBlocks (ref AllocData allocData) {
+            using var allocBlocks = new StructPooledList<ImmixBlockAddress> (CL_ClearMode.Auto);
+            using var freeBlocks = new StructPooledList<ImmixBlockAddress> (CL_ClearMode.Auto);
+
+            foreach (var block in allocData.BlocksList.Span) {
+                SweepBlock (block);
+
+                if (block.Header->UsageLevel == ImmixBlockUsage.Empty)
+                    freeBlocks.Add (block);
+                else
+                    allocBlocks.Add (block);
+            }
+
+            if (allocBlocks.Count < 1) {
+                Debug.Assert (freeBlocks.Count > 0);
+
+                var block = freeBlocks [freeBlocks.Count - 1];
+                block.Header->UsageLevel = ImmixBlockUsage.Filled;
+                allocBlocks.Add (block);
+                freeBlocks.RemoveEnd (1);
+            }
+
+            allocData.BlocksList.RemoveAll ();
+            allocData.BlocksList.AddRange (allocBlocks.Span);
+
+            ImmixGC_GlobalAllocator.ReturnBlocks (freeBlocks.Span);
+        }
+
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
+        private void SweepBlock (ImmixBlockAddress block) {
+            var lineCount = 0;
+            foreach (var line in block.Header->LineMapSpan)
+                lineCount += (line != 0) ? 1 : 0;
+
+            if (lineCount == ImmixConstants.LinesCount)
+                block.Header->UsageLevel = ImmixBlockUsage.Filled;
+            else
+                block.Header->UsageLevel = lineCount > 0 ? ImmixBlockUsage.Recyclable : ImmixBlockUsage.Empty;
+        }
+
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
         private ImmixDebugInfo GetInfo (ref AllocData alloc) {
-            int blockStride = ImmixConstants.LinesCount / 8;
-            if (blockStride * 8 != ImmixConstants.LinesCount)
+            int blockStride = ImmixConstants.LinesCount / sizeof (byte) * 8;
+            if (blockStride * sizeof (byte) * 8 != ImmixConstants.LinesCount)
                 blockStride++;
 
             var blocks = UnmanagedArray<byte>.GetArray (alloc.BlocksList.Count * blockStride);
@@ -361,23 +475,25 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
 
             int blockIdx = 0;
             foreach (var block in alloc.BlocksList.Span) {
-                switch (block.Address->UsageLevel) {
+                switch (block.Header->UsageLevel) {
                     case ImmixBlockUsage.Empty: emptyBlocks++; break;
                     case ImmixBlockUsage.Filled: fullBlocks++; break;
                     case ImmixBlockUsage.Recyclable: recyclableBlocks++; break;
                 }
 
-                var lineMapSpan = block.Address->LineMapSpan;
+                var lineMapSpan = block.Header->LineMapSpan;
                 var linesSpan = blocksSpan.Slice (blockStride * blockIdx, blockStride);
-                for (int lineIdx = 0; lineIdx < ImmixConstants.LinesCount; lineIdx++) {
+                for (int lineIdx = 0; lineIdx < ImmixConstants.LinesCount;) {
                     byte lineMapChunk = 0;
 
                     int chunkLen = Math.Min (8, ImmixConstants.LinesCount - lineIdx);
                     var lineMapMidSpan = lineMapSpan.Slice (lineIdx, chunkLen);
                     for (byte i = 0; i < chunkLen; i++)
-                        lineMapChunk |= (byte) ((lineMapMidSpan [i] & 1) << i);
+                        lineMapChunk |= (byte) ((lineMapMidSpan [i] != 0 ? 1 : 0) << i);
 
                     linesSpan [lineIdx / 8] = lineMapChunk;
+
+                    lineIdx += chunkLen;
                 }
 
                 blockIdx++;
@@ -474,26 +590,26 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
 
             // Assign the chunk header.
             var chunkPtr = (ImmixChunkHeader*) chunkMemPtr;
-            chunkPtr->Initialize ();
+            chunkPtr->Initialize (totalChunks);
 
             // Initialize the blocks.
             var lineMapsStart = (byte*) chunkMemPtr + sizeof (ImmixChunkHeader);
 
             for (int i = 0; i < ImmixConstants.BlocksPerChunk; i++)
-                *ImmixChunkHeader.GetBlock (chunkPtr, i) = new ImmixBlockHeader (lineMapsStart + (ImmixConstants.LinesCount * i));
+                *ImmixChunkHeader.GetBlock (chunkPtr, i).Header = new ImmixBlockHeader (i, lineMapsStart + (ImmixConstants.LinesCount * i));
 
             // Add the chunk to the lists and increment the total chunks counter.
             // TODO: Add these by address order.
             chunks.Add (chunkPtr);
-            freeChunks.Add (chunks.Count - 1);
+            freeChunks.Add (totalChunks);
             Interlocked.Increment (ref totalChunks);
 
             return chunkPtr;
         }
 
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
-        internal static ImmixBlockHeader* GetBlock () {
-            ImmixBlockHeader* block = null;
+        internal static ImmixBlockAddress GetBlock () {
+            ImmixBlockAddress block = null;
 
             lock (chunks) {
                 if (freeChunks.Count > 0) {
@@ -512,7 +628,7 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
                         break;
                     }
 
-                    Debug.Assert (block != null, "Free chunks list contains a full chunk.");
+                    Debug.Assert (block.Header != null, "Free chunks list contains a full chunk.");
 
                     if (--chunk->FreeBlocks < 1)
                         freeChunks.RemoveAt (0);
@@ -525,24 +641,32 @@ namespace EchelonScriptCommon.GarbageCollection.Immix {
                 }
             }
 
-            if (block->UsageLevel != ImmixBlockUsage.Empty) {
-                block->UsageLevel = ImmixBlockUsage.Empty;
-                block->LineMapSpan.Clear ();
+            if (block.Header->UsageLevel != ImmixBlockUsage.Empty) {
+                block.Header->UsageLevel = ImmixBlockUsage.Empty;
+                block.Header->LineMapSpan.Clear ();
             }
 
             return block;
         }
 
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
-        internal static void ReturnBlocks (Span<Pointer<ImmixBlockHeader>> block) {
-            throw new NotImplementedException ("[TODO] Implement returning Immix blocks.");
-            /*Debug.Assert (block.UsageLevel != ImmixBlockUsage.Empty);
+        internal static void ReturnBlocks (ReadOnlySpan<ImmixBlockAddress> blocks) {
+            foreach (var block in blocks) {
+                Debug.Assert (block.Header->UsageLevel == ImmixBlockUsage.Empty);
+                block.Header->LineMapSpan.Clear ();
+            }
 
-            block.LineMap.Span.Clear ();
-            lock (freeBlocks) {
-                freeBlocks.BinarySearch ()
-                freeBlocks.Add (block);
-            }*/
+            lock (chunks) {
+                foreach (var block in blocks) {
+                    var chunk = block.ChunkHeader;
+
+                    if (chunk->FreeBlocks < 1)
+                        freeChunks.Add (chunk->ChunkIndex);
+
+                    chunk->BlockUsed [block.Header->BlockNumber] = 0;
+                    chunk->FreeBlocks++;
+                }
+            }
         }
 
         internal static void DoDispose () {
