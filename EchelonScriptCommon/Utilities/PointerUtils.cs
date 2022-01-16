@@ -75,6 +75,15 @@ namespace EchelonScriptCommon.Utilities {
             return new ArrayPointer<T> (mem, count);
         }
 
+        public unsafe static ArrayPointer<T> GetArrayAligned<T> (this IMemoryManager manager, int count, int alignment)
+            where T : unmanaged {
+            if (count < 1)
+                throw new ArgumentOutOfRangeException (nameof (count), "Count must be greater than zero.");
+
+            var mem = manager.GetMemoryAligned<T> (alignment, count);
+            return new ArrayPointer<T> (mem, count);
+        }
+
         public unsafe static void ReturnMemory<T> (this IMemoryManager manager, ArrayPointer<T> mem)
             where T : unmanaged {
             manager.ReturnMemory (mem.Elements);
