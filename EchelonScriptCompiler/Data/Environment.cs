@@ -16,6 +16,7 @@ using ChronosLib.Pooled;
 using ChronosLib.Unmanaged;
 using Collections.Pooled;
 using CommunityToolkit.HighPerformance.Buffers;
+using EchelonScriptCommon;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.Utilities;
 using EchelonScriptCompiler.Backends;
@@ -252,6 +253,9 @@ namespace EchelonScriptCompiler.Data {
 
             private EchelonScriptEnvironment environment;
 
+            private CL_PooledList<(Pointer<ES_TypeInfo>, nint)>? staticVars;
+            private int staticVarsMemTotal;
+
             #endregion
 
             #region ================== Instance properties
@@ -296,6 +300,9 @@ namespace EchelonScriptCompiler.Data {
 
                 NamespaceBuilders = new PooledDictionary<ArrayPointer<byte>, ES_NamespaceData.Builder> ();
                 PointerAstMap = new Dictionary<IntPtr, ES_AstNode> ();
+
+                staticVars = new CL_PooledList<(Pointer<ES_TypeInfo>, nint)> ();
+                staticVarsMemTotal = 0;
             }
 
             #endregion
@@ -945,6 +952,47 @@ namespace EchelonScriptCompiler.Data {
 
             #endregion
 
+            #region Static vars
+
+            public nint AllocateStaticVar (ES_TypeInfo* varType) {
+                var alignmentVal = sizeof (nint);
+
+                var startIndex = (staticVarsMemTotal + alignmentVal - 1) / alignmentVal * alignmentVal;
+                staticVarsMemTotal = startIndex + varType->RuntimeSize;
+
+                staticVars!.Add (((Pointer<ES_TypeInfo>) varType, startIndex));
+
+                return startIndex;
+            }
+
+            public void AllocateStaticVarsMem (out void* staticVarsMem, out PooledArray<Pointer<ES_ObjectAddress>> references) {
+                if (staticVars is null)
+                    throw new CompilationException ("Static vars were already allocated.");
+
+                var mem = ArrayPointer<byte>.Null;
+                if (staticVarsMemTotal > 0) {
+                    mem = MemoryManager.GetArrayAligned<byte> (staticVarsMemTotal, sizeof (nint));
+                    mem.Span.Clear ();
+                }
+                staticVarsMem = mem.Elements;
+
+                using var refsList = new StructPooledList<Pointer<ES_ObjectAddress>> (CL_ClearMode.Auto);
+
+                foreach (var staticVar in staticVars) {
+                    var baseOffs = staticVar.Item2;
+                    var typeRefs = staticVar.Item1.Address->RefsList.Span;
+                    var refsSpan = refsList.AddSpan (typeRefs.Length);
+
+                    var refNum = 0;
+                    foreach (var refOffs in typeRefs)
+                        refsSpan [refNum++] = (ES_ObjectAddress*) (mem.Elements + baseOffs + refOffs);
+                }
+
+                references = refsList.MoveToArray ();
+            }
+
+            #endregion
+
             protected void CheckDisposed () {
                 if (disposedValue)
                     throw new ObjectDisposedException (nameof (EchelonScriptEnvironment));
@@ -968,6 +1016,9 @@ namespace EchelonScriptCompiler.Data {
 
                     NamespaceBuilders?.Dispose ();
                     NamespaceBuilders = null!;
+
+                    staticVars?.Dispose ();
+                    staticVars = null;
 
                     PointerAstMap.Clear ();
                     PointerAstMap = null!;
