@@ -56,7 +56,7 @@ namespace TestSuiteWPF.Tests {
 
             block.Inlines.Clear ();
 
-            block.Inlines.Add ($"Line size / block size: {ImmixConstants.LineSize} / {ImmixConstants.BlockSize}\nLines count: {ImmixConstants.LinesCount}\n\n");
+            block.Inlines.Add ($"Line size / block size: {ImmixConstants.LineSize} / {ImmixConstants.TrueBlockSize}\nLines count: {ImmixConstants.LinesCount}\n\n");
 
             block.Inlines.Add ($"Total blocks: {info.BlockCount}\nEmpty blocks: {info.EmptyBlocks}\nFull blocks: {info.FullBlocks}\nRecyclable blocks: {info.RecyclableBlocks}\n\n");
 
@@ -68,16 +68,19 @@ namespace TestSuiteWPF.Tests {
 
                 var markedLinesCount = 0;
                 var prevLineMarked = false;
+                var linesCount = 0;
                 for (int chunkIdx = 0; chunkIdx < info.BlockStride; chunkIdx++) {
                     var chunk = blockLines [chunkIdx];
 
-                    for (int lineIdx = 0; lineIdx < 8; lineIdx++) {
+                    var chunkLen = Math.Min (8, ImmixConstants.LinesCount - linesCount);
+                    for (int lineIdx = 0; lineIdx < chunkLen; lineIdx++) {
                         var curLineMarked = (chunk & (1 << lineIdx)) != 0;
 
                         if (curLineMarked || prevLineMarked)
                             markedLinesCount++;
 
                         prevLineMarked = curLineMarked;
+                        linesCount++;
                     }
                 }
 
