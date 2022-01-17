@@ -61,7 +61,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                     throw new NotImplementedException ("Operation not implemented yet.");
             }
 
-            return new ExpressionData { Type = inner.Type, Value = value, Constant = inner.Constant, Addressable = false, };
+            return new ExpressionData { Type = inner.Type, Value = value, Constant = inner.Constant, Writable = false, };
         }
 
         private ExpressionData GenerateCode_UnaryExpr_Bool (ExpressionData inner, SimpleUnaryExprType exprOp) {
@@ -78,7 +78,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                     throw new NotImplementedException ("Operation not implemented yet.");
             }
 
-            return new ExpressionData { Type = inner.Type, Value = value, Constant = inner.Constant, Addressable = false, };
+            return new ExpressionData { Type = inner.Type, Value = value, Constant = inner.Constant, Writable = false, };
         }
 
         private ExpressionData GenerateCode_UnaryExpr_Float (ExpressionData inner, SimpleUnaryExprType exprOp) {
@@ -98,7 +98,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                     throw new NotImplementedException ("Operation not implemented yet.");
             }
 
-            return new ExpressionData { Type = inner.Type, Value = value, Constant = inner.Constant, Addressable = false, };
+            return new ExpressionData { Type = inner.Type, Value = value, Constant = inner.Constant, Writable = false, };
         }
 
         private ExpressionData GenerateCode_UnaryExpr_Ref (ExpressionData inner, SimpleUnaryExprType exprOp) {
@@ -122,7 +122,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                     throw new NotImplementedException ("Operation not implemented yet.");
             }
 
-            return new ExpressionData { Type = finalType, Value = value, Constant = false, Addressable = isAddressable, };
+            return new ExpressionData { Type = finalType, Value = value, Constant = false, Writable = isAddressable, };
         }
     }
 }

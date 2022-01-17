@@ -162,7 +162,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
             bool isAssignment = exprOp.IsAssignment ();
 
-            Debug.Assert (!isAssignment || lhs.Addressable);
+            Debug.Assert (!isAssignment || lhs.Writable);
 
             if (!isShift && !isAssignment) {
                 if (lhsInt->IntSize > rhsInt->IntSize) {
@@ -214,9 +214,9 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 throw new NotImplementedException ("Operation not implemented yet");
 
             if (!exprOp.IsComparison ())
-                return new ExpressionData { Type = lhs.Type, Value = value, Constant = false, Addressable = false, };
+                return new ExpressionData { Type = lhs.Type, Value = value, Constant = false, Writable = false, };
             else
-                return new ExpressionData { Type = boolType, Value = value, Constant = false, Addressable = false, };
+                return new ExpressionData { Type = boolType, Value = value, Constant = false, Writable = false, };
         }
 
         private ExpressionData GenerateCode_BinaryExpr_BoolBool (ExpressionData lhs, ExpressionData rhs, SimpleBinaryExprType exprOp) {
@@ -226,7 +226,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             Debug.Assert (lhs.Type->TypeTag == ES_TypeTag.Bool);
             Debug.Assert (rhs.Type->TypeTag == ES_TypeTag.Bool);
 
-            Debug.Assert (!exprOp.IsAssignment () || lhs.Addressable);
+            Debug.Assert (!exprOp.IsAssignment () || lhs.Writable);
             Debug.Assert (lhs.Value is not null);
             Debug.Assert (rhs.Value is not null);
 
@@ -238,7 +238,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             else
                 throw new NotImplementedException ("Operation not implemented yet");
 
-            return new ExpressionData { Type = boolType, Value = value, Constant = false, Addressable = false, };
+            return new ExpressionData { Type = boolType, Value = value, Constant = false, Writable = false, };
         }
 
         private ExpressionData GenerateCode_BinaryExpr_FloatFloat (ExpressionData lhs, ExpressionData rhs, SimpleBinaryExprType exprOp) {
@@ -248,7 +248,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             Debug.Assert (lhs.Type->TypeTag == ES_TypeTag.Float);
             Debug.Assert (rhs.Type->TypeTag == ES_TypeTag.Float);
 
-            Debug.Assert (!exprOp.IsAssignment () || lhs.Addressable);
+            Debug.Assert (!exprOp.IsAssignment () || lhs.Writable);
             Debug.Assert (lhs.Value is not null);
             Debug.Assert (rhs.Value is not null);
 
@@ -268,9 +268,9 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 throw new NotImplementedException ("Operation not implemented yet");
 
             if (!exprOp.IsComparison ())
-                return new ExpressionData { Type = lhs.Type, Value = value, Constant = false, Addressable = false, };
+                return new ExpressionData { Type = lhs.Type, Value = value, Constant = false, Writable = false, };
             else
-                return new ExpressionData { Type = env!.TypeBool, Value = value, Constant = false, Addressable = false, };
+                return new ExpressionData { Type = env!.TypeBool, Value = value, Constant = false, Writable = false, };
         }
 
         private ExpressionData GenerateCode_BinaryExpr_FloatInt (ExpressionData lhs, ExpressionData rhs, SimpleBinaryExprType exprOp) {
@@ -280,7 +280,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             Debug.Assert (lhs.Type->TypeTag == ES_TypeTag.Float);
             Debug.Assert (rhs.Type->TypeTag == ES_TypeTag.Int);
 
-            Debug.Assert (!exprOp.IsAssignment () || lhs.Addressable);
+            Debug.Assert (!exprOp.IsAssignment () || lhs.Writable);
             Debug.Assert (lhs.Value is not null);
             Debug.Assert (rhs.Value is not null);
 
@@ -294,9 +294,9 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 throw new NotImplementedException ("Operation not implemented yet");
 
             if (!exprOp.IsComparison ())
-                return new ExpressionData { Type = lhs.Type, Value = value, Constant = false, Addressable = false, };
+                return new ExpressionData { Type = lhs.Type, Value = value, Constant = false, Writable = false, };
             else
-                return new ExpressionData { Type = env!.TypeBool, Value = value, Constant = false, Addressable = false, };
+                return new ExpressionData { Type = env!.TypeBool, Value = value, Constant = false, Writable = false, };
         }
 
         private ExpressionData GenerateCode_BinaryExpr_RefRef (ExpressionData lhs, ExpressionData rhs, SimpleBinaryExprType exprOp) {
@@ -306,7 +306,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             Debug.Assert (lhs.Type->TypeTag == ES_TypeTag.Reference);
             Debug.Assert (rhs.Type->TypeTag == ES_TypeTag.Reference);
 
-            Debug.Assert (!exprOp.IsAssignment () || lhs.Addressable);
+            Debug.Assert (!exprOp.IsAssignment () || lhs.Writable);
             Debug.Assert (lhs.Value is not null);
             Debug.Assert (rhs.Value is not null);
 
@@ -324,9 +324,9 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 throw new NotImplementedException ("Operation not implemented yet");
 
             if (!exprOp.IsComparison ())
-                return new ExpressionData { Type = lhs.Type, Value = value, Constant = false, Addressable = false, };
+                return new ExpressionData { Type = lhs.Type, Value = value, Constant = false, Writable = false, };
             else
-                return new ExpressionData { Type = env!.TypeBool, Value = value, Constant = false, Addressable = false, };
+                return new ExpressionData { Type = env!.TypeBool, Value = value, Constant = false, Writable = false, };
         }
 
         private ExpressionData GenerateCode_LogicalBinaryExpr (
@@ -357,7 +357,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             var exprKind = isAnd ? SyntaxKind.LogicalAndExpression : SyntaxKind.LogicalOrExpression;
             var value = BinaryExpression (exprKind, lhs.Value, rhs.Value);
 
-            return new ExpressionData { Type = boolType, Value = value, Constant = false, Addressable = false, };
+            return new ExpressionData { Type = boolType, Value = value, Constant = false, Writable = false, };
         }
     }
 }

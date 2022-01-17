@@ -31,19 +31,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             public ExpressionSyntax? Value;
 
             public bool Constant;
-            public bool Addressable;
-
-            public bool TypeIsPointer (ES_TypeInfo* baseType = null) {
-                if (Type is null)
-                    return false;
-
-                if (Type->TypeTag != ES_TypeTag.Reference)
-                    return false;
-
-                var refType = (ES_ReferenceData*) Type;
-
-                return (baseType is null || refType->PointedType == baseType);
-            }
+            public bool Writable;
         }
 
         private ExpressionSyntax GenerateCode_StaticVarsMem ()
@@ -136,7 +124,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                     throw new CompilationException (ES_BackendErrors.FrontendError);
 
                 case ES_AstNullLiteralExpression:
-                    return new ExpressionData { Expr = expr, Type = env.TypeNull, Value = null, Constant = true, Addressable = false };
+                    return new ExpressionData { Expr = expr, Type = env.TypeNull, Value = null, Constant = true, Writable = false };
 
                 case ES_AstIntegerConstantExpression intConstExpr: {
                     Debug.Assert (intConstExpr.IntType->TypeTag == ES_TypeTag.Int);
@@ -166,22 +154,22 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                     }
 
                     var valueExpr = LiteralExpression (SyntaxKind.NumericLiteralExpression, value);
-                    return new ExpressionData { Expr = expr, Type = type, Value = valueExpr, Constant = true, Addressable = false };
+                    return new ExpressionData { Expr = expr, Type = type, Value = valueExpr, Constant = true, Writable = false };
                 }
 
                 case ES_AstBooleanConstantExpression boolConstExpr: {
                     var value = LiteralExpression (boolConstExpr.Value ? SyntaxKind.TrueLiteralExpression : SyntaxKind.FalseLiteralExpression);
-                    return new ExpressionData { Expr = expr, Type = env.TypeBool, Value = value, Constant = true, Addressable = false };
+                    return new ExpressionData { Expr = expr, Type = env.TypeBool, Value = value, Constant = true, Writable = false };
                 }
 
                 case ES_AstFloat32ConstantExpression floatConstLit: {
                     var value = LiteralExpression (SyntaxKind.NumericLiteralExpression, Literal (floatConstLit.Value));
-                    return new ExpressionData { Expr = expr, Type = env.TypeFloat32, Value = value, Constant = true, Addressable = false };
+                    return new ExpressionData { Expr = expr, Type = env.TypeFloat32, Value = value, Constant = true, Writable = false };
                 }
 
                 case ES_AstFloat64ConstantExpression doubleConstLit: {
                     var value = LiteralExpression (SyntaxKind.NumericLiteralExpression, Literal (doubleConstLit.Value));
-                    return new ExpressionData { Expr = expr, Type = env.TypeFloat64, Value = value, Constant = true, Addressable = false };
+                    return new ExpressionData { Expr = expr, Type = env.TypeFloat64, Value = value, Constant = true, Writable = false };
                 }
 
                 case ES_AstStringLiteralExpression:
@@ -201,7 +189,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                         case SymbolType.Variable: {
                             var varData = symbol.MatchVariable ();
                             var valueExpr = varData.RoslynExpr;
-                            return new ExpressionData { Expr = expr, Type = varData.Type, Value = valueExpr, Constant = false, Addressable = true };
+                            return new ExpressionData { Expr = expr, Type = varData.Type, Value = valueExpr, Constant = false, Writable = true };
                         }
 
                         case SymbolType.Type: {
@@ -209,12 +197,12 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                                 throw new CompilationException (ES_BackendErrors.FrontendError);
 
                             var type = symbol.MatchType ();
-                            return new ExpressionData { Expr = expr, TypeInfo = type, Value = null, Constant = true, Addressable = true };
+                            return new ExpressionData { Expr = expr, TypeInfo = type, Value = null, Constant = true, Writable = true };
                         }
 
                         case SymbolType.Function: {
                             var func = symbol.MatchFunction ();
-                            return new ExpressionData { Expr = expr, Function = func, Value = null, Constant = true, Addressable = true };
+                            return new ExpressionData { Expr = expr, Function = func, Value = null, Constant = true, Writable = true };
                         }
 
                         default:
@@ -268,7 +256,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                     if (!envBuilder!.BinaryOpCompat (lhs.Type, rhs.Type, simpleBinaryExpr.ExpressionType, out _, out _))
                         throw new CompilationException (ES_BackendErrors.FrontendError);
 
-                    if (simpleBinaryExpr.ExpressionType.IsAssignment () && !lhs.Addressable)
+                    if (simpleBinaryExpr.ExpressionType.IsAssignment () && !lhs.Writable)
                         throw new CompilationException (ES_BackendErrors.FrontendError);
 
                     var ret = GenerateCode_BinaryExpr (lhs, rhs, simpleBinaryExpr.ExpressionType);
@@ -285,7 +273,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
         }
 
         private ExpressionData GenerateCode_IncDecExpression (ExpressionData val, bool decrement, bool postfix) {
-            if (!val.Addressable || val.Type is null || val.Value is null)
+            if (!val.Writable || val.Type is null || val.Value is null)
                 throw new CompilationException (ES_BackendErrors.FrontendError);
 
             ExpressionSyntax value;
@@ -301,7 +289,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             } else
                 throw new CompilationException (ES_BackendErrors.FrontendError);
 
-            return new ExpressionData { Type = val.Type, Value = value, Constant = false, Addressable = false };
+            return new ExpressionData { Type = val.Type, Value = value, Constant = false, Writable = false };
         }
 
         private ExpressionData GenerateCode_Expression_FunctionCall (
@@ -411,7 +399,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             var value = InvocationExpression (innerExpression)
                 .WithArgumentList (ArgumentList (SeparatedListSpan<ArgumentSyntax> (argsArr.Span)));
 
-            return new ExpressionData { Expr = funcCallExpr, Type = funcType->ReturnType, Value = value, Constant = false, Addressable = false };
+            return new ExpressionData { Expr = funcCallExpr, Type = funcType->ReturnType, Value = value, Constant = false, Writable = false };
         }
 
         private ExpressionData GenerateCode_Expression_Indexing (
@@ -480,7 +468,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 ))
             );
 
-            return new ExpressionData { Expr = expr, Type = elemType, Value = ret, Constant = false, Addressable = true };
+            return new ExpressionData { Expr = expr, Type = elemType, Value = ret, Constant = false, Writable = true };
         }
 
         private ExpressionSyntax GenerateCode_NewObject (ES_TypeInfo* type, ExpressionSyntax assignValue) {
@@ -592,7 +580,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             var value = GenerateCode_NewObject (objType, GetDefaultValue (objType));
 
             // Default-initialize the object.
-            return new ExpressionData { Expr = newObjExpr, Type = ptrType, Value = value, Constant = false, Addressable = false };
+            return new ExpressionData { Expr = newObjExpr, Type = ptrType, Value = value, Constant = false, Writable = false };
         }
 
         private ExpressionData GenerateCode_Expression_NewArray (
@@ -622,7 +610,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             var value = GenerateCode_NewArray (arrType, ranks.Span, defaultElemValue);
 
             // Default-initialize the object.
-            return new ExpressionData { Expr = newArrExpr, Type = &arrType->TypeInfo, Value = value, Constant = false, Addressable = false };
+            return new ExpressionData { Expr = newArrExpr, Type = &arrType->TypeInfo, Value = value, Constant = false, Writable = false };
         }
 
         private ExpressionData GenerateCode_ConditionalExpression (
@@ -650,7 +638,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             var exprValue = ConditionalExpression (condExpr.Value, leftExpr.Value, rightExpr.Value);
             bool constant = condExpr.Constant & leftExpr.Constant & rightExpr.Constant;
 
-            return new ExpressionData { Expr = expr, Type = leftExpr.Type, Value = exprValue, Constant = constant, Addressable = false };
+            return new ExpressionData { Expr = expr, Type = leftExpr.Type, Value = exprValue, Constant = constant, Writable = false };
         }
     }
 }

@@ -18,7 +18,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             var ret = src;
             ret.Type = dst;
             ret.Constant = false;
-            ret.Addressable = false;
+            ret.Writable = false;
 
             var srcVal = src.Value;
             Debug.Assert (srcVal is not null);
@@ -31,7 +31,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                         var intDst = (ES_IntTypeData*) dst;
 
                         if (intDst->IntSize == intSrc->IntSize && intDst->Unsigned == intSrc->Unsigned) {
-                            src.Addressable = false;
+                            src.Writable = false;
                             return src;
                         }
 
@@ -55,7 +55,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                         var fltDst = (ES_FloatTypeData*) dst;
 
                         if (fltSrc->FloatSize == fltDst->FloatSize) {
-                            src.Addressable = false;
+                            src.Writable = false;
                             return src;
                         }
 

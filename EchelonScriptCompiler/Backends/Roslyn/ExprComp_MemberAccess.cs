@@ -125,7 +125,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                             structExpr, IdentifierName (memberId.GetPooledString (Encoding.ASCII))
                         );
 
-                        return new ExpressionData { Expr = expr, Type = memberVar->Type, Value = value, Constant = false, Addressable = addressable };
+                        return new ExpressionData { Expr = expr, Type = memberVar->Type, Value = value, Constant = false, Writable = addressable };
                     }
 
                     case ES_MemberType.Function:
@@ -176,7 +176,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             } else
                 throw new CompilationException (ES_BackendErrors.FrontendError);
 
-            return new ExpressionData { Expr = expr, Type = memberType, Value = value, Constant = false, Addressable = addressable };
+            return new ExpressionData { Expr = expr, Type = memberType, Value = value, Constant = false, Writable = addressable };
         }
 
         private ExpressionData GenerateCode_Expression_MemberAccessStatic_Aggregate (
@@ -207,7 +207,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                             IdentifierName (memberVar->Info.Name.GetPooledString (Encoding.ASCII))
                         );
 
-                        return new ExpressionData { Expr = expr, Type = memberVar->Type, Value = value, Constant = false, Addressable = addressable };
+                        return new ExpressionData { Expr = expr, Type = memberVar->Type, Value = value, Constant = false, Writable = addressable };
                     }
 
                     case ES_MemberType.Function:
