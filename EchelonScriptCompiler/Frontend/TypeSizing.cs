@@ -19,7 +19,7 @@ using EchelonScriptCompiler.Utilities;
 
 namespace EchelonScriptCompiler.Frontend {
     public unsafe partial class CompilerFrontend {
-        private void PostAnalysis () {
+        private void TypeSizing () {
             Debug.Assert (Environment is not null);
             Debug.Assert (EnvironmentBuilder is not null);
 
@@ -28,15 +28,15 @@ namespace EchelonScriptCompiler.Frontend {
 
             foreach (var nmData in Environment.Namespaces.Values) {
                 foreach (var type in nmData.Types) {
-                    if (PostAnalysis_AnalyzeCycles (type))
+                    if (TypeSizing_AnalyzeCycles (type))
                         continue;
 
-                    PostAnalysis_SizeType (type, refListRefType);
+                    TypeSizing_SizeType (type, refListRefType);
                 }
             }
         }
 
-        private void PostAnalysis_SizeType ([NotNull] ES_TypeInfo* type, ArrayPointer<nint> refListRefType) {
+        private void TypeSizing_SizeType ([NotNull] ES_TypeInfo* type, ArrayPointer<nint> refListRefType) {
             Debug.Assert (Environment is not null);
             Debug.Assert (EnvironmentBuilder is not null);
 
@@ -88,7 +88,7 @@ namespace EchelonScriptCompiler.Frontend {
 
                 field->Offset = curOffs;
 
-                PostAnalysis_SizeType (field->Type, refListRefType);
+                TypeSizing_SizeType (field->Type, refListRefType);
 
                 curOffs += field->Type->RuntimeSize;
 
@@ -110,7 +110,7 @@ namespace EchelonScriptCompiler.Frontend {
                 type->Flags |= ES_TypeFlag.NoRefs;
         }
 
-        private bool PostAnalysis_AnalyzeCycles ([NotNull] ES_TypeInfo* type) {
+        private bool TypeSizing_AnalyzeCycles ([NotNull] ES_TypeInfo* type) {
             switch (type->TypeTag) {
                 case ES_TypeTag.Struct:
                 case ES_TypeTag.Class:
@@ -145,7 +145,7 @@ namespace EchelonScriptCompiler.Frontend {
 
                 var field = (ES_MemberData_Variable*) member;
 
-                if (PostAnalysis_AnalyzeCycles_Traverse (field->Type, type)) {
+                if (TypeSizing_AnalyzeCycles_Traverse (field->Type, type)) {
                     if (!EnvironmentBuilder!.PointerAstMap.TryGetValue ((IntPtr) field, out var astNode))
                         Debug.Fail ("PointerAstMap is missing field mappings.");
 
@@ -163,7 +163,7 @@ namespace EchelonScriptCompiler.Frontend {
             return hasCycles;
         }
 
-        private bool PostAnalysis_AnalyzeCycles_Traverse ([NotNull] ES_TypeInfo* innerType, [NotNull] ES_TypeInfo* containingType) {
+        private bool TypeSizing_AnalyzeCycles_Traverse ([NotNull] ES_TypeInfo* innerType, [NotNull] ES_TypeInfo* containingType) {
             switch (innerType->TypeTag) {
                 case ES_TypeTag.Struct:
                 case ES_TypeTag.Class:
@@ -200,7 +200,7 @@ namespace EchelonScriptCompiler.Frontend {
                 if (field->Type == containingType)
                     return true;
 
-                if (PostAnalysis_AnalyzeCycles_Traverse (field->Type, containingType))
+                if (TypeSizing_AnalyzeCycles_Traverse (field->Type, containingType))
                     return true;
             }
 

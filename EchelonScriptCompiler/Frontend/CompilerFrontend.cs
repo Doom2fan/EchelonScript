@@ -466,6 +466,11 @@ namespace EchelonScriptCompiler.Frontend {
             if (errorList.Count > 0)
                 return nullArr;
 
+            TypeSizing ();
+
+            if (errorList.Count > 0)
+                return nullArr;
+
             foreach (ref var transUnit in translationUnits.Span)
                 FoldConstants (ref transUnit);
 
@@ -474,11 +479,6 @@ namespace EchelonScriptCompiler.Frontend {
 
             foreach (ref var transUnit in translationUnits.Span)
                 CheckTypes (ref transUnit);
-
-            if (errorList.Count > 0)
-                return nullArr;
-
-            PostAnalysis ();
 
             if (errorList.Count > 0)
                 return nullArr;
