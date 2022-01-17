@@ -16,7 +16,7 @@ using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace EchelonScriptCompiler.Backends.RoslynBackend {
     public unsafe sealed partial class RoslynCompilerBackend {
-        private TypeSyntax GetRoslynType (ES_TypeInfo* type) {
+        private static TypeSyntax GetRoslynType (ES_TypeInfo* type) {
             switch (type->TypeTag) {
                 case ES_TypeTag.Void: return PredefinedType (Token (SyntaxKind.VoidKeyword));
 
@@ -54,7 +54,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             }
         }
 
-        private TypeSyntax GetIntType (ES_IntSize size, bool unsigned) {
+        private static TypeSyntax GetIntType (ES_IntSize size, bool unsigned) {
             switch (size) {
                 case ES_IntSize.Int8: return PredefinedType (Token (!unsigned ? SyntaxKind.SByteKeyword : SyntaxKind.ByteKeyword));
                 case ES_IntSize.Int16: return PredefinedType (Token (!unsigned ? SyntaxKind.ShortKeyword : SyntaxKind.UShortKeyword));
@@ -66,7 +66,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             }
         }
 
-        private TypeSyntax GetFloatType (ES_FloatSize size) {
+        private static TypeSyntax GetFloatType (ES_FloatSize size) {
             switch (size) {
                 case ES_FloatSize.Single: return PredefinedType (Token (SyntaxKind.FloatKeyword));
                 case ES_FloatSize.Double: return PredefinedType (Token (SyntaxKind.DoubleKeyword));
