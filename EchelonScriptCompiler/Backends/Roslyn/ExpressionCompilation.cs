@@ -83,6 +83,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
             if (exprData.Type->TypeTag == ES_TypeTag.Null) {
                 exprData.Value = GenerateCode_IsNullable (dstType, out exprData.Type, true);
+                return;
             } else if (dstType->TypeTag == ES_TypeTag.Int && dstType->TypeTag == ES_TypeTag.Int) {
                 var dstIntType = (ES_IntTypeData*) dstType;
                 var srcIntType = (ES_IntTypeData*) srcType;
