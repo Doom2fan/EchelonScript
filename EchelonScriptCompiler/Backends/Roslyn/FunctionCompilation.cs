@@ -9,6 +9,7 @@
 
 using System;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using ChronosLib.Pooled;
 using EchelonScriptCommon;
@@ -344,12 +345,12 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                     foreach (var variable in varDef.Variables) {
                         var varName = variable.Name.Text.Span;
                         var varNameId = idPool.GetIdentifier (varName);
-                        var varNameStr = varName.GetPooledString ();
+                        var roslynName = GenerateCode_Statement_GenerateVarName (symbols, varName);
 
                         var varFlags = baseVarFlags;
                         var varData = new VariableData {
                             Flags = varFlags,
-                            RoslynExpr = IdentifierName (varNameStr),
+                            RoslynExpr = IdentifierName (roslynName),
                         };
 
                         ExpressionSyntax initVal;
@@ -378,7 +379,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                         if (!symbols.AddSymbol (varNameId, new Symbol (varData)))
                             throw new CompilationException (ES_BackendErrors.FrontendError);
 
-                        var varDeclarator = VariableDeclarator (varNameStr).WithInitializer (EqualsValueClause (initVal));
+                        var varDeclarator = VariableDeclarator (roslynName).WithInitializer (EqualsValueClause (initVal));
                         var declStmt = LocalDeclarationStatement (
                             VariableDeclaration (GetRoslynType (varData.Type))
                                 .WithVariables (SingletonSeparatedList (varDeclarator))
@@ -572,6 +573,18 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 default:
                     throw new NotImplementedException ("Expression type not implemented.");
             }
+        }
+
+        private string GenerateCode_Statement_GenerateVarName (SymbolStack<Symbol> symbols, ReadOnlySpan<char> name) {
+            using var nameChars = PooledArray<char>.GetArray (name.Length + 50);
+            name.CopyTo (nameChars);
+
+            var intChars = nameChars.Span.Slice (name.Length);
+            if (!symbols.ScopesCount.TryFormat (intChars, out int charsWritten, provider: CultureInfo.InvariantCulture))
+                Debug.Fail ("This shouldn't happen.");
+
+
+            return nameChars.Span.Slice (0, name.Length + charsWritten).GetPooledString ();
         }
     }
 }

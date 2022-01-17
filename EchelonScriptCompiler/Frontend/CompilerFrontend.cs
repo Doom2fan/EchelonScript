@@ -156,6 +156,12 @@ namespace EchelonScriptCompiler.Frontend {
 
         #endregion
 
+        #region ================== Instance properties
+
+        public int ScopesCount => scopes.Count;
+
+        #endregion
+
         #region ================== Constructors
 
         public SymbolStack (TSymbolType notFoundVal) {
