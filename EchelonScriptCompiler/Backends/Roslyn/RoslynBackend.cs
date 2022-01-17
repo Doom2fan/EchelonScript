@@ -265,12 +265,12 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
         private struct VariableData {
             public VariableFlags Flags;
             public ES_TypeInfo* Type;
-            public string RoslynName;
+            public ExpressionSyntax RoslynExpr;
 
-            public VariableData (ES_TypeInfo* type, VariableFlags flags, string roslynName) {
+            public VariableData (ES_TypeInfo* type, VariableFlags flags, ExpressionSyntax roslynExpr) {
                 Flags = flags;
                 Type = type;
-                RoslynName = roslynName;
+                RoslynExpr = roslynExpr;
             }
         }
 

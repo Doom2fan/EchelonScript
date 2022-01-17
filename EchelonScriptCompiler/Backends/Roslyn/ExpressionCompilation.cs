@@ -199,7 +199,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
                         case SymbolType.Variable: {
                             var varData = symbol.MatchVariable ();
-                            var valueExpr = IdentifierName (varData.RoslynName);
+                            var valueExpr = varData.RoslynExpr;
                             return new ExpressionData { Expr = expr, Type = varData.Type, Value = valueExpr, Constant = false, Addressable = true };
                         }
 

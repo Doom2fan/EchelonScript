@@ -242,7 +242,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 symbols.AddSymbol (argData.Name, new Symbol (new VariableData (
                     argTypeInfo.ValueType,
                     argFlags,
-                    argData.Name.GetPooledString (Encoding.ASCII)
+                    IdentifierName (argData.Name.GetPooledString (Encoding.ASCII))
                 )));
             }
 
@@ -265,7 +265,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
                 funcInfo.Definition = funcInfo.Definition.WithExpressionBody (ArrowExpressionClause (exprData.Value));
             } else {
-                using var stmtData = GenerateCode_Statement (ref transUnit, symbols, src, funcInfo, retType, funcDef.Statement);
+                using var stmtData = GenerateCode_Statement (ref transUnit, symbols, src, ref funcInfo, retType, funcDef.Statement);
 
                 if (!stmtData.AlwaysReturns && retType->TypeTag != ES_TypeTag.Void)
                     throw new CompilationException (ES_BackendErrors.FrontendError);
@@ -283,7 +283,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
         private StatementData GenerateCode_Statement (
             ref TranslationUnitData transUnit, SymbolStack<Symbol> symbols, ReadOnlySpan<char> src,
-            FunctionInfo funcInfo, ES_TypeInfo* retType, ES_AstStatement stmt
+            ref FunctionInfo funcInfo, ES_TypeInfo* retType, ES_AstStatement stmt
         ) {
             Debug.Assert (stmt is not null);
             var idPool = env!.IdPool;
@@ -306,7 +306,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                     using var stmtsList = new StructPooledList<StatementSyntax> (CL_ClearMode.Auto);
                     ES_AstStatement? subStmt = blockStmt.Statement;
                     while (subStmt is not null) {
-                        using var subStmtData = GenerateCode_Statement (ref transUnit, symbols, src, funcInfo, retType, subStmt);
+                        using var subStmtData = GenerateCode_Statement (ref transUnit, symbols, src, ref funcInfo, retType, subStmt);
 
                         stmtsList.AddRange (subStmtData.Statements);
 
@@ -344,11 +344,12 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                     foreach (var variable in varDef.Variables) {
                         var varName = variable.Name.Text.Span;
                         var varNameId = idPool.GetIdentifier (varName);
+                        var varNameStr = varName.GetPooledString ();
 
                         var varFlags = baseVarFlags;
                         var varData = new VariableData {
                             Flags = varFlags,
-                            RoslynName = varName.GetPooledString (),
+                            RoslynExpr = IdentifierName (varNameStr),
                         };
 
                         ExpressionSyntax initVal;
@@ -377,7 +378,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                         if (!symbols.AddSymbol (varNameId, new Symbol (varData)))
                             throw new CompilationException (ES_BackendErrors.FrontendError);
 
-                        var varDeclarator = VariableDeclarator (varData.RoslynName).WithInitializer (EqualsValueClause (initVal));
+                        var varDeclarator = VariableDeclarator (varNameStr).WithInitializer (EqualsValueClause (initVal));
                         var declStmt = LocalDeclarationStatement (
                             VariableDeclaration (GetRoslynType (varData.Type))
                                 .WithVariables (SingletonSeparatedList (varDeclarator))
@@ -404,7 +405,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                     Debug.Assert (condExpr.Value is not null);
 
                     // Generate the then block.
-                    using var thenStmtData = GenerateCode_Statement (ref transUnit, symbols, src, funcInfo, retType, condStmt.ThenStatement);
+                    using var thenStmtData = GenerateCode_Statement (ref transUnit, symbols, src, ref funcInfo, retType, condStmt.ThenStatement);
                     StatementSyntax thenStmt;
                     if (thenStmtData.Statements.RealLength != 1) {
                         Debug.Assert (thenStmtData.Statements.RealLength > 1);
@@ -414,7 +415,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
                     // Generate the else block (if any) and the Roslyn statement.
                     if (hasElse) {
-                        var elseStmtData = GenerateCode_Statement (ref transUnit, symbols, src, funcInfo, retType, condStmt.ElseStatement!);
+                        var elseStmtData = GenerateCode_Statement (ref transUnit, symbols, src, ref funcInfo, retType, condStmt.ElseStatement!);
                         StatementSyntax elseStmt;
                         if (elseStmtData.Statements.RealLength != 1) {
                             Debug.Assert (elseStmtData.Statements.RealLength > 1);
@@ -496,7 +497,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
                     // Emit the init statements, if any.
                     if (loopStmt.InitializationStatement is not null) {
-                        using var initStmt = GenerateCode_Statement (ref transUnit, symbols, src, funcInfo, retType, loopStmt.InitializationStatement);
+                        using var initStmt = GenerateCode_Statement (ref transUnit, symbols, src, ref funcInfo, retType, loopStmt.InitializationStatement);
                         loopBlock.AddRange (initStmt.Statements);
                     }
 
@@ -504,7 +505,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                     Debug.Assert (loopStmt.LoopBody is not null);
                     Debug.Assert (loopStmt.LoopBody.Endpoint is null);
 
-                    using var loopBodyStmt = GenerateCode_Statement (ref transUnit, symbols, src, funcInfo, retType, loopStmt.LoopBody);
+                    using var loopBodyStmt = GenerateCode_Statement (ref transUnit, symbols, src, ref funcInfo, retType, loopStmt.LoopBody);
                     StatementSyntax loopBody;
                     if (loopBodyStmt.Statements.RealLength == 1)
                         loopBody = loopBodyStmt.Statements.Span [0];
