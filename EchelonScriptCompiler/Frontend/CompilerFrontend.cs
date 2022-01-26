@@ -158,7 +158,12 @@ namespace EchelonScriptCompiler.Frontend {
 
         #region ================== Instance properties
 
-        public int ScopesCount => scopes.Count;
+        public int ScopesCount {
+            get {
+                CheckDisposed ();
+                return scopes.Count;
+            }
+        }
 
         #endregion
 
@@ -192,12 +197,16 @@ namespace EchelonScriptCompiler.Frontend {
         }
 
         public void Push () {
+            CheckDisposed ();
+
             version++;
 
             scopes.Add (new Scope<TSymbolType> (GetDict ()));
         }
 
         public void Pop () {
+            CheckDisposed ();
+
             version++;
 
             Debug.Assert (scopes.Count > 0);
@@ -212,6 +221,8 @@ namespace EchelonScriptCompiler.Frontend {
         }
 
         public TSymbolType? GetSymbol (ArrayPointer<byte> name) {
+            CheckDisposed ();
+
             for (int i = scopes.Count - 1; i >= 0; i--) {
                 var scope = scopes [i];
 
@@ -223,6 +234,8 @@ namespace EchelonScriptCompiler.Frontend {
         }
 
         public bool AddSymbol (ArrayPointer<byte> name, TSymbolType symbol) {
+            CheckDisposed ();
+
             version++;
 
             var scope = scopes [^1];
@@ -234,7 +247,7 @@ namespace EchelonScriptCompiler.Frontend {
 
         #region ================== IDisposable support
 
-        public bool IsDisposed;
+        public bool IsDisposed { get; private set; }
 
         private void CheckDisposed () {
             if (IsDisposed)
@@ -247,12 +260,13 @@ namespace EchelonScriptCompiler.Frontend {
         }
 
         protected virtual void DoDispose () {
-            if (!IsDisposed) {
-                scopes.Dispose ();
-                pooledDicts.Dispose ();
+            if (IsDisposed)
+                return;
 
-                IsDisposed = true;
-            }
+            scopes.Dispose ();
+            pooledDicts.Dispose ();
+
+            IsDisposed = true;
         }
 
         public void Dispose () {
