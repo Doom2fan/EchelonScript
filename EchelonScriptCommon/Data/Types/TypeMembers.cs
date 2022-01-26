@@ -76,7 +76,6 @@ namespace EchelonScriptCommon.Data.Types {
         }
     }
 
-
     [StructLayout (LayoutKind.Sequential, Pack = 1)]
     [ES_ExportAggregate (new [] { "EchelonScript", "Reflection" }, "TypeMembers", ES_ExportAttributeBase.AggregateType.Struct)]
     public unsafe struct ES_TypeMembers {

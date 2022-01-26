@@ -137,18 +137,18 @@ namespace EchelonScriptCompiler.Frontend {
         #endregion
     }
 
-    public unsafe struct Scope<TSymbolType> {
-        public Dictionary<ArrayPointer<byte>, TSymbolType> Symbols;
-
-        public Scope (Dictionary<ArrayPointer<byte>, TSymbolType> symbols) {
-            Symbols = symbols;
-        }
-    }
-
     public unsafe class SymbolStack<TSymbolType> : IDisposable {
+        private unsafe struct Scope {
+            public Dictionary<ArrayPointer<byte>, TSymbolType> Symbols;
+
+            public Scope (Dictionary<ArrayPointer<byte>, TSymbolType> symbols) {
+                Symbols = symbols;
+            }
+        }
+
         #region ================== Instance fields
 
-        private CL_PooledList<Scope<TSymbolType>> scopes;
+        private CL_PooledList<Scope> scopes;
         private CL_PooledList<Dictionary<ArrayPointer<byte>, TSymbolType>> pooledDicts;
         private int version;
 
@@ -170,7 +170,7 @@ namespace EchelonScriptCompiler.Frontend {
         #region ================== Constructors
 
         public SymbolStack (TSymbolType notFoundVal) {
-            scopes = new CL_PooledList<Scope<TSymbolType>> ();
+            scopes = new CL_PooledList<Scope> ();
             pooledDicts = new CL_PooledList<Dictionary<ArrayPointer<byte>, TSymbolType>> ();
             version = 0;
 
@@ -201,7 +201,7 @@ namespace EchelonScriptCompiler.Frontend {
 
             version++;
 
-            scopes.Add (new Scope<TSymbolType> (GetDict ()));
+            scopes.Add (new Scope (GetDict ()));
         }
 
         public void Pop () {
@@ -288,7 +288,7 @@ namespace EchelonScriptCompiler.Frontend {
             private int version;
 
             private SymbolStack<TSymbolType> stack;
-            private CL_PooledList<Scope<TSymbolType>>.Enumerator enumerator;
+            private CL_PooledList<Scope>.Enumerator enumerator;
 
             #endregion
 

@@ -1010,21 +1010,22 @@ namespace EchelonScriptCompiler.Data {
             }
 
             protected virtual void DoDispose () {
-                if (!disposedValue) {
-                    foreach (var builderKVP in NamespaceBuilders)
-                        builderKVP.Value.Dispose ();
+                if (disposedValue)
+                    return;
 
-                    NamespaceBuilders?.Dispose ();
-                    NamespaceBuilders = null!;
+                foreach (var builderKVP in NamespaceBuilders)
+                    builderKVP.Value.Dispose ();
 
-                    staticVars?.Dispose ();
-                    staticVars = null;
+                NamespaceBuilders?.Dispose ();
+                NamespaceBuilders = null!;
 
-                    PointerAstMap.Clear ();
-                    PointerAstMap = null!;
+                staticVars?.Dispose ();
+                staticVars = null;
 
-                    disposedValue = true;
-                }
+                PointerAstMap.Clear ();
+                PointerAstMap = null!;
+
+                disposedValue = true;
             }
 
             public void Dispose () {
