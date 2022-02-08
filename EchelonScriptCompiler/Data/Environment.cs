@@ -644,6 +644,14 @@ namespace EchelonScriptCompiler.Data {
                         finalType = lhsType;
                         break;
 
+                    case SimpleBinaryExprType.Concatenation:
+                    case SimpleBinaryExprType.AssignConcatenate:
+                        if (lhsArr->DimensionsCount != 1)
+                            goto default;
+
+                        finalType = lhsType;
+                        break;
+
                     case SimpleBinaryExprType.Equals:
                     case SimpleBinaryExprType.NotEquals:
                         finalType = TypeBool;
