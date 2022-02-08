@@ -115,5 +115,13 @@ namespace EchelonScriptCommon.Data.Types {
         }
 
         #endregion
+
+        #region ================== Instance methods
+
+        public bool IsConstant () => TypeTag == ES_TypeTag.Const || TypeTag == ES_TypeTag.Immutable;
+
+        public bool IsWritable () => TypeTag != ES_TypeTag.Const && TypeTag != ES_TypeTag.Immutable;
+
+        #endregion
     }
 }
