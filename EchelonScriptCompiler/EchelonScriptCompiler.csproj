@@ -18,7 +18,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="ChronosLib" Version="3.0.0-pre-0004-gfe8176c47d" />
+    <PackageReference Include="ChronosLib" Version="3.0.0-pre-0005-g5a613d7986" />
     <PackageReference Include="Collections.Pooled" Version="2.0.0-preview.27" />
     <PackageReference Include="CommunityToolkit.HighPerformance" Version="7.1.2" />
     <PackageReference Include="LibLLVM" Version="12.0.0" />
