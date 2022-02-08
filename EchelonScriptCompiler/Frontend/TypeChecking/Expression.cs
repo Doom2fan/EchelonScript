@@ -673,7 +673,12 @@ namespace EchelonScriptCompiler.Frontend {
                 var indexedType = indexedExprData.Type;
                 var indexedTypeTag = indexedType->TypeTag;
 
-                if (indexedTypeTag == ES_TypeTag.Array) {
+                if (indexedTypeTag == ES_TypeTag.UNKNOWN) {
+                    badRankCount = false;
+                    elemType = typeUnkn;
+                    constant = false;
+                    writable = true;
+                } else if (indexedTypeTag == ES_TypeTag.Array) {
                     var arrayData = (ES_ArrayTypeData*) indexedExprData.Type;
 
                     badRankCount = rankCount != arrayData->DimensionsCount;
