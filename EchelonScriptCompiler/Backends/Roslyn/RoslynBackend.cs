@@ -27,7 +27,6 @@ using EchelonScriptCommon.Utilities;
 using EchelonScriptCompiler.CompilerCommon.IR;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Frontend;
-using EchelonScriptCompiler.Utilities;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -37,8 +36,6 @@ using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace EchelonScriptCompiler.Backends.RoslynBackend {
     public unsafe sealed class RoslynBackendData : IBackendData {
-        private const string TypesNamespacePrefix = RoslynCompilerBackend.NamespaceName + ".";
-
         #region ================== Instance fields
 
         private EchelonScriptEnvironment environment;
@@ -117,8 +114,6 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 return ret;
             }
         }
-
-        private MethodInfo GetGlobalFunction (ReadOnlySpan<char> funcName) => GetGlobalFunction (funcName.GetPooledString ());
 
         private MethodInfo GetGlobalFunction (string funcName) {
             Debug.Assert (assembly is not null);
