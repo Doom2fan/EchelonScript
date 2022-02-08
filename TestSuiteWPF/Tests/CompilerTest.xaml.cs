@@ -10,20 +10,20 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.Text;
 using System.Linq;
+using System.Text;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using ChronosLib.Pooled;
 using CommunityToolkit.HighPerformance.Buffers;
+using EchelonScriptCommon;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCompiler;
 using EchelonScriptCompiler.Backends.RoslynBackend;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Frontend;
 using ICSharpCode.AvalonEdit.Document;
-using EchelonScriptCommon;
 
 namespace TestSuiteWPF.Tests {
     /// <summary>
