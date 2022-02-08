@@ -10,64 +10,74 @@
 using System;
 using System.Diagnostics;
 using EchelonScriptCommon.Data.Types;
+using EchelonScriptCompiler.CompilerCommon.IR;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace EchelonScriptCompiler.Backends.RoslynBackend {
     public unsafe sealed partial class RoslynCompilerBackend {
-        private ExpressionData GenerateCode_Cast (ExpressionData src, ES_TypeInfo* dst) {
-            var ret = src;
-            ret.Type = dst;
-            ret.Constant = false;
-            ret.Writable = false;
+        private static ExpressionData CompileExpression_Cast (
+            ref PassData passData,
+            ref FunctionData funcData,
+            ESIR_CastExpression expr
+        ) {
+            var origExpr = CompileExpression (ref passData, ref funcData, expr.Expression);
+            var destType = expr.DestType.Pointer;
 
-            var srcVal = src.Value;
-            Debug.Assert (srcVal is not null);
+            var origVal = origExpr.Value!;
+            Debug.Assert (origVal is not null);
 
-            switch (src.Type->TypeTag) {
+            ES_TypeInfo* retType;
+            ExpressionSyntax retValue;
+            switch (origExpr.Type->TypeTag) {
                 case ES_TypeTag.Int: {
-                    var intSrc = (ES_IntTypeData*) src.Type;
+                    var intSrc = (ES_IntTypeData*) origExpr.Type;
 
-                    if (dst->TypeTag == ES_TypeTag.Int) {
-                        var intDst = (ES_IntTypeData*) dst;
+                    if (destType->TypeTag == ES_TypeTag.Int) {
+                        var intDest = (ES_IntTypeData*) destType;
 
-                        if (intDst->IntSize == intSrc->IntSize && intDst->Unsigned == intSrc->Unsigned) {
-                            src.Writable = false;
-                            return src;
+                        if (intDest->IntSize == intSrc->IntSize && intDest->Unsigned == intSrc->Unsigned) {
+                            origExpr.Writable = false;
+                            return origExpr;
                         }
 
-                        var dstType = GetIntType (intDst->IntSize, intDst->Unsigned);
-                        ret.Value = CastExpression (dstType, srcVal);
-                    } else if (dst->TypeTag == ES_TypeTag.Float) {
-                        var fltDst = (ES_FloatTypeData*) dst;
+                        var roslynDestType = GetIntType (intDest->IntSize, intDest->Unsigned);
+                        retValue = CastExpression (roslynDestType, origVal);
+                    } else if (destType->TypeTag == ES_TypeTag.Float) {
+                        var floatDest = (ES_FloatTypeData*) destType;
 
-                        var dstType = GetFloatType (fltDst->FloatSize);
-                        ret.Value = CastExpression (dstType, srcVal);
+                        var roslynDestType = GetFloatType (floatDest->FloatSize);
+                        retValue = CastExpression (roslynDestType, origVal);
                     } else
                         throw new CompilationException (ES_BackendErrors.FrontendError);
+
+                    retType = destType;
 
                     break;
                 }
 
                 case ES_TypeTag.Float: {
-                    var fltSrc = (ES_FloatTypeData*) src.Type;
+                    var floatSrc = (ES_FloatTypeData*) origExpr.Type;
 
-                    if (dst->TypeTag == ES_TypeTag.Float) {
-                        var fltDst = (ES_FloatTypeData*) dst;
+                    if (destType->TypeTag == ES_TypeTag.Float) {
+                        var floatDest = (ES_FloatTypeData*) destType;
 
-                        if (fltSrc->FloatSize == fltDst->FloatSize) {
-                            src.Writable = false;
-                            return src;
+                        if (floatSrc->FloatSize == floatDest->FloatSize) {
+                            origExpr.Writable = false;
+                            return origExpr;
                         }
 
-                        var dstType = GetFloatType (fltDst->FloatSize);
-                        ret.Value = CastExpression (dstType, srcVal);
-                    } else if (dst->TypeTag == ES_TypeTag.Int) {
-                        var intDst = (ES_IntTypeData*) dst;
+                        var roslynDestType = GetFloatType (floatDest->FloatSize);
+                        retValue = CastExpression (roslynDestType, origVal);
+                    } else if (destType->TypeTag == ES_TypeTag.Int) {
+                        var intDest = (ES_IntTypeData*) destType;
 
-                        var dstType = GetIntType (intDst->IntSize, intDst->Unsigned);
-                        ret.Value = CastExpression (dstType, srcVal);
+                        var roslynDestType = GetIntType (intDest->IntSize, intDest->Unsigned);
+                        retValue = CastExpression (roslynDestType, origVal);
                     } else
                         throw new CompilationException (ES_BackendErrors.FrontendError);
+
+                    retType = destType;
 
                     break;
                 }
@@ -76,7 +86,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                     throw new NotImplementedException ("Cast not implemented.");
             }
 
-            return ret;
+            return new ExpressionData { Type = retType, Value = retValue, };
         }
     }
 }

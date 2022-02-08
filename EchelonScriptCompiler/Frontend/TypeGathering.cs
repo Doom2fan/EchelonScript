@@ -18,7 +18,7 @@ using EchelonScriptCompiler.Utilities;
 
 namespace EchelonScriptCompiler.Frontend {
     public unsafe partial class CompilerFrontend {
-        protected ES_TypeInfo* GetType (SymbolStack<FrontendSymbol> symbols, SourceData src, ES_AstTypeDeclaration_TypeName typeName) {
+        private ES_TypeInfo* GetType (SymbolStack<FrontendSymbol> symbols, SourceData src, ES_AstTypeDeclaration_TypeName typeName) {
             var idPool = Environment!.IdPool;
 
             Debug.Assert (typeName.TypeName.Parts.Length > 0);
@@ -70,8 +70,8 @@ namespace EchelonScriptCompiler.Frontend {
             }
         }
 
-        protected ES_TypeInfo* ResolveTypeDeclaration (
-            ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, SourceData src,
+        private ES_TypeInfo* ResolveTypeDeclaration (
+            ArrayPointer<byte> transUnitName, SymbolStack<FrontendSymbol> symbols, SourceData src,
             ES_AstTypeDeclaration typeDecl
         ) {
             Debug.Assert (EnvironmentBuilder is not null);
@@ -84,7 +84,7 @@ namespace EchelonScriptCompiler.Frontend {
                         case ES_AccessModifier.Public: break;
 
                         case ES_AccessModifier.Internal:
-                            if (!type->SourceUnit.Equals (transUnit.Name)) {
+                            if (!type->SourceUnit.Equals (transUnitName)) {
                                 using var symbolName = PooledArray<char>.GetArray (typeName.GetStringLength ());
                                 typeName.ToString (symbolName);
 
@@ -106,12 +106,12 @@ namespace EchelonScriptCompiler.Frontend {
                     return typeRef.Reference;
 
                 case ES_AstTypeDeclaration_Array arrayDecl: {
-                    var elemType = ResolveTypeDeclaration (ref transUnit, symbols, src, arrayDecl.ElementType);
+                    var elemType = ResolveTypeDeclaration (transUnitName, symbols, src, arrayDecl.ElementType);
                     return EnvironmentBuilder.CreateArrayType (elemType, arrayDecl.Dimensions);
                 }
 
                 case ES_AstTypeDeclaration_Basic basicDecl: {
-                    var innerType = ResolveTypeDeclaration (ref transUnit, symbols, src, basicDecl.Inner!);
+                    var innerType = ResolveTypeDeclaration (transUnitName, symbols, src, basicDecl.Inner!);
 
                     switch (basicDecl.Type) {
                         case ES_AstTypeDeclaration_Basic.DeclType.Const:
@@ -136,8 +136,8 @@ namespace EchelonScriptCompiler.Frontend {
             }
         }
 
-        protected ES_AstTypeDeclaration_TypeReference GenerateASTTypeRef (
-            ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, SourceData src,
+        private ES_AstTypeDeclaration_TypeReference GenerateASTTypeRef (
+            ArrayPointer<byte> transUnitName, SymbolStack<FrontendSymbol> symbols, SourceData src,
             ES_AstTypeDeclaration typeDecl
         ) {
             Debug.Assert (typeDecl is not null);
@@ -145,7 +145,7 @@ namespace EchelonScriptCompiler.Frontend {
             if (typeDecl is ES_AstTypeDeclaration_TypeReference)
                 return (typeDecl as ES_AstTypeDeclaration_TypeReference)!;
 
-            var type = ResolveTypeDeclaration (ref transUnit, symbols, src, typeDecl);
+            var type = ResolveTypeDeclaration (transUnitName, symbols, src, typeDecl);
 
             if (type == null)
                 type = Environment!.TypeUnknownValue;
@@ -153,7 +153,7 @@ namespace EchelonScriptCompiler.Frontend {
             return new ES_AstTypeDeclaration_TypeReference (typeDecl, type);
         }
 
-        protected ES_NamespaceData? GetNamespace (SourceData src, ES_AstNodeBounds nodeBounds, ReadOnlySpan<char> namespaceStr) {
+        private ES_NamespaceData? GetNamespace (SourceData src, ES_AstNodeBounds nodeBounds, ReadOnlySpan<char> namespaceStr) {
             var namespaceName = Environment!.IdPool.GetIdentifier (namespaceStr);
 
             if (!Environment!.Namespaces.TryGetValue (namespaceName, out var namespaceData)) {
@@ -169,14 +169,14 @@ namespace EchelonScriptCompiler.Frontend {
             return namespaceData;
         }
 
-        protected void ImportNamespaceSymbols (SymbolStack<FrontendSymbol> symbols, ES_NamespaceData namespaceData) {
+        private void ImportNamespaceSymbols (SymbolStack<FrontendSymbol> symbols, ES_NamespaceData namespaceData) {
             foreach (var type in namespaceData.Types)
-                symbols.AddSymbol (type.Address->Name.TypeName, NewSymbolType (type));
+                symbols.AddSymbol (type.Address->Name.TypeName, FrontendSymbol.NewType (type));
             foreach (var funcKVP in namespaceData.Functions)
-                symbols.AddSymbol (funcKVP.Key, NewSymbolFunction (funcKVP.Value));
+                symbols.AddSymbol (funcKVP.Key, FrontendSymbol.NewFunction (funcKVP.Value));
         }
 
-        protected void AST_HandleImport (SymbolStack<FrontendSymbol> symbols, SourceData src, ES_AstImportStatement import) {
+        private void AST_HandleImport (SymbolStack<FrontendSymbol> symbols, SourceData src, ES_AstImportStatement import) {
             using var nmNameString = import.NamespaceName.ToPooledChars ();
             var namespaceData = GetNamespace (src, import.NamespaceName.NodeBounds, nmNameString);
 
@@ -185,7 +185,7 @@ namespace EchelonScriptCompiler.Frontend {
 
             if (import.ImportedNames is null || import.ImportedNames.Length == 0) {
                 foreach (var type in namespaceData.Types) {
-                    if (!symbols.AddSymbol (type.Address->Name.TypeName, NewSymbolVariable (type))) {
+                    if (!symbols.AddSymbol (type.Address->Name.TypeName, FrontendSymbol.NewVariable (type))) {
                         var err = ES_FrontendErrors.GenDuplicateSymbolDef (
                             type.Address->Name.TypeNameString,
                             src, import.NamespaceName.NodeBounds
@@ -194,7 +194,7 @@ namespace EchelonScriptCompiler.Frontend {
                     }
                 }
                 foreach (var funcKVP in namespaceData.Functions) {
-                    if (!symbols.AddSymbol (funcKVP.Key, NewSymbolFunction (funcKVP.Value))) {
+                    if (!symbols.AddSymbol (funcKVP.Key, FrontendSymbol.NewFunction (funcKVP.Value))) {
                         var err = ES_FrontendErrors.GenDuplicateSymbolDef (
                             funcKVP.Value.Address->Name.TypeNameString,
                             src, import.NamespaceName.NodeBounds
@@ -212,7 +212,7 @@ namespace EchelonScriptCompiler.Frontend {
                     if (!symbolFound) {
                         foreach (var typeData in namespaceData.Types) {
                             if (typeData.Address->Name.TypeName.Equals (name)) {
-                                isDuplicate = !symbols.AddSymbol (name, NewSymbolType (typeData));
+                                isDuplicate = !symbols.AddSymbol (name, FrontendSymbol.NewType (typeData));
                                 symbolFound = true;
                                 break;
                             }
@@ -222,7 +222,7 @@ namespace EchelonScriptCompiler.Frontend {
                     if (!symbolFound) {
                         foreach (var funcKVP in namespaceData.Functions) {
                             if (funcKVP.Key.Equals (name)) {
-                                isDuplicate = !symbols.AddSymbol (name, NewSymbolFunction (funcKVP.Value.Address));
+                                isDuplicate = !symbols.AddSymbol (name, FrontendSymbol.NewFunction (funcKVP.Value.Address));
                                 symbolFound = true;
                                 break;
                             }
@@ -242,7 +242,7 @@ namespace EchelonScriptCompiler.Frontend {
             }
         }
 
-        protected void AST_HandleAlias (ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, SourceData src, ES_AstTypeAlias alias) {
+        private void AST_HandleAlias (ArrayPointer<byte> transUnitName, SymbolStack<FrontendSymbol> symbols, SourceData src, ES_AstTypeAlias alias) {
             var aliasName = alias.AliasName.Text.Span;
             var aliasId = Environment!.IdPool.GetIdentifier (aliasName);
 
@@ -267,22 +267,22 @@ namespace EchelonScriptCompiler.Frontend {
                 }
 
                 if (func != null) {
-                    if (!symbols.AddSymbol (aliasId, NewSymbolFunction (func)))
+                    if (!symbols.AddSymbol (aliasId, FrontendSymbol.NewFunction (func)))
                         errorList.Add (ES_FrontendErrors.GenDuplicateSymbolDef (aliasName.GetPooledString (), alias.AliasName));
 
                     return;
                 }
             }
 
-            alias.OriginalName = GenerateASTTypeRef (ref transUnit, symbols, src, alias.OriginalName!);
+            alias.OriginalName = GenerateASTTypeRef (transUnitName, symbols, src, alias.OriginalName!);
 
             var origType = GetTypeRef (alias.OriginalName);
 
-            if (!symbols.AddSymbol (aliasId, NewSymbolType (origType)))
+            if (!symbols.AddSymbol (aliasId, FrontendSymbol.NewType (origType)))
                 errorList.Add (ES_FrontendErrors.GenDuplicateSymbolDef (aliasName.GetPooledString (), alias.AliasName));
         }
 
-        protected void GatherGlobalImports (ref TranslationUnitData transUnit) {
+        private void GatherGlobalImports (ref TranslationUnitData transUnit) {
             var idPool = Environment!.IdPool;
             var namespaces = Environment.Namespaces;
             var globalTypesList = EnvironmentBuilder!.GetOrCreateNamespace (Environment.GlobalTypesNamespace).NamespaceData.Types;
@@ -295,7 +295,7 @@ namespace EchelonScriptCompiler.Frontend {
                 // Add built-in symbols
                 symbols.Push ();
                 foreach (var type in globalTypesList)
-                    symbols.AddSymbol (type.Address->Name.TypeName, NewSymbolType (type));
+                    symbols.AddSymbol (type.Address->Name.TypeName, FrontendSymbol.NewType (type));
 
                 // Add imported symbols
                 symbols.Push ();
@@ -304,11 +304,11 @@ namespace EchelonScriptCompiler.Frontend {
                     AST_HandleImport (symbols, src, import);
 
                 foreach (var alias in ast.TypeAliases)
-                    AST_HandleAlias (ref transUnit, symbols, src, alias);
+                    AST_HandleAlias (transUnit.Name, symbols, src, alias);
             }
         }
 
-        protected void GatherTypes (ref TranslationUnitData transUnit) {
+        private void GatherTypes (ref TranslationUnitData transUnit) {
             foreach (ref var astUnit in transUnit.AstUnits.Span) {
                 foreach (var nm in astUnit.Ast.Namespaces) {
                     ArrayPointer<byte> namespaceName;
@@ -364,7 +364,7 @@ namespace EchelonScriptCompiler.Frontend {
             }
         }
 
-        protected void GatherTypes_InheritanceList (
+        private void GatherTypes_InheritanceList (
             ref TranslationUnitData transUnit, ref AstUnitData astUnit,
             ReadOnlySpan<ES_AstTypeDeclaration_TypeName> inheritanceList, bool isClass,
             out ArrayPointer<Pointer<ES_InterfaceData>> interfacesListMem, out ES_ClassData* baseClass
@@ -378,7 +378,7 @@ namespace EchelonScriptCompiler.Frontend {
             using var interfacesList = new StructPooledList<Pointer<ES_InterfaceData>> (CL_ClearMode.Auto);
 
             foreach (var inheritId in inheritanceList) {
-                var type = ResolveTypeDeclaration (ref transUnit, symbols, srcCode, inheritId);
+                var type = ResolveTypeDeclaration (transUnit.Name, symbols, srcCode, inheritId);
 
                 if (type == null)
                     continue;
@@ -423,7 +423,7 @@ namespace EchelonScriptCompiler.Frontend {
                 interfacesListMem = ArrayPointer<Pointer<ES_InterfaceData>>.Null;
         }
 
-        protected unsafe void ResolveAggregate (ref TranslationUnitData transUnit, ref AstUnitData astUnit, ES_TypeMembers.Builder membersBuilder, ES_AstAggregateDefinition typeDef, bool isClass) {
+        private unsafe void ResolveAggregate (ref TranslationUnitData transUnit, ref AstUnitData astUnit, ES_TypeMembers.Builder membersBuilder, ES_AstAggregateDefinition typeDef, bool isClass) {
             static bool IsNameUsed (ArrayPointer<byte> id, ReadOnlySpan<ES_MemberData_Variable> vars, ReadOnlySpan<ES_MemberData_Function> funcs) {
                 foreach (var memberVar in vars) {
                     if (memberVar.Info.Name.Equals (id))
@@ -463,7 +463,7 @@ namespace EchelonScriptCompiler.Frontend {
                     case ES_AstMemberVarDefinition varDef: {
                         Debug.Assert (varDef.ValueType is not null);
 
-                        varDef.ValueType = GenerateASTTypeRef (ref transUnit, symbols, srcCode, varDef.ValueType);
+                        varDef.ValueType = GenerateASTTypeRef (transUnit.Name, symbols, srcCode, varDef.ValueType);
                         if (varDef.InitializationExpression is not null)
                             GatherTypes_Expression (ref transUnit, symbols, srcCode, varDef.InitializationExpression);
 
@@ -517,7 +517,7 @@ namespace EchelonScriptCompiler.Frontend {
             }
         }
 
-        protected void GatherTypes_Class (ref TranslationUnitData transUnit, ref AstUnitData astUnit, ES_AstClassDefinition classDef, ES_ClassData.Builder builder) {
+        private void GatherTypes_Class (ref TranslationUnitData transUnit, ref AstUnitData astUnit, ES_AstClassDefinition classDef, ES_ClassData.Builder builder) {
             if (builder.ClassData->TypeInfo.RuntimeSize > -1)
                 return;
 
@@ -532,18 +532,18 @@ namespace EchelonScriptCompiler.Frontend {
             throw new NotImplementedException ("[TODO] Classes not implemented yet.");
         }
 
-        protected void GatherTypes_Struct (ref TranslationUnitData transUnit, ref AstUnitData astUnit, ES_AstStructDefinition structDef, ES_StructData.Builder builder) {
+        private void GatherTypes_Struct (ref TranslationUnitData transUnit, ref AstUnitData astUnit, ES_AstStructDefinition structDef, ES_StructData.Builder builder) {
             GatherTypes_InheritanceList (ref transUnit, ref astUnit, structDef.InterfacesList, false, out var interfacesList, out _);
             builder.InterfacesList = interfacesList;
 
             ResolveAggregate (ref transUnit, ref astUnit, builder.MembersListBuilder, structDef, false);
         }
 
-        protected void GatherTypes_Enum (ref TranslationUnitData transUnit, ref AstUnitData astUnit, ES_AstEnumDefinition enumDef, ES_EnumData.Builder builder) {
+        private void GatherTypes_Enum (ref TranslationUnitData transUnit, ref AstUnitData astUnit, ES_AstEnumDefinition enumDef, ES_EnumData.Builder builder) {
             throw new NotImplementedException ("[TODO] Enums not implemented yet.");
         }
 
-        protected void GatherTypes_Function (ref TranslationUnitData transUnit, ref AstUnitData astUnit, ES_AstFunctionDefinition funcDef) {
+        private void GatherTypes_Function (ref TranslationUnitData transUnit, ref AstUnitData astUnit, ES_AstFunctionDefinition funcDef) {
             var symbols = astUnit.Symbols;
             var unitSrc = astUnit.SourceData;
 
@@ -574,7 +574,7 @@ namespace EchelonScriptCompiler.Frontend {
             symbols.Pop ();
         }
 
-        protected void GatherTypes_Statement (ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, SourceData src, ES_AstStatement stmt) {
+        private void GatherTypes_Statement (ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, SourceData src, ES_AstStatement stmt) {
             Debug.Assert (stmt is not null);
 
             switch (stmt) {
@@ -597,19 +597,17 @@ namespace EchelonScriptCompiler.Frontend {
 
                 #region Symbol definition
 
-                case ES_AstImportStatement importStmt: {
+                case ES_AstImportStatement importStmt:
                     AST_HandleImport (symbols, src, importStmt);
                     break;
-                }
 
-                case ES_AstTypeAlias aliasStmt: {
-                    AST_HandleAlias (ref transUnit, symbols, src, aliasStmt);
+                case ES_AstTypeAlias aliasStmt:
+                    AST_HandleAlias (transUnit.Name, symbols, src, aliasStmt);
                     break;
-                }
 
                 case ES_AstLocalVarDefinition varDef: {
                     if (varDef.ValueType is not null)
-                        varDef.ValueType = GenerateASTTypeRef (ref transUnit, symbols, src, varDef.ValueType);
+                        varDef.ValueType = GenerateASTTypeRef (transUnit.Name, symbols, src, varDef.ValueType);
 
                     foreach (var variable in varDef.Variables) {
                         if (variable.InitializationExpression is not null)
@@ -648,6 +646,12 @@ namespace EchelonScriptCompiler.Frontend {
 
                     break;
                 }
+
+                case ES_AstBreakStatement:
+                    break;
+
+                case ES_AstContinueStatement:
+                    break;
 
                 case ES_AstGotoLabelStatement:
                     break;
@@ -709,7 +713,7 @@ namespace EchelonScriptCompiler.Frontend {
             }
         }
 
-        protected void GatherTypes_Expression (ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, SourceData src, ES_AstExpression expr) {
+        private void GatherTypes_Expression (ref TranslationUnitData transUnit, SymbolStack<FrontendSymbol> symbols, SourceData src, ES_AstExpression expr) {
             Debug.Assert (expr is not null);
 
             switch (expr) {
@@ -737,7 +741,7 @@ namespace EchelonScriptCompiler.Frontend {
 
                 case ES_AstNewObjectExpression newObjExpr: {
                     if (newObjExpr.TypeDeclaration is not null)
-                        newObjExpr.TypeDeclaration = GenerateASTTypeRef (ref transUnit, symbols, src, newObjExpr.TypeDeclaration);
+                        newObjExpr.TypeDeclaration = GenerateASTTypeRef (transUnit.Name, symbols, src, newObjExpr.TypeDeclaration);
 
                     foreach (var args in newObjExpr.Arguments)
                         GatherTypes_Expression (ref transUnit, symbols, src, args.ValueExpression);
@@ -747,7 +751,7 @@ namespace EchelonScriptCompiler.Frontend {
 
                 case ES_AstNewArrayExpression newArrayExpr: {
                     if (newArrayExpr.ElementType is not null)
-                        newArrayExpr.ElementType = GenerateASTTypeRef (ref transUnit, symbols, src, newArrayExpr.ElementType);
+                        newArrayExpr.ElementType = GenerateASTTypeRef (transUnit.Name, symbols, src, newArrayExpr.ElementType);
 
                     foreach (var rank in newArrayExpr.Ranks) {
                         Debug.Assert (rank is not null);
@@ -786,7 +790,7 @@ namespace EchelonScriptCompiler.Frontend {
 
                 case ES_AstCastExpression castExpr:
                     if (castExpr.DestinationType is not null)
-                        castExpr.DestinationType = GenerateASTTypeRef (ref transUnit, symbols, src, castExpr.DestinationType);
+                        castExpr.DestinationType = GenerateASTTypeRef (transUnit.Name, symbols, src, castExpr.DestinationType);
                     GatherTypes_Expression (ref transUnit, symbols, src, castExpr.InnerExpression);
                     break;
 

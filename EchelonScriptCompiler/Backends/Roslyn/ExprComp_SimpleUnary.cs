@@ -7,122 +7,138 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-using System;
-using System.Diagnostics;
 using EchelonScriptCommon.Data.Types;
-using EchelonScriptCompiler.CompilerCommon;
+using EchelonScriptCompiler.CompilerCommon.IR;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace EchelonScriptCompiler.Backends.RoslynBackend {
     public unsafe sealed partial class RoslynCompilerBackend {
-        private ExpressionData GenerateCode_UnaryExpr (ExpressionData inner, SimpleUnaryExprType exprOp) {
-            if (!envBuilder!.UnaryOpCompat (inner.Type, exprOp, out var _, out _))
-                throw new CompilationException (ES_BackendErrors.FrontendError);
+        private static ExpressionData CompileExpression_Unary (
+            ref PassData passData,
+            ref FunctionData funcData,
+            ESIR_UnaryExpression expr
+        ) {
+            var innerExpr = CompileExpression (ref passData, ref funcData, expr.ExprInner);
 
-            Debug.Assert (inner.Value != null);
-
-            if (inner.Type->TypeTag == ES_TypeTag.Int)
-                return GenerateCode_UnaryExpr_Int (inner, exprOp);
-            else if (inner.Type->TypeTag == ES_TypeTag.Bool)
-                return GenerateCode_UnaryExpr_Bool (inner, exprOp);
-            else if (inner.Type->TypeTag == ES_TypeTag.Float)
-                return GenerateCode_UnaryExpr_Float (inner, exprOp);
-            else if (inner.Type->TypeTag == ES_TypeTag.Reference)
-                return GenerateCode_UnaryExpr_Ref (inner, exprOp);
+            if (innerExpr.Type->TypeTag == ES_TypeTag.Bool)
+                return CompileExpression_UnaryBool (ref passData, expr, ref innerExpr);
+            else if (innerExpr.Type->TypeTag == ES_TypeTag.Int)
+                return CompileExpression_UnaryInt (ref passData, expr, ref innerExpr);
+            else if (innerExpr.Type->TypeTag == ES_TypeTag.Float)
+                return CompileExpression_UnaryFloat (ref passData, expr, ref innerExpr);
+            else if (innerExpr.Type->TypeTag == ES_TypeTag.Reference)
+                return CompileExpression_UnaryRef (ref passData, expr, ref innerExpr);
             else
-                throw new NotImplementedException ("Operation not implemented yet.");
-
-            throw new CompilationException (ES_BackendErrors.FrontendError);
+                throw new CompilationException ("Binary expression not supported.");
         }
 
-        private ExpressionData GenerateCode_UnaryExpr_Int (ExpressionData inner, SimpleUnaryExprType exprOp) {
-            Debug.Assert (inner.Type->TypeTag == ES_TypeTag.Int);
-            Debug.Assert (inner.Value is not null);
+        private static ExpressionData CompileExpression_UnarySimple (
+            ref PassData passData,
+            ESIR_UnaryExpression expr,
+            ref ExpressionData innerExpr
+        ) {
+            var postfix = false;
+            SyntaxKind op;
 
-            var innerInt = (ES_IntTypeData*) inner.Type;
+            switch (expr.Kind) {
+                case ESIR_NodeKind.UnaryNegative: op = SyntaxKind.UnaryMinusExpression; break;
+                case ESIR_NodeKind.UnaryLogicalNot: op = SyntaxKind.LogicalNotExpression; break;
+                case ESIR_NodeKind.UnaryBitNot: op = SyntaxKind.BitwiseNotExpression; break;
 
-            ExpressionSyntax value;
-            switch (exprOp) {
-                case SimpleUnaryExprType.BitNot:
-                    value = PrefixUnaryExpression (SyntaxKind.BitwiseNotExpression, inner.Value);
+                case ESIR_NodeKind.UnaryPreIncrement: op = SyntaxKind.PreIncrementExpression; break;
+                case ESIR_NodeKind.UnaryPreDecrement: op = SyntaxKind.PreDecrementExpression; break;
+                case ESIR_NodeKind.UnaryPostIncrement:
+                    op = SyntaxKind.PostIncrementExpression;
+                    postfix = true;
                     break;
-                case SimpleUnaryExprType.Negative:
-                    if (innerInt->Unsigned)
-                        throw new CompilationException (ES_BackendErrors.FrontendError);
-                    value = PrefixUnaryExpression (SyntaxKind.UnaryMinusExpression, inner.Value);
-                    break;
-                case SimpleUnaryExprType.Positive:
-                    value = inner.Value;
+                case ESIR_NodeKind.UnaryPostDecrement:
+                    op = SyntaxKind.PostDecrementExpression;
+                    postfix = true;
                     break;
 
                 default:
-                    throw new NotImplementedException ("Operation not implemented yet.");
+                    throw new CompilationException ("Not a simple binary operation.");
             }
 
-            return new ExpressionData { Type = inner.Type, Value = value, Constant = inner.Constant, Writable = false, };
+            ExpressionSyntax value = !postfix
+                ? PrefixUnaryExpression (op, innerExpr.Value!)
+                : PostfixUnaryExpression (op, innerExpr.Value!);
+
+            return new ExpressionData { Type = innerExpr.Type, Value = value, };
         }
 
-        private ExpressionData GenerateCode_UnaryExpr_Bool (ExpressionData inner, SimpleUnaryExprType exprOp) {
-            Debug.Assert (inner.Type->TypeTag == ES_TypeTag.Bool);
-            Debug.Assert (inner.Value is not null);
-
-            ExpressionSyntax value;
-            switch (exprOp) {
-                case SimpleUnaryExprType.LogicalNot:
-                    value = PrefixUnaryExpression (SyntaxKind.LogicalNotExpression, inner.Value);
-                    break;
+        private static ExpressionData CompileExpression_UnaryBool (
+            ref PassData passData,
+            ESIR_UnaryExpression expr,
+            ref ExpressionData innerExpr
+        ) {
+            switch (expr.Kind) {
+                case ESIR_NodeKind.UnaryLogicalNot:
+                    return CompileExpression_UnarySimple (ref passData, expr, ref innerExpr);
 
                 default:
-                    throw new NotImplementedException ("Operation not implemented yet.");
+                    throw new CompilationException ("Invalid unary op for bool.");
             }
-
-            return new ExpressionData { Type = inner.Type, Value = value, Constant = inner.Constant, Writable = false, };
         }
 
-        private ExpressionData GenerateCode_UnaryExpr_Float (ExpressionData inner, SimpleUnaryExprType exprOp) {
-            Debug.Assert (inner.Type->TypeTag == ES_TypeTag.Float);
-            Debug.Assert (inner.Value is not null);
+        private static ExpressionData CompileExpression_UnaryInt (
+            ref PassData passData,
+            ESIR_UnaryExpression expr,
+            ref ExpressionData innerExpr
+        ) {
+            switch (expr.Kind) {
+                case ESIR_NodeKind.UnaryNegative:
+                case ESIR_NodeKind.UnaryBitNot:
 
-            ExpressionSyntax value;
-            switch (exprOp) {
-                case SimpleUnaryExprType.Negative:
-                    value = PrefixUnaryExpression (SyntaxKind.UnaryMinusExpression, inner.Value);
-                    break;
-                case SimpleUnaryExprType.Positive:
-                    value = inner.Value;
-                    break;
+                case ESIR_NodeKind.UnaryPreIncrement:
+                case ESIR_NodeKind.UnaryPreDecrement:
+                case ESIR_NodeKind.UnaryPostIncrement:
+                case ESIR_NodeKind.UnaryPostDecrement:
+                    return CompileExpression_UnarySimple (ref passData, expr, ref innerExpr);
 
                 default:
-                    throw new NotImplementedException ("Operation not implemented yet.");
+                    throw new CompilationException ("Invalid unary op for int.");
             }
-
-            return new ExpressionData { Type = inner.Type, Value = value, Constant = inner.Constant, Writable = false, };
         }
 
-        private ExpressionData GenerateCode_UnaryExpr_Ref (ExpressionData inner, SimpleUnaryExprType exprOp) {
-            Debug.Assert (inner.Type->TypeTag == ES_TypeTag.Reference);
-            Debug.Assert (inner.Value is not null);
+        private static ExpressionData CompileExpression_UnaryFloat (
+            ref PassData passData,
+            ESIR_UnaryExpression expr,
+            ref ExpressionData innerExpr
+        ) {
+            switch (expr.Kind) {
+                case ESIR_NodeKind.UnaryNegative:
 
-            var innerRef = (ES_ReferenceData*) inner.Type;
-
-            ES_TypeInfo* finalType;
-            bool isAddressable;
-
-            ExpressionSyntax value;
-            switch (exprOp) {
-                case SimpleUnaryExprType.Dereference:
-                    value = PrefixUnaryExpression (SyntaxKind.PointerIndirectionExpression, inner.Value);
-                    finalType = innerRef->PointedType;
-                    isAddressable = true;
-                    break;
+                case ESIR_NodeKind.UnaryPreIncrement:
+                case ESIR_NodeKind.UnaryPreDecrement:
+                case ESIR_NodeKind.UnaryPostIncrement:
+                case ESIR_NodeKind.UnaryPostDecrement:
+                    return CompileExpression_UnarySimple (ref passData, expr, ref innerExpr);
 
                 default:
-                    throw new NotImplementedException ("Operation not implemented yet.");
+                    throw new CompilationException ("Invalid unary op for float.");
             }
+        }
 
-            return new ExpressionData { Type = finalType, Value = value, Constant = false, Writable = isAddressable, };
+        private static ExpressionData CompileExpression_UnaryRef (
+            ref PassData passData,
+            ESIR_UnaryExpression expr,
+            ref ExpressionData innerExpr
+        ) {
+            var refType = (ES_ReferenceData*) innerExpr.Type;
+
+            switch (expr.Kind) {
+                case ESIR_NodeKind.UnaryDereference: {
+                    var innerValue = CompileCode_NullCheck (innerExpr.Value!, refType->PointedType);
+                    var value = PrefixUnaryExpression (SyntaxKind.PointerIndirectionExpression, innerValue);
+                    return new ExpressionData { Type = refType->PointedType, Value = value, };
+                }
+
+                default:
+                    throw new CompilationException ("Invalid unary op for bool.");
+            }
         }
     }
 }

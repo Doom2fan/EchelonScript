@@ -18,7 +18,7 @@ using EchelonScriptCompiler.Utilities;
 
 namespace EchelonScriptCompiler.Frontend {
     public unsafe partial class CompilerFrontend {
-        protected void CreateTypes (ref TranslationUnitData transUnit) {
+        private void CreateTypes (ref TranslationUnitData transUnit) {
             var idPool = Environment!.IdPool;
 
             foreach (ref var astUnit in transUnit.AstUnits.Span) {
@@ -69,7 +69,7 @@ namespace EchelonScriptCompiler.Frontend {
             }
         }
 
-        protected void CreateTypes_Aggregate (
+        private void CreateTypes_Aggregate (
             ref TranslationUnitData transUnit, ES_NamespaceData.Builder namespaceBuilder,
             ES_TypeTag type, ES_AstAggregateDefinition typeDef
         ) {
@@ -98,7 +98,7 @@ namespace EchelonScriptCompiler.Frontend {
             EnvironmentBuilder!.PointerAstMap.Add ((IntPtr) typeData, typeDef);
         }
 
-        protected void GenerateTypesList () {
+        private void GenerateTypesList () {
             foreach (var nmKVP in EnvironmentBuilder!.NamespaceBuilders) {
                 var namespaceName = nmKVP.Key;
                 var namespaceBuilder = nmKVP.Value;
@@ -127,7 +127,7 @@ namespace EchelonScriptCompiler.Frontend {
             }
         }
 
-        protected void GenerateBuiltinTypes () {
+        private void GenerateBuiltinTypes () {
             Debug.Assert (Environment is not null);
             Debug.Assert (EnvironmentBuilder is not null);
 
@@ -158,7 +158,7 @@ namespace EchelonScriptCompiler.Frontend {
             globalTypesList.Add (boolType);
         }
 
-        protected Pointer<ES_TypeInfo> GenerateBuiltinTypes_Int (ES_IntSize size, bool unsigned) {
+        private Pointer<ES_TypeInfo> GenerateBuiltinTypes_Int (ES_IntSize size, bool unsigned) {
             var intDataPtr = EnvironmentBuilder!.MemoryManager.GetMemory<ES_IntTypeData> ();
             var namePtr = Environment!.IdPool.GetIdentifier (ES_PrimitiveTypes.GetIntName (size, unsigned));
             var fqn = new ES_FullyQualifiedName (Environment.GlobalTypesNamespace, namePtr);
@@ -168,7 +168,7 @@ namespace EchelonScriptCompiler.Frontend {
             return new Pointer<ES_TypeInfo> (&intDataPtr->TypeInfo);
         }
 
-        protected Pointer<ES_TypeInfo> GenerateBuiltinTypes_Float (ES_FloatSize size) {
+        private Pointer<ES_TypeInfo> GenerateBuiltinTypes_Float (ES_FloatSize size) {
             var floatDataPtr = EnvironmentBuilder!.MemoryManager.GetMemory<ES_FloatTypeData> ();
             var namePtr = Environment!.IdPool.GetIdentifier (ES_PrimitiveTypes.GetFloatName (size));
             var fqn = new ES_FullyQualifiedName (Environment.GlobalTypesNamespace, namePtr);
@@ -178,7 +178,7 @@ namespace EchelonScriptCompiler.Frontend {
             return new Pointer<ES_TypeInfo> (&floatDataPtr->TypeInfo);
         }
 
-        protected Pointer<ES_TypeInfo> GenerateBuiltinTypes_Simple (ReadOnlySpan<char> name, ES_TypeTag tag, int runtimeSize) {
+        private Pointer<ES_TypeInfo> GenerateBuiltinTypes_Simple (ReadOnlySpan<char> name, ES_TypeTag tag, int runtimeSize) {
             var voidDataPtr = EnvironmentBuilder!.MemoryManager.GetMemory<ES_TypeInfo> ();
             var namePtr = Environment!.IdPool.GetIdentifier (name);
             var fqn = new ES_FullyQualifiedName (Environment.GlobalTypesNamespace, namePtr);

@@ -11,8 +11,8 @@ using System.Diagnostics;
 using EchelonScriptCompiler.CompilerCommon;
 
 namespace EchelonScriptCompiler.Frontend {
-    public unsafe partial class CompilerFrontend {
-        protected void FoldConstants_BinaryExpression_BoolBool_Comp (
+    internal unsafe static partial class Compiler_ConstantFolding {
+        private static void FoldExpression_Binary_BoolBool_Comp (
             ref ES_AstExpression expr, SimpleBinaryExprType op,
             ES_AstBooleanConstantExpression lhs, ES_AstBooleanConstantExpression rhs
         ) {
@@ -34,7 +34,7 @@ namespace EchelonScriptCompiler.Frontend {
             expr = new ES_AstBooleanConstantExpression (finalValue, expr);
         }
 
-        protected void FoldConstants_BinaryExpression_BoolBool_Arithmetic (
+        private static void FoldExpression_Binary_BoolBool_Arithmetic (
             ref ES_AstExpression expr, SimpleBinaryExprType op,
             ES_AstBooleanConstantExpression lhs, ES_AstBooleanConstantExpression rhs
         ) {

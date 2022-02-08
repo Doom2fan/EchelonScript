@@ -11,8 +11,8 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using EchelonScriptCommon.Data.Types;
+using EchelonScriptCompiler.CompilerCommon.IR;
 using EchelonScriptCompiler.Data;
-using EchelonScriptCompiler.Frontend;
 
 namespace EchelonScriptCompiler.Backends {
     public unsafe interface IBackendData : IDisposable {
@@ -44,7 +44,7 @@ namespace EchelonScriptCompiler.Backends {
             List<EchelonScriptErrorMessage> infoMsgList
         );
 
-        bool CompileEnvironment (EchelonScriptEnvironment environment, EchelonScriptEnvironment.Builder builder, Span<TranslationUnitData> transUnits);
+        bool CompileEnvironment (EchelonScriptEnvironment environment, EchelonScriptEnvironment.Builder builder, ESIR_Tree irTree);
 
         #endregion
     }

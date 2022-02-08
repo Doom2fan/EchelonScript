@@ -13,7 +13,9 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using ChronosLib.Pooled;
 using EchelonScriptCommon.Data.Types;
+using EchelonScriptCompiler.CompilerCommon.IR;
 using EchelonScriptCompiler.Frontend;
+using EchelonScriptCompiler.Utilities;
 
 namespace EchelonScriptCompiler.Backends.RoslynBackend {
     public unsafe sealed partial class RoslynCompilerBackend {
@@ -85,6 +87,22 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             mangleChars.AddRange (func->Name.TypeNameString);
 
             return mangleChars.Span.GetPooledString ();
+        }
+
+        internal static string MangleStaticVariable ([DisallowNull] ESIR_StaticVariable staticVar) {
+            const string prefix = "StaticVar_";
+            var enc = Encoding.ASCII;
+            var varName = staticVar.Name;
+
+            var prefixLen = enc.GetByteCount (prefix);
+            using var chars = PooledArray<byte>.GetArray (prefixLen + varName.Length);
+
+            var writtenPrefixLen = enc.GetBytes (prefix, chars);
+            Debug.Assert (writtenPrefixLen == prefixLen);
+
+            varName.Span.CopyTo (chars.Span [prefixLen..]);
+
+            return varName.Span.GetPooledString (enc);
         }
 
         #region Type names

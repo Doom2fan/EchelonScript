@@ -352,6 +352,9 @@ namespace EchelonScriptCompiler.Data {
                 if (lhsType->TypeTag == ES_TypeTag.Reference && rhsType->TypeTag == ES_TypeTag.Reference)
                     return BinaryOpCompat_RefRef (lhsType, rhsType, exprType, out finalType, out isConst);
 
+                if (lhsType->TypeTag == ES_TypeTag.Array && rhsType->TypeTag == ES_TypeTag.Array)
+                    return BinaryOpCompat_ArrayArray (lhsType, rhsType, exprType, out finalType, out isConst);
+
                 isConst = false;
                 return false;
             }
@@ -370,14 +373,15 @@ namespace EchelonScriptCompiler.Data {
                         return true;
 
                     case SimpleBinaryExprType.Assign:
+                        isConst = false;
                         if (lhsType->IsReferenceType ())
                             finalType = lhsType;
-                        else if (rhsType->IsReferenceType ())
-                            finalType = rhsType;
-                        else
+                        else if (rhsType->IsReferenceType ()) {
+                            finalType = environment.TypeUnknownValue;
+                            return false;
+                        } else
                             goto default;
 
-                        isConst = false;
                         return true;
 
                     default:
@@ -449,13 +453,13 @@ namespace EchelonScriptCompiler.Data {
                 bool isCompatible;
 
                 if (exprType.IsBitShift ()) {
-                    if (!rhsIntType->Unsigned)
+                    if (rhsIntType->Unsigned)
                         return false;
 
-                    if (rhsIntType->IntSize > lhsIntType->IntSize)
+                    if (rhsIntType->IntSize > ES_IntSize.Int32)
                         return false;
 
-                    return true;
+                    isCompatible = true;
                 } else if (lhsIntType->Unsigned == rhsIntType->Unsigned)
                     isCompatible = true;
                 else
@@ -601,6 +605,36 @@ namespace EchelonScriptCompiler.Data {
 
                 finalType = environment.TypeUnknownValue;
                 isConst = false;
+
+                if (lhsType != rhsType)
+                    return false;
+
+                switch (exprType) {
+                    case SimpleBinaryExprType.Assign:
+                        finalType = lhsType;
+                        break;
+
+                    case SimpleBinaryExprType.Equals:
+                    case SimpleBinaryExprType.NotEquals:
+                        finalType = TypeBool;
+                        break;
+
+                    default:
+                        return false;
+                }
+
+                return true;
+            }
+
+            private bool BinaryOpCompat_ArrayArray (ES_TypeInfo* lhsType, ES_TypeInfo* rhsType, SimpleBinaryExprType exprType, out ES_TypeInfo* finalType, out bool isConst) {
+                Debug.Assert (lhsType->TypeTag == ES_TypeTag.Array);
+                Debug.Assert (rhsType->TypeTag == ES_TypeTag.Array);
+
+                finalType = environment.TypeUnknownValue;
+                isConst = false;
+
+                var lhsArr = (ES_ArrayTypeData*) lhsType;
+                var rhsArr = (ES_ArrayTypeData*) rhsType;
 
                 if (lhsType != rhsType)
                     return false;
@@ -785,6 +819,11 @@ namespace EchelonScriptCompiler.Data {
                 ReadOnlySpan<ES_MemberData_Variable> varsList,
                 ReadOnlySpan<ES_MemberData_Function> funcsList
             ) {
+                if (varsList.Length + funcsList.Length == 0) {
+                    membersBuilder.MembersList = ArrayPointer<Pointer<ES_MemberData>>.Null;
+                    return;
+                }
+
                 var varsSize = varsList.Length * sizeof (ES_MemberData_Variable);
                 var funcsSize = funcsList.Length * sizeof (ES_MemberData_Function);
 

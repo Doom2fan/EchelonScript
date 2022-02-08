@@ -19,11 +19,12 @@ using System.Runtime.Loader;
 using System.Text;
 using ChronosLib.Pooled;
 using Collections.Pooled;
+using CommunityToolkit.HighPerformance;
 using EchelonScriptCommon;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.GarbageCollection;
 using EchelonScriptCommon.Utilities;
-using EchelonScriptCompiler.CompilerCommon;
+using EchelonScriptCompiler.CompilerCommon.IR;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Frontend;
 using EchelonScriptCompiler.Utilities;
@@ -50,7 +51,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
         private Dictionary<Pointer<ES_FunctionData>, MethodInfo> functionMethodMappings;
         private Dictionary<(MethodInfo, Type), Delegate> methodDelegateMappings;
 
-        private ArrayPointer<Pointer<ES_ObjectAddress>> rootsArray;
+        private ArrayPointer<nint> rootsArray;
 
         #endregion
 
@@ -62,12 +63,12 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
         #region ================== Constructors
 
-        public RoslynBackendData (
-            EchelonScriptEnvironment env, EchelonScriptEnvironment.Builder envBuilder,
-            ArrayPointer<Pointer<ES_ObjectAddress>> rootsArr,
+        internal RoslynBackendData (
+            ref RoslynCompilerBackend.PassData passData,
+            ArrayPointer<nint> rootsArr,
             Stream peStream, Stream pdbStream, string name
         ) {
-            environment = env;
+            environment = passData.Env;
 
             rootsArray = rootsArr;
 
@@ -80,7 +81,24 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             functionMethodMappings = new Dictionary<Pointer<ES_FunctionData>, MethodInfo> ();
             methodDelegateMappings = new Dictionary<(MethodInfo, Type), Delegate> ();
 
-            var globalStaticConsMethodInfo = GetGlobalFunction (RoslynCompilerBackend.GlobalStaticConsName);
+            foreach (var map in passData.Mappings) {
+                switch (map.Type) {
+                    case RoslynCompilerBackend.MappingType.Function: {
+                        if (!map.TryGetFunction (out var funcData, out var roslynName))
+                            Debug.Fail ("???");
+
+                        Debug.Assert (roslynName is not null);
+                        functionMethodMappings [funcData] = GetGlobalFunction (roslynName);
+
+                        break;
+                    }
+
+                    default:
+                        throw new NotImplementedException ("Mapping type not implemented.");
+                }
+            }
+
+            var globalStaticConsMethodInfo = GetGlobalFunction (ES_Constants.GlobalStaticConstructorName);
             globalStaticConsMethodInfo.Invoke (null, null);
         }
 
@@ -88,23 +106,21 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
         #region ================== Instance methods
 
-        private MethodInfo GetFunctionMethodInfo ([DisallowNull] ES_FunctionData* func) {
+        private MethodInfo? GetFunctionMethodInfo ([DisallowNull] ES_FunctionData* func) {
             if (false) {
                 // TODO: Add support for member functions.
             } else {
-                if (functionMethodMappings.TryGetValue (func, out var ret)) {
-                    Debug.Assert (ret is not null);
-                    return ret;
-                }
+                if (!functionMethodMappings.TryGetValue (func, out var ret))
+                    return null;
 
-                ret = GetGlobalFunction (RoslynCompilerBackend.MangleGlobalFunctionName (func));
-
-                functionMethodMappings.Add (func, ret);
+                Debug.Assert (ret is not null);
                 return ret;
             }
         }
 
-        private MethodInfo GetGlobalFunction (ReadOnlySpan<char> funcName) {
+        private MethodInfo GetGlobalFunction (ReadOnlySpan<char> funcName) => GetGlobalFunction (funcName.GetPooledString ());
+
+        private MethodInfo GetGlobalFunction (string funcName) {
             Debug.Assert (assembly is not null);
 
             const string globalStorageTypeName
@@ -114,7 +130,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             var globalStorageType = assembly.GetType (globalStorageTypeName);
             Debug.Assert (globalStorageType is not null);
 
-            var methodInfo = globalStorageType.GetMethod (funcName.GetPooledString ());
+            var methodInfo = globalStorageType.GetMethod (funcName);
             Debug.Assert (methodInfo is not null);
 
             return methodInfo;
@@ -125,6 +141,9 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
             var delegateType = typeof (T);
             var methodInfo = GetFunctionMethodInfo (func);
+
+            if (methodInfo is null)
+                return null;
 
             if (methodDelegateMappings.TryGetValue ((methodInfo, delegateType), out var delRet)) {
                 Debug.Assert (delRet is not null);
@@ -184,94 +203,65 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
         #region ================== Enums
 
-        private enum SymbolType : int {
-            None,
-            Type,
-            Variable,
+        internal enum MappingType {
             Function,
-        }
-
-        private enum VariableFlags {
-            Using,
-            Ref,
-            Out,
         }
 
         #endregion
 
         #region ================== Structs
 
-        private struct Symbol {
-            #region ================== Instance fields
+        internal struct BackendMapping {
+            public MappingType Type { get; private init; }
+            private void* valuePointer { get; init; }
+            private string? valueString { get; init; }
 
-            public readonly SymbolType Tag;
-
-            private readonly void* ptrData;
-            private readonly VariableData varData;
-
-            #endregion
-
-            #region ================== Constructors
-
-            public Symbol (ES_TypeInfo* type) {
-                Tag = SymbolType.Type;
-
-                ptrData = type;
-
-                varData = default;
+            public static BackendMapping Function (ES_FunctionData* funcData, string roslynName) {
+                return new BackendMapping {
+                    Type = MappingType.Function,
+                    valuePointer = funcData,
+                    valueString = roslynName,
+                };
             }
 
-            public Symbol (VariableData data) {
-                Tag = SymbolType.Variable;
+            public bool TryGetFunction (out ES_FunctionData* funcData, out string? roslynName) {
+                if (Type != MappingType.Function) {
+                    funcData = null;
+                    roslynName = null;
+                    return false;
+                }
 
-                varData = data;
-
-                ptrData = null;
+                funcData = (ES_FunctionData*) valuePointer;
+                roslynName = valueString;
+                return true;
             }
-
-            public Symbol (ES_FunctionData* data) {
-                Tag = SymbolType.Function;
-
-                ptrData = data;
-
-                varData = default;
-            }
-
-            #endregion
-
-            #region ================== Instance methods
-
-            public ES_TypeInfo* MatchType () {
-                Debug.Assert (Tag == SymbolType.Type);
-
-                return (ES_TypeInfo*) ptrData;
-            }
-
-            public VariableData MatchVariable () {
-                Debug.Assert (Tag == SymbolType.Variable);
-
-                return varData;
-            }
-
-            public ES_FunctionData* MatchFunction () {
-                Debug.Assert (Tag == SymbolType.Function);
-
-                return (ES_FunctionData*) ptrData;
-            }
-
-            #endregion
         }
 
-        private struct VariableData {
-            public VariableFlags Flags;
-            public ES_TypeInfo* Type;
-            public ExpressionSyntax RoslynExpr;
+        internal ref struct PassData {
+            public EchelonScriptEnvironment Env { get; init; }
+            public EchelonScriptEnvironment.Builder EnvBuilder { get; init; }
 
-            public VariableData (ES_TypeInfo* type, VariableFlags flags, ExpressionSyntax roslynExpr) {
-                Flags = flags;
-                Type = type;
-                RoslynExpr = roslynExpr;
-            }
+            public List<EchelonScriptErrorMessage> ErrorList { get; init; }
+            public List<EchelonScriptErrorMessage> WarnList { get; init; }
+            public List<EchelonScriptErrorMessage> InfoList { get; init; }
+
+            public ChronosLib.Unmanaged.IMemoryManager MemoryManager => EnvBuilder.MemoryManager;
+            public UnmanagedIdentifierPool IdPool => Env.IdPool;
+
+            public Ref<StructPooledList<BackendMapping>> MappingsInit { private get; init; }
+            public ref StructPooledList<BackendMapping> Mappings => ref MappingsInit.Value;
+
+            public Ref<StructPooledList<MemberDeclarationSyntax>> GlobalMembersInit { private get; init; }
+            public ref StructPooledList<MemberDeclarationSyntax> GlobalMembers => ref GlobalMembersInit.Value;
+
+            public Ref<StructPooledList<MemberDeclarationSyntax>> TypesInit { private get; init; }
+            public ref StructPooledList<MemberDeclarationSyntax> Types => ref TypesInit.Value;
+
+            public Dictionary<ArrayPointer<byte>, ESIR_StaticVariable> StaticVariables { get; init; }
+            public Dictionary<ArrayPointer<byte>, ESIR_Function> Functions { get; init; }
+            public Dictionary<Pointer<ES_TypeInfo>, ESIR_Struct> Structs { get; init; }
+
+            public SymbolStack<LabelSymbol> LabelStack { get; init; }
         }
 
         #endregion
@@ -281,9 +271,6 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
         private List<EchelonScriptErrorMessage> errorList;
         private List<EchelonScriptErrorMessage> warningList;
         private List<EchelonScriptErrorMessage> infoList;
-
-        private EchelonScriptEnvironment? env;
-        private EchelonScriptEnvironment.Builder? envBuilder;
 
         #endregion
 
@@ -299,9 +286,6 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             errorList = null!;
             warningList = null!;
             infoList = null!;
-
-            env = null;
-            envBuilder = null;
         }
 
         #endregion
@@ -318,81 +302,71 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             errorList = errList;
             warningList = warnList;
             infoList = infoMsgList;
-
-            env = null;
         }
 
-        public bool CompileEnvironment (EchelonScriptEnvironment environment, EchelonScriptEnvironment.Builder builder, Span<TranslationUnitData> transUnits) {
+        public bool CompileEnvironment (EchelonScriptEnvironment environment, EchelonScriptEnvironment.Builder builder, ESIR_Tree irTree) {
             CheckDisposed ();
 
             if (errorList.Count > 0)
                 return false;
 
+            var mappings = new StructPooledList<BackendMapping> (CL_ClearMode.Auto);
+            var members = new StructPooledList<MemberDeclarationSyntax> (CL_ClearMode.Auto);
+            var types = new StructPooledList<MemberDeclarationSyntax> (CL_ClearMode.Auto);
+            using var labelStack = new SymbolStack<LabelSymbol> (new LabelSymbol ());
+
             try {
-                BeginEnvironment (environment, builder);
+                var passData = new PassData {
+                    Env = environment,
+                    EnvBuilder = builder,
 
-                CompileCode (transUnits);
+                    ErrorList = errorList,
+                    WarnList = warningList,
+                    InfoList = infoList,
 
-                EndEnvironment ();
+                    MappingsInit = new (ref mappings),
+                    GlobalMembersInit = new (ref members),
+                    TypesInit = new (ref types),
+
+                    StaticVariables = new (),
+                    Functions = new (),
+                    Structs = new (),
+
+                    LabelStack = labelStack,
+                };
+
+                return CompileCode (ref passData, irTree);
             } catch when (!Debugger.IsAttached) {
-                env = null;
-                envBuilder = null;
+                mappings.Dispose ();
+                members.Dispose ();
+                types.Dispose ();
 
                 throw;
             }
-
-            return true;
         }
 
         #endregion
 
         #region Compilation functions
 
-        private void BeginEnvironment (EchelonScriptEnvironment environment, EchelonScriptEnvironment.Builder builder) {
-            CheckDisposed ();
+        private static bool CompileCode (ref PassData passData, ESIR_Tree irTree) {
+            foreach (var staticVar in irTree.StaticVariables.Elements) {
+                if (!passData.StaticVariables.TryAdd (staticVar.Name, staticVar))
+                    throw new CompilationException ("Cannot have multiple static variables with the same name.");
+            }
 
-            if (env is not null)
-                throw new CompilationException (ES_BackendErrors.EnvStarted);
+            foreach (var func in irTree.Functions.Elements) {
+                if (!passData.Functions.TryAdd (func.Name, func))
+                    throw new CompilationException ("Cannot have multiple functions with the same name.");
+            }
 
-            env = environment;
-            envBuilder = builder;
-        }
-
-        private void EndEnvironment () {
-            CheckDisposed ();
-            CheckEnvironment ();
-
-            Debug.Assert (envBuilder is not null);
-
-            env = null;
-            envBuilder = null;
-        }
-
-        private void BeginTranslationUnit (ref TranslationUnitData transUnit) {
-            CheckDisposed ();
-            CheckEnvironment ();
-        }
-
-        private void EndTranslationUnit () {
-            CheckDisposed ();
-            CheckEnvironment ();
-            CheckTranslationUnit ();
-        }
-
-        private bool CompileCode (Span<TranslationUnitData> transUnits) {
-            CheckEnvironment ();
-            Debug.Assert (env is not null);
-            Debug.Assert (envBuilder is not null);
-
-            using var symbols = new SymbolStack<Symbol> (new Symbol ());
-            var idPool = env.IdPool;
-
-            using var memberDefinitions = new StructPooledList<MemberDeclarationSyntax> (CL_ClearMode.Auto);
-            using var globalFunctions = new StructPooledList<MemberDeclarationSyntax> (CL_ClearMode.Auto);
-            using var globalStaticConsBody = new StructPooledList<StatementSyntax> (CL_ClearMode.Auto);
+            foreach (var structDef in irTree.Structs.Elements) {
+                if (!passData.Structs.TryAdd (structDef.Type, structDef))
+                    throw new CompilationException ("Cannot have multiple structs with the same name.");
+            }
 
             // Emit types and functions with no user code.
-            foreach (var namespaceKVP in env.Namespaces) {
+            foreach (var namespaceKVP in passData.Env.Namespaces) {
                 var namespaceData = namespaceKVP.Value;
 
                 foreach (var typeAddr in namespaceData.Types) {
@@ -415,8 +389,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
                         case ES_TypeTag.Array: {
                             var arrayType = (ES_ArrayTypeData*) typePtr;
-                            var arrayRoslynType = GenerateCode_Array (arrayType);
-                            memberDefinitions.Add (arrayRoslynType);
+                            CompileCode_Array (ref passData, arrayType);
                             break;
                         }
 
@@ -426,122 +399,114 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 }
             }
 
-            // Pre-emit the function prototypes/headers so we don't get errors when trying to get
-            // them for calls later.
-            // TODO: Handle functions in types!
-            foreach (var namespaceKVP in env.Namespaces) {
-                var namespaceData = namespaceKVP.Value;
+            if (!CompileStaticVariables (ref passData, irTree.StaticVariables, out var gcRoots))
+                return false;
 
-                foreach (var funcKVP in namespaceData.Functions)
-                    ;//GetOrGenerateFunction (namespaceData, null, funcKVP.Key, out _, out _);
+            foreach (var structDef in irTree.Structs.Elements)
+                CompileStruct (ref passData, structDef);
+
+            foreach (var func in irTree.Functions.Elements)
+                CompileFunction (ref passData, func);
+
+            if (!CompileCSharp (ref passData, gcRoots))
+                return false;
+
+            return passData.ErrorList.Count > 0;
+        }
+
+        private static bool CompileStaticVariables (ref PassData passData, ESIR_List<ESIR_StaticVariable> staticVars, out ArrayPointer<nint> roots) {
+            var alignmentVal = sizeof (nint);
+
+            var totalMem = 0;
+            using var rootsList = new StructPooledList<nint> (CL_ClearMode.Auto);
+
+            var staticVarsMemRef = CompileCode_StaticVarsMem ();
+            foreach (var staticVar in staticVars.Elements) {
+                var varType = staticVar.Type.Pointer;
+                var varRoslynType = GetRoslynType (varType);
+
+                var baseOffs = (totalMem + alignmentVal - 1) / alignmentVal * alignmentVal;
+                var refsSpan = rootsList.AddSpan (varType->RefsList.Length);
+                totalMem = baseOffs + varType->RuntimeSize;
+
+                var refNum = 0;
+                foreach (var refOffs in varType->RefsList.Span)
+                    refsSpan [refNum++] = baseOffs + refOffs;
+
+                var accessExpr = RefExpression (PrefixUnaryExpression (
+                    SyntaxKind.PointerIndirectionExpression,
+                    CastExpression (
+                        PointerType (varRoslynType),
+                        BinaryExpression (
+                            SyntaxKind.AddExpression,
+                            staticVarsMemRef,
+                            NumericLiteral (baseOffs)
+                        )
+                    )
+                ));
+
+                var mangledName = MangleStaticVariable (staticVar);
+                passData.GlobalMembers.Add (
+                    PropertyDeclaration (
+                        RefType (varRoslynType),
+                        mangledName
+                    ).WithModifiers (TokenList (
+                        Token (SyntaxKind.PublicKeyword),
+                        Token (SyntaxKind.StaticKeyword)
+                    )).WithAccessorList (AccessorList (ListParams (
+                        GetterDeclaration ()
+                        .WithAttributeLists (SingletonList (SimpleAttributeList (
+                            Attribute_MethodImpl_AggressiveInlining (),
+                            Attribute_ExcludeFromStackTrace ()
+                        ))).WithExpressionBody (ArrowExpressionClause (accessExpr))
+                    )))
+                );
             }
 
-            // Emit the type bodies. (Needs to be done before function bodies)
-            foreach (ref var transUnit in transUnits) {
-                BeginTranslationUnit (ref transUnit);
-
-                foreach (ref var astUnit in transUnit.AstUnits.Span) {
-                    if (!astUnit.Ast.Valid)
-                        throw new CompilationException (ES_BackendErrors.FrontendError);
-
-                    var src = astUnit.Ast.Source.Span;
-                    PopulateSymbolsFromFrontend (symbols, ref astUnit, out var astStackCount);
-
-                    foreach (var nmDef in astUnit.Ast.Namespaces) {
-                        symbols.Push ();
-
-                        var namespaceBuilder = GetNamespace (nmDef.NamespaceName);
-                        var namespaceData = namespaceBuilder.NamespaceData;
-                        ImportNamespaceSymbols (symbols, namespaceBuilder);
-
-                        foreach (var def in nmDef.Contents) {
-                            switch (def) {
-                                case ES_AstClassDefinition classDef:
-                                    throw new NotImplementedException ("[TODO] Classes not implemented yet.");
-
-                                case ES_AstStructDefinition structDef: {
-                                    var structId = idPool.GetIdentifier (structDef.Name.Text.Span);
-                                    var structBuilder = namespaceBuilder.GetStruct (structId);
-                                    Debug.Assert (structBuilder is not null);
-                                    var structPtr = structBuilder.StructData;
-
-                                    var structDecl = GenerateCode_Struct (ref transUnit, ref astUnit, symbols, src, structDef, structPtr);
-                                    memberDefinitions.Add (structDecl);
-
-                                    var staticConsCall = ExpressionStatement (InvocationExpression (MemberAccessExpression (
-                                        SyntaxKind.SimpleMemberAccessExpression,
-                                        IdentifierName (structDecl.Identifier),
-                                        IdentifierName (DefaultStaticConsName)
-                                    )));
-                                    globalStaticConsBody.Add (staticConsCall);
-
-                                    break;
-                                }
-
-                                case ES_AstEnumDefinition enumDef:
-                                    break;
-
-                                case ES_AstFunctionDefinition funcDef: {
-                                    var funcDecl = GenerateCode_Function (ref transUnit, ref astUnit, namespaceData, symbols, src, null, funcDef);
-                                    globalFunctions.Add (funcDecl);
-                                    break;
-                                }
-                            }
-                        }
-
-                        symbols.Pop ();
-                    }
-
-                    for (; astStackCount > 0; astStackCount--)
-                        symbols.Pop ();
-                }
-
-                EndTranslationUnit ();
+            var staticVarsMem = ArrayPointer<byte>.Null;
+            if (totalMem > 0) {
+                staticVarsMem = passData.MemoryManager.GetArrayAligned<byte> (totalMem, sizeof (nint));
+                staticVarsMem.Span.Clear ();
             }
 
-            envBuilder.AllocateStaticVarsMem (out var staticVarsMem, out var rootsPooledArray);
-            var rootsArray = ArrayPointer<Pointer<ES_ObjectAddress>>.Null;
-            if (rootsPooledArray.RealLength > 0) {
-                rootsArray = envBuilder.MemoryManager.GetArrayAligned<Pointer<ES_ObjectAddress>> (rootsPooledArray.RealLength, sizeof (nint));
-                rootsPooledArray.Span.CopyTo (rootsArray.Span);
+            foreach (ref var root in rootsList.Span)
+                root += (nint) staticVarsMem.Elements;
+
+            var rootsArray = ArrayPointer<nint>.Null;
+            if (rootsList.Count > 0) {
+                rootsArray = passData.MemoryManager.GetArrayAligned<nint> (rootsList.Count, sizeof (nint));
+                rootsList.Span.CopyTo (rootsArray.Span);
                 ES_GarbageCollector.AddRoots ((ES_ObjectAddress**) rootsArray.Elements, rootsArray.Length);
             }
+            roots = rootsArray;
 
-            globalFunctions.Add (
+            var roslynBytePtr = PointerType (PredefinedType (Token (SyntaxKind.ByteKeyword)));
+            passData.GlobalMembers.Add (
                 PropertyDeclaration (
-                    PointerType (PredefinedType (Token (SyntaxKind.ByteKeyword))),
+                    roslynBytePtr,
                     StaticVarsMemName
                 ).WithModifiers (TokenList (
                     Token (SyntaxKind.PublicKeyword),
                     Token (SyntaxKind.StaticKeyword)
                 )).WithAccessorList (AccessorList (ListParams (
-                    AccessorDeclaration (
-                        SyntaxKind.GetAccessorDeclaration
-                    ).WithAttributeLists (SingletonList (AttributeList (SimpleSeparatedList (
-                        Token (SyntaxKind.CommaToken),
+                    GetterDeclaration ()
+                    .WithAttributeLists (SingletonList (SimpleAttributeList (
                         Attribute_MethodImpl_AggressiveInlining (),
                         Attribute_ExcludeFromStackTrace ()
-                    )))).WithExpressionBody (ArrowExpressionClause (
-                        PointerLiteral (staticVarsMem, PointerType (PredefinedType (Token (SyntaxKind.ByteKeyword))))
+                    ))).WithExpressionBody (ArrowExpressionClause (
+                        PointerLiteral (staticVarsMem.Elements, roslynBytePtr)
                     ))
                 )))
             );
 
-            // Add the global constructor to the global functions list.
-            globalFunctions.Add (
-                MethodDeclaration (
-                    PredefinedType (Token (SyntaxKind.VoidKeyword)),
-                    GlobalStaticConsName
-                ).WithModifiers (TokenList (
-                    Token (SyntaxKind.PublicKeyword),
-                    Token (SyntaxKind.StaticKeyword)
-                )).WithBody (BlockSpan (globalStaticConsBody.Span))
-            );
+            return true;
+        }
 
+        private static bool CompileCSharp (ref PassData passData, ArrayPointer<nint> gcRoots) {
             // Create the global storage type and add it to the definitions list.
-            memberDefinitions.Add (
+            passData.Types.Add (
                 StructDeclaration (GlobalStorageTypeName)
-                .WithMembers (ListSpan (globalFunctions.Span))
+                .WithMembers (ListSpan (passData.GlobalMembers.Span))
                 .WithModifiers (TokenList (
                     Token (SyntaxKind.PublicKeyword),
                     Token (SyntaxKind.UnsafeKeyword)
@@ -550,7 +515,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
             // Create the namespace and compilation unit.
             var namespaceName = IdentifierName (NamespaceName);
-            var namespaceDecl = NamespaceDeclaration (namespaceName).WithMembers (ListSpan (memberDefinitions.Span));
+            var namespaceDecl = NamespaceDeclaration (namespaceName).WithMembers (ListSpan (passData.Types.Span));
 
             var compUnit = CompilationUnit ().WithMembers (
                 SingletonList<MemberDeclarationSyntax> (namespaceDecl)
@@ -618,13 +583,13 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 var errPos = diagMsg.Location.GetLineSpan ().StartLinePosition;
                 var errMsg = diagMsg.GetMessage ();
 
-                errorList.Add (new (
+                passData.ErrorList.Add (new (
                     $"The C# compiler reported an error at line {errPos.Line}, column {errPos.Character} when compiling: {errMsg}",
                     0, 0, string.Empty.AsMemory (), 0, 0
                 ));
             }
 
-            if (errorList.Count > 0)
+            if (passData.ErrorList.Count > 0)
                 return false;
 
             // Emit the DLL and report errors.
@@ -648,18 +613,17 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 if (diagMsg.Severity != DiagnosticSeverity.Error)
                     continue;
 
-                errorList.Add (new (error_EmitError.Replace ("{errMsg}", diagMsg.GetMessage ()), 0, 0, string.Empty.AsMemory (), 0, 0));
+                passData.ErrorList.Add (new (error_EmitError.Replace ("{errMsg}", diagMsg.GetMessage ()), 0, 0, string.Empty.AsMemory (), 0, 0));
             }
 
-            if (!emitResult.Success && errorList.Count < 1)
-                errorList.Add (new ("Unknown Roslyn Emit error. Success was false but no errors reported.", 0, 0, string.Empty.AsMemory (), 0, 0));
+            if (!emitResult.Success && passData.ErrorList.Count < 1)
+                passData.ErrorList.Add (new ("Unknown Roslyn Emit error. Success was false but no errors reported.", 0, 0, string.Empty.AsMemory (), 0, 0));
 
-            if (errorList.Count > 0)
+            if (passData.ErrorList.Count > 0)
                 return false;
 
             // Create the backend data and load the assembly.
-
-            envBuilder.BackendData = new RoslynBackendData (env, envBuilder, rootsArray, dllStream, pdbStream, assemblyName);
+            passData.EnvBuilder.BackendData = new RoslynBackendData (ref passData, gcRoots, dllStream, pdbStream, assemblyName);
 
             return true;
         }
@@ -668,7 +632,31 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
         #region Roslyn utils
 
-        private ExpressionSyntax PointerLiteral (void* value, TypeSyntax? type = null) {
+        private static LiteralExpressionSyntax StringLiteral (string value)
+            => LiteralExpression (SyntaxKind.StringLiteralExpression, Literal (value));
+
+        private static LiteralExpressionSyntax NumericLiteral (int value)
+            => LiteralExpression (SyntaxKind.NumericLiteralExpression, Literal (value));
+
+        private static LiteralExpressionSyntax NumericLiteral (uint value)
+            => LiteralExpression (SyntaxKind.NumericLiteralExpression, Literal (value));
+
+        private static LiteralExpressionSyntax NumericLiteral (long value)
+            => LiteralExpression (SyntaxKind.NumericLiteralExpression, Literal (value));
+
+        private static LiteralExpressionSyntax NumericLiteral (ulong value)
+            => LiteralExpression (SyntaxKind.NumericLiteralExpression, Literal (value));
+
+        private static LiteralExpressionSyntax NumericLiteral (float value)
+            => LiteralExpression (SyntaxKind.NumericLiteralExpression, Literal (value));
+
+        private static LiteralExpressionSyntax NumericLiteral (double value)
+            => LiteralExpression (SyntaxKind.NumericLiteralExpression, Literal (value));
+
+        private static LiteralExpressionSyntax BoolLiteral (bool value)
+            => LiteralExpression (value ? SyntaxKind.TrueLiteralExpression : SyntaxKind.FalseLiteralExpression);
+
+        private static ExpressionSyntax PointerLiteral (void* value, TypeSyntax? type = null) {
             if (type is null)
                 type = PointerType (PredefinedType (Token (SyntaxKind.VoidKeyword)));
 
@@ -693,7 +681,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             );
         }
 
-        private NameSyntax NamespaceNameSyntax (params string [] name) {
+        private static NameSyntax NamespaceNameSyntax (params string [] name) {
             Debug.Assert (name.Length > 0);
 
             NameSyntax ret = IdentifierName (name [0]);
@@ -703,14 +691,14 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             return ret;
         }
 
-        private UsingDirectiveSyntax SingleImportDirective (NameSyntax namespaceName, string typeNameStr) {
+        private static UsingDirectiveSyntax SingleImportDirective (NameSyntax namespaceName, string typeNameStr) {
             var typeName = IdentifierName (typeNameStr);
             var originalName = QualifiedName (namespaceName, typeName);
 
             return UsingDirective (NameEquals (typeName), originalName);
         }
 
-        private SeparatedSyntaxList<TNode> SeparatedListSpan<TNode> (ReadOnlySpan<SyntaxNodeOrToken> nodes) where TNode : SyntaxNode {
+        private static SeparatedSyntaxList<TNode> SeparatedListSpan<TNode> (ReadOnlySpan<SyntaxNodeOrToken> nodes) where TNode : SyntaxNode {
             var nodesList = new SyntaxNodeOrTokenList ();
             foreach (var node in nodes)
                 nodesList = nodesList.Add (node);
@@ -718,10 +706,10 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             return SeparatedList<TNode> (nodesList);
         }
 
-        private SyntaxList<TNode> ListSpan<TNode> (Span<TNode> statements) where TNode : SyntaxNode
+        private static SyntaxList<TNode> ListSpan<TNode> (Span<TNode> statements) where TNode : SyntaxNode
             => ListSpan ((ReadOnlySpan<TNode>) statements);
 
-        private SyntaxList<TNode> ListSpan<TNode> (ReadOnlySpan<TNode> nodes) where TNode : SyntaxNode {
+        private static SyntaxList<TNode> ListSpan<TNode> (ReadOnlySpan<TNode> nodes) where TNode : SyntaxNode {
             var nodesList = new SyntaxList<TNode> ();
             foreach (var node in nodes)
                 nodesList = nodesList.Add (node);
@@ -729,9 +717,12 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             return List (nodesList);
         }
 
-        private SyntaxList<TNode> ListParams<TNode> (params TNode [] nodes) where TNode : SyntaxNode => List (nodes);
+        private static SyntaxList<TNode> ListParams<TNode> (params TNode [] nodes) where TNode : SyntaxNode => List (nodes);
 
-        private SeparatedSyntaxList<TNode> SimpleSeparatedList<TNode> (ReadOnlySpan<TNode> nodes, SyntaxToken separator)
+        private static SeparatedSyntaxList<TNode> SimpleSeparatedList<TNode> (Span<TNode> nodes, SyntaxToken separator)
+            where TNode : SyntaxNode => SimpleSeparatedList ((ReadOnlySpan<TNode>) nodes, separator);
+
+        private static SeparatedSyntaxList<TNode> SimpleSeparatedList<TNode> (ReadOnlySpan<TNode> nodes, SyntaxToken separator)
             where TNode : SyntaxNode {
             using var list = new StructPooledList<SyntaxNodeOrToken> (CL_ClearMode.Auto);
             list.EnsureCapacity (nodes.Length * 2 - 1);
@@ -748,10 +739,10 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             return SeparatedListSpan<TNode> (list.Span);
         }
 
-        private SeparatedSyntaxList<TNode> SimpleSeparatedList<TNode> (SyntaxToken separator, params TNode [] nodes) where TNode : SyntaxNode
-            => SimpleSeparatedList<TNode> (nodes, separator);
+        private static SeparatedSyntaxList<TNode> SimpleSeparatedList<TNode> (SyntaxToken separator, params TNode [] nodes)
+            where TNode : SyntaxNode => SimpleSeparatedList<TNode> (nodes, separator);
 
-        private BlockSyntax BlockSpan (ReadOnlySpan<StatementSyntax> statements) {
+        private static BlockSyntax BlockSpan (ReadOnlySpan<StatementSyntax> statements) {
             var stmtsList = new SyntaxList<StatementSyntax> ();
             foreach (var stmt in statements)
                 stmtsList = stmtsList.Add (stmt);
@@ -759,7 +750,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             return Block (stmtsList);
         }
 
-        private FieldDeclarationSyntax SimpleFieldDeclaration (TypeSyntax type, SyntaxToken name, ExpressionSyntax? assignValue = null) {
+        private static FieldDeclarationSyntax SimpleFieldDeclaration (TypeSyntax type, SyntaxToken name, ExpressionSyntax? assignValue = null) {
             var varDeclarator = VariableDeclarator (name);
             if (assignValue is not null)
                 varDeclarator = varDeclarator.WithInitializer (EqualsValueClause (assignValue));
@@ -771,27 +762,33 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             return fieldDecl;
         }
 
-        private AttributeListSyntax SingletonAttributeList (AttributeSyntax attr) => AttributeList (SingletonSeparatedList (attr));
+        private static AttributeListSyntax SingletonAttributeList (AttributeSyntax attr) => AttributeList (SingletonSeparatedList (attr));
 
-        private AttributeArgumentListSyntax SingletonAttributeArgumentList (AttributeArgumentSyntax attrArg)
+        private static AttributeListSyntax SimpleAttributeList (ReadOnlySpan<AttributeSyntax> attrArgs)
+            => AttributeList (SimpleSeparatedList (attrArgs, Token (SyntaxKind.CommaToken)));
+
+        private static AttributeListSyntax SimpleAttributeList (params AttributeSyntax [] attrArgs)
+            => SimpleAttributeList (attrArgs.AsSpan ());
+
+        private static AttributeArgumentListSyntax SingletonAttributeArgumentList (AttributeArgumentSyntax attrArg)
             => AttributeArgumentList (SingletonSeparatedList (attrArg));
 
-        private AttributeArgumentListSyntax SimpleAttributeArgumentList (ReadOnlySpan<AttributeArgumentSyntax> attrArgs)
+        private static AttributeArgumentListSyntax SimpleAttributeArgumentList (ReadOnlySpan<AttributeArgumentSyntax> attrArgs)
             => AttributeArgumentList (SimpleSeparatedList (attrArgs, Token (SyntaxKind.CommaToken)));
 
-        private AttributeArgumentListSyntax SimpleAttributeArgumentList (params AttributeArgumentSyntax [] attrArgs)
+        private static AttributeArgumentListSyntax SimpleAttributeArgumentList (params AttributeArgumentSyntax [] attrArgs)
             => AttributeArgumentList (SimpleSeparatedList<AttributeArgumentSyntax> (attrArgs, Token (SyntaxKind.CommaToken)));
 
-        private ExpressionSyntax SimpleMemberAccess (ExpressionSyntax type, SimpleNameSyntax memberName)
+        private static ExpressionSyntax SimpleMemberAccess (ExpressionSyntax type, SimpleNameSyntax memberName)
             => MemberAccessExpression (SyntaxKind.SimpleMemberAccessExpression, type, memberName);
 
-        private ExpressionSyntax SimpleMemberAccess (string type, string memberName)
+        private static ExpressionSyntax SimpleMemberAccess (string type, string memberName)
             => MemberAccessExpression (SyntaxKind.SimpleMemberAccessExpression, IdentifierName (type), IdentifierName (memberName));
 
-        private ExpressionSyntax PointerMemberAccess (ExpressionSyntax type, SimpleNameSyntax memberName)
+        private static ExpressionSyntax PointerMemberAccess (ExpressionSyntax type, SimpleNameSyntax memberName)
             => MemberAccessExpression (SyntaxKind.PointerMemberAccessExpression, type, memberName);
 
-        private AttributeSyntax Attribute_MethodImpl_AggressiveInlining () {
+        private static AttributeSyntax Attribute_MethodImpl_AggressiveInlining () {
             return Attribute (
                 IdentifierName (nameof (MethodImplAttribute)),
                 SingletonAttributeArgumentList (AttributeArgument (
@@ -800,10 +797,10 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             );
         }
 
-        private AttributeSyntax Attribute_ExcludeFromStackTrace ()
+        private static AttributeSyntax Attribute_ExcludeFromStackTrace ()
             => Attribute (IdentifierName (nameof (ES_ExcludeFromStackTraceAttribute)));
 
-        private AttributeSyntax Attribute_StructLayout (string layoutKind, ExpressionSyntax? pack, ExpressionSyntax? size) {
+        private static AttributeSyntax Attribute_StructLayout (string layoutKind, ExpressionSyntax? pack, ExpressionSyntax? size) {
             using var args = new StructPooledList<AttributeArgumentSyntax> (CL_ClearMode.Auto);
             args.Add (AttributeArgument (SimpleMemberAccess (nameof (LayoutKind), layoutKind)));
 
@@ -819,163 +816,46 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             );
         }
 
-        private AttributeSyntax Attribute_FieldOffset (int value)
+        private static AttributeSyntax Attribute_FieldOffset (int value)
             => Attribute_FieldOffset (LiteralExpression (SyntaxKind.NumericLiteralExpression, Literal (value)));
 
-        private AttributeSyntax Attribute_FieldOffset (ExpressionSyntax value) {
+        private static AttributeSyntax Attribute_FieldOffset (ExpressionSyntax value) {
             return Attribute (
                 IdentifierName (nameof (FieldOffsetAttribute)),
                 SingletonAttributeArgumentList (AttributeArgument (value))
             );
         }
 
-        #endregion
+        private static AccessorDeclarationSyntax GetterDeclaration () => AccessorDeclaration (SyntaxKind.GetAccessorDeclaration);
 
-        #region AST/Language utils
+        private static AccessorDeclarationSyntax SetterDeclaration () => AccessorDeclaration (SyntaxKind.SetAccessorDeclaration);
 
-        private ES_NamespaceData.Builder GetNamespace (ES_AstDottableIdentifier namespaceName) {
-            using var namespaceNameChars = namespaceName.ToPooledChars ();
-            return GetNamespace (namespaceNameChars);
-        }
-
-        private ES_NamespaceData.Builder GetNamespace (ReadOnlySpan<char> namespaceStr) {
-            var namespaceName = env!.IdPool.GetIdentifier (namespaceStr);
-
-            if (!envBuilder!.NamespaceBuilders.TryGetValue (namespaceName, out var namespaceBuilder))
-                throw new CompilationException (ES_BackendErrors.FrontendError);
-
-            return namespaceBuilder;
-        }
-
-        private void ImportNamespaceSymbols (SymbolStack<Symbol> symbols, ES_NamespaceData.Builder namespaceBuilder) {
-            var namespaceData = namespaceBuilder.NamespaceData;
-
-            foreach (var type in namespaceData.Types)
-                symbols.AddSymbol (type.Address->Name.TypeName, new Symbol (type));
-            foreach (var funcKVP in namespaceData.Functions)
-                symbols.AddSymbol (funcKVP.Key, new Symbol (funcKVP.Value));
-        }
-
-        private void AST_HandleImport (SymbolStack<Symbol> symbols, ES_AstImportStatement import) {
-            var namespaceBuilder = GetNamespace (import.NamespaceName);
-            var namespaceData = namespaceBuilder.NamespaceData;
-
-            if (namespaceData is null)
-                return;
-
-            if (import.ImportedNames is null || import.ImportedNames.Length == 0) {
-                foreach (var type in namespaceData.Types) {
-                    if (!symbols.AddSymbol (type.Address->Name.TypeName, new Symbol (type)))
-                        throw new CompilationException (ES_BackendErrors.FrontendError);
-                }
-                foreach (var funcKVP in namespaceData.Functions) {
-                    if (!symbols.AddSymbol (funcKVP.Key, new Symbol (funcKVP.Value)))
-                        throw new CompilationException (ES_BackendErrors.FrontendError);
-                }
-            } else {
-                foreach (var importTk in import.ImportedNames) {
-                    var name = env!.IdPool.GetIdentifier (importTk.Text.Span);
-
-                    bool symbolFound = false;
-                    bool isDuplicate = false;
-
-                    if (!symbolFound) {
-                        foreach (var typeData in namespaceData.Types) {
-                            if (typeData.Address->Name.TypeName.Equals (name)) {
-                                isDuplicate = !symbols.AddSymbol (name, new Symbol (typeData));
-                                symbolFound = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (!symbolFound) {
-                        foreach (var funcKVP in namespaceData.Functions) {
-                            if (funcKVP.Key.Equals (name)) {
-                                isDuplicate = !symbols.AddSymbol (name, new Symbol (funcKVP.Value.Address));
-                                symbolFound = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (!symbolFound || isDuplicate)
-                        throw new CompilationException (ES_BackendErrors.FrontendError);
-                }
-            }
-        }
-
-        private void AST_HandleAlias (SymbolStack<Symbol> symbols, ES_AstTypeAlias alias) {
-            var aliasName = alias.AliasName.Text.Span;
-            var aliasId = env!.IdPool.GetIdentifier (aliasName);
-
-            var origType = GetTypeRef (alias.OriginalName);
-
-            if (!symbols.AddSymbol (aliasId, new Symbol (origType)))
-                throw new CompilationException (ES_BackendErrors.FrontendError);
-        }
-
-        private ES_TypeInfo* GetTypeRef (ES_AstTypeDeclaration? typeDecl) {
-            Debug.Assert (typeDecl is not null);
-
-            var typeRef = typeDecl as ES_AstTypeDeclaration_TypeReference;
-            Debug.Assert (typeRef is not null);
-
-            if (typeRef is null)
-                throw new CompilationException (ES_BackendErrors.FrontendError);
-
-            return typeRef.Reference;
+        private static ExpressionSyntax Roslyn_CreateSpan (
+            TypeSyntax spanType, ExpressionSyntax spanSrc, ExpressionSyntax spanLength,
+            bool readOnly = false
+        ) {
+            return ObjectCreationExpression (
+                GenericName (
+                    Identifier ("Span")
+                ).WithTypeArgumentList (TypeArgumentList (
+                    SingletonSeparatedList (spanType)
+                ))
+            ).WithArgumentList (ArgumentList (
+                SimpleSeparatedList (
+                    Token (SyntaxKind.CommaToken),
+                    Argument (spanSrc),
+                    Argument (spanLength)
+                )
+            ));
         }
 
         #endregion
 
         #region Misc utils
 
-        private void PopulateSymbolsFromFrontend (SymbolStack<Symbol> symbols, ref AstUnitData astUnit, out int astStackCount) {
-            astStackCount = 0;
-
-            // Copy the AST unit's symbols
-            foreach (var scope in astUnit.Symbols) {
-                symbols.Push ();
-                astStackCount++;
-
-                foreach (var symbolKVP in scope) {
-                    var symbolName = symbolKVP.Key;
-                    var symbol = symbolKVP.Value;
-
-                    switch (symbol.Tag) {
-                        case FrontendSymbolType.Type:
-                            symbols.AddSymbol (symbolName, new Symbol (symbol.MatchType ()));
-                            break;
-
-                        case FrontendSymbolType.Function:
-                            symbols.AddSymbol (symbolName, new Symbol (symbol.MatchFunction ()));
-                            break;
-
-                        case FrontendSymbolType.Variable:
-                            throw new NotImplementedException ("?");
-                    }
-                }
-            }
-        }
-
-        private void AddVariable (SymbolStack<Symbol> stack, ArrayPointer<byte> name, VariableData data) {
-            stack.AddSymbol (name, new Symbol (data));
-        }
-
         private void CheckDisposed () {
             if (IsDisposed)
                 throw new ObjectDisposedException (GetType ().Name);
-        }
-
-        private void CheckEnvironment () {
-            if (env is null)
-                throw new CompilationException (ES_BackendErrors.EnvIsNull);
-        }
-
-        private void CheckTranslationUnit () {
-            if (false)
-                throw new CompilationException (ES_BackendErrors.TransUnitIsNull);
         }
 
         #endregion
@@ -992,9 +872,6 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
         private void DoDispose () {
             if (IsDisposed)
                 return;
-
-            env = null;
-            envBuilder = null;
 
             IsDisposed = true;
         }

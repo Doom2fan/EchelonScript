@@ -19,7 +19,7 @@ using EchelonScriptCompiler.Utilities;
 
 namespace EchelonScriptCompiler.Frontend {
     public unsafe partial class CompilerFrontend {
-        protected void CreateFunctions (ref TranslationUnitData transUnit) {
+        private void CreateFunctions (ref TranslationUnitData transUnit) {
             var idPool = Environment!.IdPool;
 
             foreach (ref var astUnit in transUnit.AstUnits.Span) {
@@ -68,7 +68,7 @@ namespace EchelonScriptCompiler.Frontend {
             }
         }
 
-        protected void CreateFunctions_Function (
+        private void CreateFunctions_Function (
             ref TranslationUnitData transUnit, ES_NamespaceData.Builder namespaceBuilder,
             SymbolStack<FrontendSymbol> symbols, SourceData unitSrc,
             ES_TypeInfo* parentType, ES_AstFunctionDefinition funcDef
@@ -105,7 +105,7 @@ namespace EchelonScriptCompiler.Frontend {
 
             // Handle the return type.
             Debug.Assert (funcDef.ReturnType is not null);
-            funcDef.ReturnType = GenerateASTTypeRef (ref transUnit, symbols, unitSrc, funcDef.ReturnType);
+            funcDef.ReturnType = GenerateASTTypeRef (transUnit.Name, symbols, unitSrc, funcDef.ReturnType);
 
             // Handle arguments.
             using var argData = new StructPooledList<ES_FunctionArgData> (CL_ClearMode.Auto);
@@ -117,7 +117,7 @@ namespace EchelonScriptCompiler.Frontend {
             bool reqAfterOptReported = false;
             foreach (var arg in funcDef.ArgumentsList) {
                 var argName = idPool.GetIdentifier (arg.Name.Text.Span);
-                arg.ValueType = GenerateASTTypeRef (ref transUnit, symbols, unitSrc, arg.ValueType!);
+                arg.ValueType = GenerateASTTypeRef (transUnit.Name, symbols, unitSrc, arg.ValueType!);
 
                 var idx = argNamesList.BinarySearch (argName, UnmanagedIdentifierComparer.Instance);
                 if (idx >= 0) {

@@ -15,6 +15,7 @@ using ChronosLib.Pooled;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.Utilities;
 using EchelonScriptCompiler.CompilerCommon;
+using EchelonScriptCompiler.CompilerCommon.IR;
 using EchelonScriptCompiler.Data;
 
 namespace EchelonScriptCompiler.Frontend {
@@ -135,6 +136,15 @@ namespace EchelonScriptCompiler.Frontend {
         }
 
         #endregion
+
+        public static FrontendSymbol NewVariable (ES_TypeInfo* type, FrontendSymbolFlags flags = 0)
+            => new FrontendSymbol (FrontendSymbolType.Variable, type, flags);
+
+        public static FrontendSymbol NewType (ES_TypeInfo* type)
+            => new FrontendSymbol (FrontendSymbolType.Type, type, 0);
+
+        public static FrontendSymbol NewFunction (ES_FunctionData* data)
+            => new FrontendSymbol (FrontendSymbolType.Function, data, 0);
     }
 
     public unsafe class SymbolStack<TSymbolType> : IDisposable {
@@ -343,21 +353,20 @@ namespace EchelonScriptCompiler.Frontend {
         #endregion
     }
 
-    public unsafe partial class CompilerFrontend : IDisposable {
+    public unsafe sealed partial class CompilerFrontend : IDisposable {
         #region ================== Instance fields
 
-        protected List<EchelonScriptErrorMessage> errorList;
-        protected List<EchelonScriptErrorMessage> warningList;
-        protected List<EchelonScriptErrorMessage> infoList;
-        protected StructPooledList<TranslationUnitData> translationUnits;
-        protected int unitIdx;
+        private List<EchelonScriptErrorMessage> errorList;
+        private List<EchelonScriptErrorMessage> warningList;
+        private List<EchelonScriptErrorMessage> infoList;
+        private StructPooledList<TranslationUnitData> translationUnits;
 
         #endregion
 
         #region ================== Instance properties
 
-        public EchelonScriptEnvironment.Builder? EnvironmentBuilder { get; protected set; }
-        public EchelonScriptEnvironment? Environment { get; protected set; }
+        private EchelonScriptEnvironment.Builder? EnvironmentBuilder { get; set; }
+        private EchelonScriptEnvironment? Environment { get; set; }
 
         #endregion
 
@@ -376,24 +385,19 @@ namespace EchelonScriptCompiler.Frontend {
 
             Environment = null;
             EnvironmentBuilder = null;
-
-            unitIdx = 0;
         }
 
         #endregion
 
         #region ================== Instance methods
 
-        protected FrontendSymbol NewSymbolVariable (ES_TypeInfo* type, FrontendSymbolFlags flags = 0) {
-            return new FrontendSymbol (FrontendSymbolType.Variable, type, flags);
-        }
+        private static ES_TypeInfo* GetTypeRef (ES_AstTypeDeclaration? typeDecl) {
+            Debug.Assert (typeDecl is not null);
 
-        protected FrontendSymbol NewSymbolType (ES_TypeInfo* type) {
-            return new FrontendSymbol (FrontendSymbolType.Type, type, 0);
-        }
+            var typeRef = typeDecl as ES_AstTypeDeclaration_TypeReference;
+            Debug.Assert (typeRef is not null);
 
-        protected FrontendSymbol NewSymbolFunction (ES_FunctionData* data) {
-            return new FrontendSymbol (FrontendSymbolType.Function, data, 0);
+            return typeRef.Reference;
         }
 
         public void Setup (EchelonScriptEnvironment env, EchelonScriptEnvironment.Builder envBuilder) {
@@ -443,8 +447,12 @@ namespace EchelonScriptCompiler.Frontend {
             translationUnits.Add (translationUnit);
         }
 
-        public PooledArray<TranslationUnitData> CompileCode () {
-            var nullArr = PooledArray<TranslationUnitData>.Empty ();
+        public ESIR_Tree? CompileCode () {
+            Debug.Assert (Environment is not null);
+            Debug.Assert (EnvironmentBuilder is not null);
+
+            //var nullArr = PooledArray<TranslationUnitData>.Empty ();
+            var nullArr = (ESIR_Tree?) null;
 
             CheckDisposed ();
             CheckSetUp ();
@@ -491,27 +499,37 @@ namespace EchelonScriptCompiler.Frontend {
             if (errorList.Count > 0)
                 return nullArr;
 
-            foreach (ref var transUnit in translationUnits.Span)
-                FoldConstants (ref transUnit);
+            foreach (ref var transUnit in translationUnits.Span) {
+                Compiler_ConstantFolding.FoldConstants (
+                    Environment, EnvironmentBuilder,
+                    errorList, warningList, infoList,
+                    ref transUnit
+                );
+            }
 
             if (errorList.Count > 0)
                 return nullArr;
 
-            foreach (ref var transUnit in translationUnits.Span)
-                CheckTypes (ref transUnit);
+            var irTree = Compiler_TypeChecking.CheckTypes (
+                Environment, EnvironmentBuilder,
+                errorList, warningList, infoList,
+                translationUnits.Span
+            );
 
             if (errorList.Count > 0)
                 return nullArr;
 
-            return translationUnits.ToPooledArray ();
+
+            return irTree;
+            //return translationUnits.ToPooledArray ();
         }
 
-        protected void CheckDisposed () {
+        private void CheckDisposed () {
             if (disposedValue)
                 throw new ObjectDisposedException (nameof (CompilerFrontend));
         }
 
-        protected void CheckSetUp () {
+        private void CheckSetUp () {
             if (Environment == null | EnvironmentBuilder == null)
                 throw new CompilationException ("The frontend is not set up.");
         }
@@ -527,13 +545,13 @@ namespace EchelonScriptCompiler.Frontend {
                 DoDispose ();
         }
 
-        protected virtual void DoDispose () {
-            if (!disposedValue) {
-                Reset ();
-                translationUnits.Dispose ();
+        private void DoDispose () {
+            if (disposedValue)
+                return;
+            Reset ();
+            translationUnits.Dispose ();
 
-                disposedValue = true;
-            }
+            disposedValue = true;
         }
 
         public void Dispose () {

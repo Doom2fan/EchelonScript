@@ -7,357 +7,339 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-using System;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using EchelonScriptCommon;
 using EchelonScriptCommon.Data.Types;
-using EchelonScriptCompiler.CompilerCommon;
-using EchelonScriptCompiler.Frontend;
+using EchelonScriptCompiler.CompilerCommon.IR;
 using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace EchelonScriptCompiler.Backends.RoslynBackend {
     public unsafe sealed partial class RoslynCompilerBackend {
-        private bool GetSimpleBinaryExprSyntaxKind (SimpleBinaryExprType exprType, out SyntaxKind syntaxKind) {
-            syntaxKind = exprType switch {
-                SimpleBinaryExprType.Add => SyntaxKind.AddExpression,
-                SimpleBinaryExprType.Subtract => SyntaxKind.SubtractExpression,
+        private static ExpressionData CompileExpression_SimpleBinary (
+            ref PassData passData,
+            ref FunctionData funcData,
+            ESIR_SimpleBinaryExpression expr
+        ) {
+            var lhsExpr = CompileExpression (ref passData, ref funcData, expr.ExprLeft);
+            var rhsExpr = CompileExpression (ref passData, ref funcData, expr.ExprRight);
 
-                SimpleBinaryExprType.Multiply => SyntaxKind.MultiplyExpression,
-                SimpleBinaryExprType.Divide => SyntaxKind.DivideExpression,
-                SimpleBinaryExprType.Modulo => SyntaxKind.ModuloExpression,
-
-                SimpleBinaryExprType.ShiftLeft => SyntaxKind.LeftShiftExpression,
-                SimpleBinaryExprType.ShiftRight => SyntaxKind.RightShiftExpression,
-
-                SimpleBinaryExprType.LesserThan => SyntaxKind.LessThanExpression,
-                SimpleBinaryExprType.GreaterThan => SyntaxKind.GreaterThanExpression,
-                SimpleBinaryExprType.LesserThanEqual => SyntaxKind.LessThanOrEqualExpression,
-                SimpleBinaryExprType.GreaterThanEqual => SyntaxKind.GreaterThanOrEqualExpression,
-
-                SimpleBinaryExprType.Equals => SyntaxKind.EqualsExpression,
-                SimpleBinaryExprType.NotEquals => SyntaxKind.NotEqualsExpression,
-
-                SimpleBinaryExprType.BitAnd => SyntaxKind.BitwiseAndExpression,
-                SimpleBinaryExprType.BitXor => SyntaxKind.ExclusiveOrExpression,
-                SimpleBinaryExprType.BitOr => SyntaxKind.BitwiseOrExpression,
-
-                SimpleBinaryExprType.LogicalAnd => SyntaxKind.LogicalAndExpression,
-                SimpleBinaryExprType.LogicalOr => SyntaxKind.LogicalOrExpression,
-
-                _ => SyntaxKind.None,
-            };
-
-            return syntaxKind != SyntaxKind.None;
+            if (lhsExpr.Type->TypeTag == ES_TypeTag.Bool && rhsExpr.Type->TypeTag == ES_TypeTag.Bool)
+                return CompileExpression_BinaryBoolBool (ref passData, expr, ref lhsExpr, ref rhsExpr);
+            else if (lhsExpr.Type->TypeTag == ES_TypeTag.Int && rhsExpr.Type->TypeTag == ES_TypeTag.Int)
+                return CompileExpression_BinaryIntInt (ref passData, expr, ref lhsExpr, ref rhsExpr);
+            else if (lhsExpr.Type->TypeTag == ES_TypeTag.Float && rhsExpr.Type->TypeTag == ES_TypeTag.Float)
+                return CompileExpression_BinaryFloatFloat (ref passData, expr, ref lhsExpr, ref rhsExpr);
+            else if (lhsExpr.Type->TypeTag == ES_TypeTag.Float && rhsExpr.Type->TypeTag == ES_TypeTag.Int)
+                return CompileExpression_BinaryFloatInt (ref passData, expr, ref lhsExpr, ref rhsExpr);
+            else if (lhsExpr.Type->TypeTag == ES_TypeTag.Reference && rhsExpr.Type->TypeTag == ES_TypeTag.Reference)
+                return CompileExpression_BinaryRefRef (ref passData, expr, ref lhsExpr, ref rhsExpr);
+            else if (lhsExpr.Type->TypeTag == ES_TypeTag.Array && rhsExpr.Type->TypeTag == ES_TypeTag.Array)
+                return CompileExpression_BinaryArrayArray (ref passData, expr, ref lhsExpr, ref rhsExpr);
+            else
+                throw new CompilationException ("Binary expression not supported.");
         }
 
-        private bool GetSimpleBinaryExprAssignSyntaxKind (SimpleBinaryExprType exprType, out SyntaxKind syntaxKind) {
-            syntaxKind = exprType switch {
-                SimpleBinaryExprType.Assign => SyntaxKind.SimpleAssignmentExpression,
+        private static ExpressionData CompileExpression_BinarySimple (
+            ref PassData passData,
+            ESIR_SimpleBinaryExpression expr,
+            ref ExpressionData lhsExpr,
+            ref ExpressionData rhsExpr
+        ) {
+            SyntaxKind op;
 
-                SimpleBinaryExprType.AssignAdd => SyntaxKind.AddAssignmentExpression,
-                SimpleBinaryExprType.AssignSubtract => SyntaxKind.SubtractAssignmentExpression,
+            switch (expr.Kind) {
+                case ESIR_NodeKind.BinaryExprAdd: op = SyntaxKind.AddExpression; break;
+                case ESIR_NodeKind.BinaryExprSubtract: op = SyntaxKind.SubtractExpression; break;
 
-                SimpleBinaryExprType.AssignMultiply => SyntaxKind.MultiplyAssignmentExpression,
-                SimpleBinaryExprType.AssignDivide => SyntaxKind.DivideAssignmentExpression,
-                SimpleBinaryExprType.AssignModulo => SyntaxKind.ModuloAssignmentExpression,
+                case ESIR_NodeKind.BinaryExprMultiply: op = SyntaxKind.MultiplyExpression; break;
+                case ESIR_NodeKind.BinaryExprDivide: op = SyntaxKind.DivideExpression; break;
+                case ESIR_NodeKind.BinaryExprModulo: op = SyntaxKind.ModuloExpression; break;
 
-                SimpleBinaryExprType.AssignBitAnd => SyntaxKind.AndAssignmentExpression,
-                SimpleBinaryExprType.AssignXor => SyntaxKind.ExclusiveOrAssignmentExpression,
-                SimpleBinaryExprType.AssignBitOr => SyntaxKind.OrAssignmentExpression,
+                case ESIR_NodeKind.BinaryExprShiftLeft: op = SyntaxKind.LeftShiftExpression; break;
+                case ESIR_NodeKind.BinaryExprShiftRight: op = SyntaxKind.RightShiftExpression; break;
+                //case ESIR_NodeKind.BinaryExprShiftRightUnsigned: op = SyntaxKind.RightShiftExpression; break;
 
-                SimpleBinaryExprType.AssignShiftLeft => SyntaxKind.LeftShiftAssignmentExpression,
-                SimpleBinaryExprType.AssignShiftRight => SyntaxKind.RightShiftAssignmentExpression,
+                case ESIR_NodeKind.BinaryExprLesserThan: op = SyntaxKind.LessThanExpression; break;
+                case ESIR_NodeKind.BinaryExprGreaterThan: op = SyntaxKind.GreaterThanExpression; break;
+                case ESIR_NodeKind.BinaryExprLesserThanEqual: op = SyntaxKind.LessThanOrEqualExpression; break;
+                case ESIR_NodeKind.BinaryExprGreaterThanEqual: op = SyntaxKind.GreaterThanOrEqualExpression; break;
 
-                _ => SyntaxKind.None,
-            };
+                case ESIR_NodeKind.BinaryExprEquals: op = SyntaxKind.EqualsExpression; break;
+                case ESIR_NodeKind.BinaryExprNotEquals: op = SyntaxKind.NotEqualsExpression; break;
 
-            return syntaxKind != SyntaxKind.None;
-        }
+                case ESIR_NodeKind.BinaryExprBitAnd: op = SyntaxKind.BitwiseAndExpression; break;
+                case ESIR_NodeKind.BinaryExprBitOr: op = SyntaxKind.BitwiseOrExpression; break;
+                case ESIR_NodeKind.BinaryExprBitXor: op = SyntaxKind.ExclusiveOrExpression; break;
 
-        private ExpressionData GenerateCode_BinaryExpr (ExpressionData lhs, ExpressionData rhs, SimpleBinaryExprType exprOp) {
-            if (!envBuilder!.BinaryOpCompat (lhs.Type, rhs.Type, exprOp, out _, out _))
-                throw new CompilationException (ES_BackendErrors.FrontendError);
+                case ESIR_NodeKind.BinaryExprLogicalAnd: op = SyntaxKind.LogicalAndExpression; break;
+                case ESIR_NodeKind.BinaryExprLogicalOr: op = SyntaxKind.LogicalOrExpression; break;
 
-            var lhsNull = lhs.Type->TypeTag == ES_TypeTag.Null;
-            var rhsNull = rhs.Type->TypeTag == ES_TypeTag.Null;
-
-            Debug.Assert (lhs.Value != null || lhsNull);
-            Debug.Assert (rhs.Value != null || rhsNull);
-
-            if (lhsNull || rhsNull) {
-                if (lhsNull && rhsNull)
-                    throw new CompilationException (ES_BackendErrors.FrontendError);
-
-                ref var nullSide = ref lhs;
-                var refType = rhs.Type;
-
-                if (rhsNull) {
-                    nullSide = ref rhs;
-                    refType = lhs.Type;
-                }
-
-                nullSide.Value = LiteralExpression (SyntaxKind.NullLiteralExpression);
-                nullSide.Type = refType;
+                default:
+                    throw new CompilationException ("Not a simple binary operation.");
             }
 
-            if (lhs.Type->TypeTag == ES_TypeTag.Int && rhs.Type->TypeTag == ES_TypeTag.Int)
-                return GenerateCode_BinaryExpr_IntInt (lhs, rhs, exprOp);
+            var value = BinaryExpression (op, lhsExpr.Value!, rhsExpr.Value!);
 
-            else if (lhs.Type->TypeTag == ES_TypeTag.Bool && rhs.Type->TypeTag == ES_TypeTag.Bool)
-                return GenerateCode_BinaryExpr_BoolBool (lhs, rhs, exprOp);
-
-            else if (lhs.Type->TypeTag == ES_TypeTag.Float && rhs.Type->TypeTag == ES_TypeTag.Float)
-                return GenerateCode_BinaryExpr_FloatFloat (lhs, rhs, exprOp);
-
-            else if (lhs.Type->TypeTag == ES_TypeTag.Float && rhs.Type->TypeTag == ES_TypeTag.Int)
-                return GenerateCode_BinaryExpr_FloatInt (lhs, rhs, exprOp);
-
-            else if (lhs.Type->TypeTag == ES_TypeTag.Reference && rhs.Type->TypeTag == ES_TypeTag.Reference)
-                return GenerateCode_BinaryExpr_RefRef (lhs, rhs, exprOp);
-
-            throw new CompilationException (ES_BackendErrors.FrontendError);
+            return new ExpressionData { Type = lhsExpr.Type, Value = value, };
         }
 
-        private ExpressionSyntax GenerateCode_BinaryExpr_IntIntDiv ([NotNull] ES_TypeInfo* type, ExpressionSyntax lhs, ExpressionSyntax rhs, bool mod) {
-            Debug.Assert (type->TypeTag == ES_TypeTag.Int);
+        private static ExpressionData CompileExpression_BinaryBoolBool (
+            ref PassData passData,
+            ESIR_SimpleBinaryExpression expr,
+            ref ExpressionData lhsExpr,
+            ref ExpressionData rhsExpr
+        ) {
+            switch (expr.Kind) {
+                case ESIR_NodeKind.BinaryExprEquals:
+                case ESIR_NodeKind.BinaryExprNotEquals:
 
-            var roslynType = GetRoslynType (type);
+                case ESIR_NodeKind.BinaryExprBitAnd:
+                case ESIR_NodeKind.BinaryExprBitOr:
+                case ESIR_NodeKind.BinaryExprBitXor:
 
-            return CastExpression (
-                roslynType,
+                case ESIR_NodeKind.BinaryExprLogicalAnd:
+                case ESIR_NodeKind.BinaryExprLogicalOr:
+                    break;
+
+                default:
+                    throw new CompilationException ("Invalid binary op for bool/bool.");
+            }
+
+            return CompileExpression_BinarySimple (ref passData, expr, ref lhsExpr, ref rhsExpr);
+        }
+
+        private static ExpressionData CompileExpression_BinaryIntInt (
+            ref PassData passData,
+            ESIR_SimpleBinaryExpression expr,
+            ref ExpressionData lhsExpr,
+            ref ExpressionData rhsExpr
+        ) {
+            var lhsInt = (ES_IntTypeData*) lhsExpr.Type;
+            var rhsInt = (ES_IntTypeData*) rhsExpr.Type;
+
+            switch (expr.Kind) {
+                case ESIR_NodeKind.BinaryExprAdd:
+                case ESIR_NodeKind.BinaryExprSubtract:
+
+                case ESIR_NodeKind.BinaryExprMultiply:
+
+                case ESIR_NodeKind.BinaryExprLesserThan:
+                case ESIR_NodeKind.BinaryExprGreaterThan:
+                case ESIR_NodeKind.BinaryExprLesserThanEqual:
+                case ESIR_NodeKind.BinaryExprGreaterThanEqual:
+
+                case ESIR_NodeKind.BinaryExprEquals:
+                case ESIR_NodeKind.BinaryExprNotEquals:
+
+                case ESIR_NodeKind.BinaryExprBitAnd:
+                case ESIR_NodeKind.BinaryExprBitOr:
+                case ESIR_NodeKind.BinaryExprBitXor:
+                    break;
+
+                case ESIR_NodeKind.BinaryExprShiftLeft:
+                case ESIR_NodeKind.BinaryExprShiftRight:
+                case ESIR_NodeKind.BinaryExprShiftRightUnsigned:
+                    Debug.Assert (lhsInt->IntSize == rhsInt->IntSize);
+                    Debug.Assert (lhsInt->Unsigned == rhsInt->Unsigned);
+
+                    return CompileExpression_BinaryIntInt_Shift (ref passData, expr, ref lhsExpr, ref rhsExpr);
+
+                case ESIR_NodeKind.BinaryExprDivide:
+                case ESIR_NodeKind.BinaryExprModulo:
+                    return CompileExpression_BinaryIntInt_Division (ref passData, expr, ref lhsExpr, ref rhsExpr);
+
+                //case ESIR_NodeKind.BinaryExprPower:
+
+                default:
+                    throw new CompilationException ("Invalid binary op for int/int.");
+            }
+
+            Debug.Assert (lhsInt->IntSize == rhsInt->IntSize);
+            Debug.Assert (lhsInt->Unsigned == rhsInt->Unsigned);
+
+            return CompileExpression_BinarySimple (ref passData, expr, ref lhsExpr, ref rhsExpr);
+        }
+
+        private static ExpressionData CompileExpression_BinaryIntInt_Shift (
+            ref PassData passData,
+            ESIR_SimpleBinaryExpression expr,
+            ref ExpressionData lhsExpr,
+            ref ExpressionData rhsExpr
+        ) {
+            var lhsInt = (ES_IntTypeData*) lhsExpr.Type;
+            var rhsInt = (ES_IntTypeData*) rhsExpr.Type;
+
+            Debug.Assert (rhsInt->IntSize <= ES_IntSize.Int32);
+            Debug.Assert (!rhsInt->Unsigned);
+
+            if (expr.Kind == ESIR_NodeKind.BinaryExprShiftRightUnsigned) {
+                var unsignedLhsType = GetIntType (lhsInt->IntSize, true);
+
+                var value = CastExpression (
+                    GetRoslynType (lhsExpr.Type),
+                    BinaryExpression (
+                        SyntaxKind.RightShiftExpression,
+                        CastExpression (unsignedLhsType, lhsExpr.Value!),
+                        rhsExpr.Value!
+                    )
+                );
+                return new ExpressionData { Type = lhsExpr.Type, Value = value, };
+            }
+
+            return CompileExpression_BinarySimple (ref passData, expr, ref lhsExpr, ref rhsExpr);
+        }
+
+        private static ExpressionData CompileExpression_BinaryIntInt_Division (
+            ref PassData passData,
+            ESIR_SimpleBinaryExpression expr,
+            ref ExpressionData lhsExpr,
+            ref ExpressionData rhsExpr
+        ) {
+            var lhsInt = (ES_IntTypeData*) lhsExpr.Type;
+            var rhsInt = (ES_IntTypeData*) rhsExpr.Type;
+
+            Debug.Assert (lhsInt->IntSize == rhsInt->IntSize);
+            Debug.Assert (lhsInt->Unsigned == rhsInt->Unsigned);
+
+            string divFunc;
+            switch (expr.Kind) {
+                case ESIR_NodeKind.BinaryExprDivide:
+                    divFunc = nameof (ES_DotNetIntrinsicsImpl.IntegerDivision);
+                    break;
+
+                case ESIR_NodeKind.BinaryExprModulo:
+                    divFunc = nameof (ES_DotNetIntrinsicsImpl.IntegerModulo);
+                    break;
+
+                default:
+                    throw new CompilationException ("Not an int/int division expression.");
+            }
+
+            var value = CastExpression (
+                GetRoslynType (lhsExpr.Type),
                 InvocationExpression (
                     SimpleMemberAccess (
                         nameof (ES_DotNetIntrinsicsImpl),
-                        !mod ? nameof (ES_DotNetIntrinsicsImpl.IntegerDivision) : nameof (ES_DotNetIntrinsicsImpl.IntegerModulo)
+                        divFunc
                     )
                 ).WithArgumentList (ArgumentList (
                     SimpleSeparatedList (
                         Token (SyntaxKind.CommaToken),
-                        Argument (lhs),
-                        Argument (rhs)
+                        Argument (lhsExpr.Value!),
+                        Argument (rhsExpr.Value!)
                     )
                 ))
             );
+
+            return new ExpressionData { Type = lhsExpr.Type, Value = value, };
         }
 
-        private ExpressionData GenerateCode_BinaryExpr_IntInt (ExpressionData lhs, ExpressionData rhs, SimpleBinaryExprType exprOp) {
-            var boolType = env!.TypeBool;
+        private static ExpressionData CompileExpression_BinaryFloatFloat (
+            ref PassData passData,
+            ESIR_SimpleBinaryExpression expr,
+            ref ExpressionData lhsExpr,
+            ref ExpressionData rhsExpr
+        ) {
+            var lhsFloat = (ES_FloatTypeData*) lhsExpr.Type;
+            var rhsFloat = (ES_FloatTypeData*) rhsExpr.Type;
 
-            // Validate the types and op.
-            Debug.Assert (lhs.Type->TypeTag == ES_TypeTag.Int);
-            Debug.Assert (rhs.Type->TypeTag == ES_TypeTag.Int);
+            Debug.Assert (lhsFloat->FloatSize == rhsFloat->FloatSize);
 
-            var lhsInt = (ES_IntTypeData*) lhs.Type;
-            var rhsInt = (ES_IntTypeData*) rhs.Type;
+            switch (expr.Kind) {
+                case ESIR_NodeKind.BinaryExprAdd:
+                case ESIR_NodeKind.BinaryExprSubtract:
 
-            bool isShift = exprOp.IsBitShift ();
+                case ESIR_NodeKind.BinaryExprMultiply:
+                case ESIR_NodeKind.BinaryExprDivide:
+                case ESIR_NodeKind.BinaryExprModulo:
 
-            if (!isShift && lhsInt->Unsigned != rhsInt->Unsigned)
-                throw new CompilationException (ES_BackendErrors.FrontendError);
-            else if (isShift && !rhsInt->Unsigned)
-                throw new CompilationException (ES_BackendErrors.FrontendError);
+                case ESIR_NodeKind.BinaryExprLesserThan:
+                case ESIR_NodeKind.BinaryExprGreaterThan:
+                case ESIR_NodeKind.BinaryExprLesserThanEqual:
+                case ESIR_NodeKind.BinaryExprGreaterThanEqual:
 
-            bool isAssignment = exprOp.IsAssignment ();
+                case ESIR_NodeKind.BinaryExprEquals:
+                case ESIR_NodeKind.BinaryExprNotEquals:
+                    break;
 
-            Debug.Assert (!isAssignment || lhs.Writable);
+                //case ESIR_NodeKind.BinaryExprPower:
 
-            if (!isShift && !isAssignment) {
-                if (lhsInt->IntSize > rhsInt->IntSize) {
-                    rhs = GenerateCode_Cast (rhs, lhs.Type);
-                    rhsInt = lhsInt;
-                } else if (rhsInt->IntSize > lhsInt->IntSize) {
-                    lhs = GenerateCode_Cast (lhs, rhs.Type);
-                    lhsInt = rhsInt;
-                }
-            } else {
-                if (rhsInt->IntSize < lhsInt->IntSize) {
-                    rhs = GenerateCode_Cast (rhs, lhs.Type);
-                    rhsInt = lhsInt;
-                } else if (rhsInt->IntSize > lhsInt->IntSize)
-                    throw new CompilationException (ES_BackendErrors.FrontendError);
+                default:
+                    throw new CompilationException ("Invalid binary op for float/float.");
             }
 
-            bool unsigned = lhsInt->Unsigned;
-
-            Debug.Assert (lhs.Value is not null);
-            Debug.Assert (rhs.Value is not null);
-
-            ExpressionSyntax value;
-            if (exprOp == SimpleBinaryExprType.Divide || exprOp == SimpleBinaryExprType.AssignDivide ||
-                exprOp == SimpleBinaryExprType.Modulo || exprOp == SimpleBinaryExprType.AssignModulo
-            ) {
-                var mod = exprOp == SimpleBinaryExprType.Modulo || exprOp == SimpleBinaryExprType.AssignModulo;
-
-                value = GenerateCode_BinaryExpr_IntIntDiv (lhs.Type, lhs.Value, rhs.Value, mod);
-
-                if (isAssignment)
-                    value = AssignmentExpression (SyntaxKind.SimpleAssignmentExpression, lhs.Value, value);
-            } else if (GetSimpleBinaryExprSyntaxKind (exprOp, out var simpleBinarySyntaxKind))
-                value = BinaryExpression (simpleBinarySyntaxKind, lhs.Value, rhs.Value);
-            else if (GetSimpleBinaryExprAssignSyntaxKind (exprOp, out var simpleBinaryAssignSyntaxKind))
-                value = AssignmentExpression (simpleBinaryAssignSyntaxKind, lhs.Value, rhs.Value);
-            else if (exprOp == SimpleBinaryExprType.ShiftRightUnsigned || exprOp == SimpleBinaryExprType.AssignShiftRightUnsigned) {
-                var leftVal = lhs.Value;
-                if (!lhsInt->Unsigned)
-                    leftVal = CastExpression (GetIntType (lhsInt->IntSize, true), leftVal);
-
-                value = BinaryExpression (simpleBinarySyntaxKind, leftVal, rhs.Value);
-
-                if (!lhsInt->Unsigned)
-                    value = CastExpression (GetRoslynType (lhs.Type), value);
-            } else if (exprOp == SimpleBinaryExprType.Power || exprOp == SimpleBinaryExprType.AssignPower)
-                throw new NotImplementedException ("[TODO] ** not implemented yet.");
-            else
-                throw new NotImplementedException ("Operation not implemented yet");
-
-            if (!exprOp.IsComparison ())
-                return new ExpressionData { Type = lhs.Type, Value = value, Constant = false, Writable = false, };
-            else
-                return new ExpressionData { Type = boolType, Value = value, Constant = false, Writable = false, };
+            return CompileExpression_BinarySimple (ref passData, expr, ref lhsExpr, ref rhsExpr);
         }
 
-        private ExpressionData GenerateCode_BinaryExpr_BoolBool (ExpressionData lhs, ExpressionData rhs, SimpleBinaryExprType exprOp) {
-            var boolType = env!.TypeBool;
-
-            // Validate the types and op.
-            Debug.Assert (lhs.Type->TypeTag == ES_TypeTag.Bool);
-            Debug.Assert (rhs.Type->TypeTag == ES_TypeTag.Bool);
-
-            Debug.Assert (!exprOp.IsAssignment () || lhs.Writable);
-            Debug.Assert (lhs.Value is not null);
-            Debug.Assert (rhs.Value is not null);
-
-            ExpressionSyntax value;
-            if (GetSimpleBinaryExprSyntaxKind (exprOp, out var simpleBinarySyntaxKind))
-                value = BinaryExpression (simpleBinarySyntaxKind, lhs.Value, rhs.Value);
-            else if (GetSimpleBinaryExprAssignSyntaxKind (exprOp, out var simpleBinaryAssignSyntaxKind))
-                value = AssignmentExpression (simpleBinaryAssignSyntaxKind, lhs.Value, rhs.Value);
-            else
-                throw new NotImplementedException ("Operation not implemented yet");
-
-            return new ExpressionData { Type = boolType, Value = value, Constant = false, Writable = false, };
-        }
-
-        private ExpressionData GenerateCode_BinaryExpr_FloatFloat (ExpressionData lhs, ExpressionData rhs, SimpleBinaryExprType exprOp) {
-            Debug.Assert (env is not null);
-
-            // Validate the types and op.
-            Debug.Assert (lhs.Type->TypeTag == ES_TypeTag.Float);
-            Debug.Assert (rhs.Type->TypeTag == ES_TypeTag.Float);
-
-            Debug.Assert (!exprOp.IsAssignment () || lhs.Writable);
-            Debug.Assert (lhs.Value is not null);
-            Debug.Assert (rhs.Value is not null);
-
-            var lhsFloat = (ES_FloatTypeData*) lhs.Type;
-            var rhsFloat = (ES_FloatTypeData*) rhs.Type;
-            if (lhsFloat->FloatSize != rhsFloat->FloatSize)
-                throw new CompilationException (ES_BackendErrors.FrontendError);
-
-            ExpressionSyntax value;
-            if (GetSimpleBinaryExprSyntaxKind (exprOp, out var simpleBinarySyntaxKind))
-                value = BinaryExpression (simpleBinarySyntaxKind, lhs.Value, rhs.Value);
-            else if (GetSimpleBinaryExprAssignSyntaxKind (exprOp, out var simpleBinaryAssignSyntaxKind))
-                value = AssignmentExpression (simpleBinaryAssignSyntaxKind, lhs.Value, rhs.Value);
-            else if (exprOp == SimpleBinaryExprType.Power || exprOp == SimpleBinaryExprType.AssignPower)
-                throw new NotImplementedException ("[TODO] ** not implemented yet.");
-            else
-                throw new NotImplementedException ("Operation not implemented yet");
-
-            if (!exprOp.IsComparison ())
-                return new ExpressionData { Type = lhs.Type, Value = value, Constant = false, Writable = false, };
-            else
-                return new ExpressionData { Type = env!.TypeBool, Value = value, Constant = false, Writable = false, };
-        }
-
-        private ExpressionData GenerateCode_BinaryExpr_FloatInt (ExpressionData lhs, ExpressionData rhs, SimpleBinaryExprType exprOp) {
-            Debug.Assert (env is not null);
-
-            // Validate the types and op.
-            Debug.Assert (lhs.Type->TypeTag == ES_TypeTag.Float);
-            Debug.Assert (rhs.Type->TypeTag == ES_TypeTag.Int);
-
-            Debug.Assert (!exprOp.IsAssignment () || lhs.Writable);
-            Debug.Assert (lhs.Value is not null);
-            Debug.Assert (rhs.Value is not null);
-
-            var lhsFloat = (ES_FloatTypeData*) lhs.Type;
-            var rhsFloat = (ES_IntTypeData*) rhs.Type;
-
-            ExpressionSyntax value;
-            if (exprOp == SimpleBinaryExprType.Power || exprOp == SimpleBinaryExprType.AssignPower)
-                throw new NotImplementedException ("[TODO] ** not implemented yet.");
-            else
-                throw new NotImplementedException ("Operation not implemented yet");
-
-            if (!exprOp.IsComparison ())
-                return new ExpressionData { Type = lhs.Type, Value = value, Constant = false, Writable = false, };
-            else
-                return new ExpressionData { Type = env!.TypeBool, Value = value, Constant = false, Writable = false, };
-        }
-
-        private ExpressionData GenerateCode_BinaryExpr_RefRef (ExpressionData lhs, ExpressionData rhs, SimpleBinaryExprType exprOp) {
-            Debug.Assert (env is not null);
-
-            // Validate the types and op.
-            Debug.Assert (lhs.Type->TypeTag == ES_TypeTag.Reference);
-            Debug.Assert (rhs.Type->TypeTag == ES_TypeTag.Reference);
-
-            Debug.Assert (!exprOp.IsAssignment () || lhs.Writable);
-            Debug.Assert (lhs.Value is not null);
-            Debug.Assert (rhs.Value is not null);
-
-            var lhsRef = (ES_ReferenceData*) lhs.Type;
-            var rhsRef = (ES_ReferenceData*) rhs.Type;
-            if (lhsRef != rhsRef)
-                throw new CompilationException (ES_BackendErrors.FrontendError);
-
-            ExpressionSyntax value;
-            if (GetSimpleBinaryExprSyntaxKind (exprOp, out var simpleBinarySyntaxKind))
-                value = BinaryExpression (simpleBinarySyntaxKind, lhs.Value, rhs.Value);
-            else if (GetSimpleBinaryExprAssignSyntaxKind (exprOp, out var simpleBinaryAssignSyntaxKind))
-                value = AssignmentExpression (simpleBinaryAssignSyntaxKind, lhs.Value, rhs.Value);
-            else
-                throw new NotImplementedException ("Operation not implemented yet");
-
-            if (!exprOp.IsComparison ())
-                return new ExpressionData { Type = lhs.Type, Value = value, Constant = false, Writable = false, };
-            else
-                return new ExpressionData { Type = env!.TypeBool, Value = value, Constant = false, Writable = false, };
-        }
-
-        private ExpressionData GenerateCode_LogicalBinaryExpr (
-            ref TranslationUnitData transUnit, SymbolStack<Symbol> symbols, ReadOnlySpan<char> src,
-            ES_AstSimpleBinaryExpression binExpr
+        private static ExpressionData CompileExpression_BinaryFloatInt (
+            ref PassData passData,
+            ESIR_SimpleBinaryExpression expr,
+            ref ExpressionData lhsExpr,
+            ref ExpressionData rhsExpr
         ) {
-            var boolType = env!.TypeBool;
+            switch (expr.Kind) {
+                //case ESIR_NodeKind.BinaryExprPower:
 
-            var exprOp = binExpr.ExpressionType;
-            Debug.Assert (exprOp.IsLogical ());
+                default:
+                    throw new CompilationException ("Invalid binary op for float/int.");
+            }
+        }
 
-            bool isAnd = exprOp == SimpleBinaryExprType.LogicalAnd;
-            Debug.Assert (isAnd || exprOp == SimpleBinaryExprType.LogicalOr);
+        private static ExpressionData CompileExpression_BinaryRefRef (
+            ref PassData passData,
+            ESIR_SimpleBinaryExpression expr,
+            ref ExpressionData lhsExpr,
+            ref ExpressionData rhsExpr
+        ) {
+            var lhsRef = (ES_ReferenceData*) lhsExpr.Type;
+            var rhsRef = (ES_ReferenceData*) rhsExpr.Type;
 
-            // Generate the left-hand side.
-            var lhs = GenerateCode_Expression (ref transUnit, symbols, src, binExpr.Left, boolType);
+            switch (expr.Kind) {
+                case ESIR_NodeKind.BinaryExprEquals:
+                case ESIR_NodeKind.BinaryExprNotEquals: {
+                    var roslynVoidPtr = PointerType (PredefinedType (Token (SyntaxKind.VoidKeyword)));
 
-            GenerateCode_EnsureImplicitCompat (ref lhs, boolType);
+                    var value = BinaryExpression (
+                        expr.Kind == ESIR_NodeKind.BinaryExprEquals ? SyntaxKind.EqualsExpression : SyntaxKind.NotEqualsExpression,
+                        CastExpression (roslynVoidPtr, lhsExpr.Value!),
+                        CastExpression (roslynVoidPtr, rhsExpr.Value!)
+                    );
 
-            // Generate the right-hand side.
-            var rhs = GenerateCode_Expression (ref transUnit, symbols, src, binExpr.Right, boolType);
-            GenerateCode_EnsureImplicitCompat (ref rhs, boolType);
+                    return new ExpressionData { Type = passData.Env.TypeBool, Value = value, };
+                }
 
-            Debug.Assert (lhs.Value is not null);
-            Debug.Assert (rhs.Value is not null);
+                default:
+                    throw new CompilationException ("Invalid binary op for ref/ref.");
+            }
+        }
 
-            // Generate the comparison.
-            var exprKind = isAnd ? SyntaxKind.LogicalAndExpression : SyntaxKind.LogicalOrExpression;
-            var value = BinaryExpression (exprKind, lhs.Value, rhs.Value);
+        private static ExpressionData CompileExpression_BinaryArrayArray (
+            ref PassData passData,
+            ESIR_SimpleBinaryExpression expr,
+            ref ExpressionData lhsExpr,
+            ref ExpressionData rhsExpr
+        ) {
+            var lhsArray = (ES_ArrayTypeData*) lhsExpr.Type;
+            var rhsArray = (ES_ArrayTypeData*) rhsExpr.Type;
 
-            return new ExpressionData { Type = boolType, Value = value, Constant = false, Writable = false, };
+            switch (expr.Kind) {
+                case ESIR_NodeKind.BinaryExprEquals:
+                case ESIR_NodeKind.BinaryExprNotEquals: {
+                    var roslynVoidPtr = PointerType (PredefinedType (Token (SyntaxKind.VoidKeyword)));
+
+                    var value = BinaryExpression (
+                        expr.Kind == ESIR_NodeKind.BinaryExprEquals ? SyntaxKind.EqualsExpression : SyntaxKind.NotEqualsExpression,
+                        CastExpression (roslynVoidPtr, lhsExpr.Value!),
+                        CastExpression (roslynVoidPtr, rhsExpr.Value!)
+                    );
+
+                    return new ExpressionData { Type = passData.Env.TypeBool, Value = value, };
+                }
+
+                default:
+                    throw new CompilationException ("Invalid binary op for array/array.");
+            }
         }
     }
 }

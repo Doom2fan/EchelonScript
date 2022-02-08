@@ -15,6 +15,7 @@ using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.GarbageCollection;
 using EchelonScriptCommon.Utilities;
 using EchelonScriptCompiler.CompilerCommon;
+using EchelonScriptCompiler.CompilerCommon.IR;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Frontend;
 using LLVMSharp.Interop;
@@ -311,6 +312,10 @@ namespace EchelonScriptCompiler.Backends.LLVMBackend {
             }
 
             return true;
+        }
+
+        public bool CompileEnvironment (EchelonScriptEnvironment environment, EchelonScriptEnvironment.Builder builder, ESIR_Tree irTree) {
+            return false;
         }
 
         #endregion

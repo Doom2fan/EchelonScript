@@ -13,8 +13,8 @@ using EchelonScriptCommon.Data.Types;
 using EchelonScriptCompiler.CompilerCommon;
 
 namespace EchelonScriptCompiler.Frontend {
-    public unsafe partial class CompilerFrontend {
-        protected void FoldConstants_ExplicitCast_ToFloat (ES_TypeInfo* dstType, in ES_AstExpression innerExpr, ref ES_AstExpression expr, out bool isRedundant) {
+    internal unsafe static partial class Compiler_ConstantFolding {
+        private static void FoldConstants_ExplicitCast_ToFloat (ES_TypeInfo* dstType, in ES_AstExpression innerExpr, ref ES_AstExpression expr, out bool isRedundant) {
             Debug.Assert (dstType is not null);
             Debug.Assert (dstType->TypeTag == ES_TypeTag.Float);
 
@@ -78,7 +78,7 @@ namespace EchelonScriptCompiler.Frontend {
          * Single precision ops.
          *
          */
-        protected void FoldConstants_BinaryExpression_Float32Float32_Comp (
+        private static void FoldExpression_Binary_Float32Float32_Comp (
             ref ES_AstExpression expr, SimpleBinaryExprType op,
             ES_AstFloat32ConstantExpression lhs, ES_AstFloat32ConstantExpression rhs
         ) {
@@ -114,7 +114,7 @@ namespace EchelonScriptCompiler.Frontend {
             expr = new ES_AstBooleanConstantExpression (finalValue, expr);
         }
 
-        protected void FoldConstants_BinaryExpression_Float32Float32_Arithmetic (
+        private static void FoldExpression_Binary_Float32Float32_Arithmetic (
             ref ES_AstExpression expr, SimpleBinaryExprType op,
             ES_AstFloat32ConstantExpression lhs, ES_AstFloat32ConstantExpression rhs
         ) {
@@ -151,7 +151,7 @@ namespace EchelonScriptCompiler.Frontend {
             expr = new ES_AstFloat32ConstantExpression (finalValue, expr);
         }
 
-        protected void FoldConstants_BinaryExpression_Float32Int_Arithmetic (
+        private static void FoldExpression_Binary_Float32Int_Arithmetic (
             ref ES_AstExpression expr, SimpleBinaryExprType op,
             ES_AstFloat32ConstantExpression lhs, ES_AstIntegerConstantExpression rhs
         ) {
@@ -174,7 +174,7 @@ namespace EchelonScriptCompiler.Frontend {
          * Double precision ops.
          *
          */
-        protected void FoldConstants_BinaryExpression_Float64Float64_Comp (
+        private static void FoldExpression_Binary_Float64Float64_Comp (
             ref ES_AstExpression expr, SimpleBinaryExprType op,
             ES_AstFloat64ConstantExpression lhs, ES_AstFloat64ConstantExpression rhs
         ) {
@@ -210,7 +210,7 @@ namespace EchelonScriptCompiler.Frontend {
             expr = new ES_AstBooleanConstantExpression (finalValue, expr);
         }
 
-        protected void FoldConstants_BinaryExpression_Float64Float64_Arithmetic (
+        private static void FoldExpression_Binary_Float64Float64_Arithmetic (
             ref ES_AstExpression expr, SimpleBinaryExprType op,
             ES_AstFloat64ConstantExpression lhs, ES_AstFloat64ConstantExpression rhs
         ) {
@@ -247,7 +247,7 @@ namespace EchelonScriptCompiler.Frontend {
             expr = new ES_AstFloat64ConstantExpression (finalValue, expr);
         }
 
-        protected void FoldConstants_BinaryExpression_Float64Int_Arithmetic (
+        private static void FoldExpression_Binary_Float64Int_Arithmetic (
             ref ES_AstExpression expr, SimpleBinaryExprType op,
             ES_AstFloat64ConstantExpression lhs, ES_AstIntegerConstantExpression rhs
         ) {

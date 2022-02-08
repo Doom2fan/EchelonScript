@@ -12,6 +12,7 @@ using System.Collections.Generic;
 using ChronosLib.Pooled;
 using EchelonScriptCompiler.Backends;
 using EchelonScriptCompiler.CompilerCommon;
+using EchelonScriptCompiler.CompilerCommon.IR;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Frontend;
 using EchelonScriptCompiler.Frontend.Parser;
@@ -115,18 +116,30 @@ namespace EchelonScriptCompiler {
             frontend.AddUnit (unitName, astUnitsList.Span);
         }
 
-        public void Compile () {
+        public bool Compile () {
+            var code = frontend.CompileCode ();
+
+            if (errorsList.Count > 0 || code is null)
+                return false;
+
+            if (backend is not null) {
+                if (!backend.CompileEnvironment (environment!, environmentBuilder!, code))
+                    return false;
+
+                if (errorsList.Count > 0)
+                    return false;
+            }
+
+            return true;
+        }
+
+        public ESIR_Tree? CompileIR () {
             var code = frontend.CompileCode ();
 
             if (errorsList.Count > 0)
-                return;
+                return null;
 
-            if (backend is not null) {
-                backend.CompileEnvironment (environment!, environmentBuilder!, code);
-
-                if (errorsList.Count > 0)
-                    return;
-            }
+            return code;
         }
 
         public void Reset () {

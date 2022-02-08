@@ -184,6 +184,7 @@ namespace EchelonScriptCompiler.Frontend {
 
         public const string NoCast = "Cannot convert type \"{givenType}\" to \"{destType}\".";
         public const string NoImplicitCast = "Cannot implicitly convert type \"{givenType}\" to \"{destType}\".";
+        public const string NotValueExpression = "Expression is not a value.";
         public const string NoExplicitCast = "Cannot type \"{givenType}\" to \"{destType}\".";
         public const string CantApplyBinaryOp = "\"{op}\" cannot be applied to operands of type \"{lhs}\" and \"{rhs}\".";
         public const string CantApplyUnaryOp = "\"{op}\" cannot be applied to operand of type \"{expr}\".";

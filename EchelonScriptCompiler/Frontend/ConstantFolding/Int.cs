@@ -13,10 +13,11 @@ using EchelonScriptCommon.Data.Types;
 using EchelonScriptCompiler.CompilerCommon;
 
 namespace EchelonScriptCompiler.Frontend {
-    public unsafe partial class CompilerFrontend {
-        public ES_IntTypeData* DetermineIntLiteralType (ES_AstIntegerLiteralExpression intLitExpr, ES_TypeInfo* expectedType, bool negated) {
-            Debug.Assert (Environment is not null);
-
+    internal unsafe static partial class Compiler_ConstantFolding {
+        private static ES_IntTypeData* DetermineIntLiteralType (
+            ref PassData passData,
+            ES_AstIntegerLiteralExpression intLitExpr, ES_TypeInfo* expectedType, bool negated
+        ) {
             ES_IntTypeData* expectedIntType = null;
 
             bool? unsigned = null;
@@ -90,7 +91,7 @@ namespace EchelonScriptCompiler.Frontend {
                 var errSize = minSize;
                 if (chosenSize is not null)
                     errSize = chosenSize.Value;
-                errorList.Add (ES_FrontendErrors.GenIntLitTooBig (isSigned!.Value, errSize, intLitExpr.Token));
+                passData.ErrorList.Add (ES_FrontendErrors.GenIntLitTooBig (isSigned!.Value, errSize, intLitExpr.Token));
 
                 if (unsigned is null && isSigned == false)
                     unsigned = true;
@@ -125,7 +126,7 @@ namespace EchelonScriptCompiler.Frontend {
             if (unsigned is null)
                 unsigned = false;
 
-            var intType = Environment.GetIntType (size, unsigned.Value);
+            var intType = passData.Env.GetIntType (size, unsigned.Value);
 
             Debug.Assert (intType is not null);
             Debug.Assert (intType->TypeTag == ES_TypeTag.Int);
@@ -133,11 +134,11 @@ namespace EchelonScriptCompiler.Frontend {
             return (ES_IntTypeData*) intType;
         }
 
-        protected bool FoldConstants_IntLiteral (ref ES_AstExpression expr, ES_TypeInfo* expectedType, bool negated) {
+        private static bool FoldExpression_IntLiteral (ref PassData passData, ref ES_AstExpression expr, ES_TypeInfo* expectedType, bool negated) {
             var intLitExpr = expr as ES_AstIntegerLiteralExpression;
             Debug.Assert (intLitExpr is not null);
 
-            var intType = DetermineIntLiteralType (intLitExpr, expectedType, negated);
+            var intType = DetermineIntLiteralType (ref passData, intLitExpr, expectedType, negated);
 
             if (!negated) {
                 expr = new ES_AstIntegerConstantExpression ((ES_TypeInfo*) intType, intLitExpr.Value, intLitExpr);
@@ -158,7 +159,7 @@ namespace EchelonScriptCompiler.Frontend {
             }
         }
 
-        protected void FoldConstants_ExplicitCast_ToInt (ES_TypeInfo* dstType, in ES_AstExpression innerExpr, ref ES_AstExpression expr, out bool isRedundant) {
+        private static void FoldExpression_ExplicitCast_ToInt (ES_TypeInfo* dstType, in ES_AstExpression innerExpr, ref ES_AstExpression expr, out bool isRedundant) {
             Debug.Assert (dstType is not null);
             Debug.Assert (dstType->TypeTag == ES_TypeTag.Int);
 
@@ -253,7 +254,7 @@ namespace EchelonScriptCompiler.Frontend {
                 isRedundant = false;
         }
 
-        protected void FoldConstants_BinaryExpression_IntInt_Comp (
+        private static void FoldExpression_Binary_IntInt_Comp (
             ref ES_AstExpression expr, SimpleBinaryExprType op,
             ES_AstIntegerConstantExpression lhs, ES_AstIntegerConstantExpression rhs
         ) {
@@ -315,7 +316,7 @@ namespace EchelonScriptCompiler.Frontend {
             expr = new ES_AstBooleanConstantExpression (finalValue, expr);
         }
 
-        protected void FoldConstants_BinaryExpression_IntInt_BitShifting (
+        private static void FoldExpression_Binary_IntInt_BitShifting (
             ref ES_AstExpression expr, SimpleBinaryExprType op,
             ES_AstIntegerConstantExpression lhs, ES_AstIntegerConstantExpression rhs
         ) {
@@ -468,7 +469,7 @@ namespace EchelonScriptCompiler.Frontend {
             expr = new ES_AstIntegerConstantExpression (&lhsType->TypeInfo, finalValue, expr);
         }
 
-        protected void FoldConstants_BinaryExpression_IntInt_Arithmetic (
+        private static void FoldExpression_Binary_IntInt_Arithmetic (
             ref ES_AstExpression expr, SimpleBinaryExprType op,
             ES_AstIntegerConstantExpression lhs, ES_AstIntegerConstantExpression rhs
         ) {

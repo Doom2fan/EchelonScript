@@ -9,12 +9,13 @@
 
 using System;
 using System.Diagnostics;
+using System.Text;
 using ChronosLib.Pooled;
-using EchelonScriptCommon;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.GarbageCollection;
 using EchelonScriptCompiler.CompilerCommon;
-using EchelonScriptCompiler.Frontend;
+using EchelonScriptCompiler.CompilerCommon.IR;
+using EchelonScriptCompiler.Utilities;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -34,444 +35,10 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             public bool Writable;
         }
 
-        private ExpressionSyntax GenerateCode_StaticVarsMem ()
+        private static ExpressionSyntax CompileCode_StaticVarsMem ()
             => SimpleMemberAccess (GlobalStorageTypeName, StaticVarsMemName);
 
-        private ExpressionSyntax? GenerateCode_IsNullable (ES_TypeInfo* destType, out ES_TypeInfo* retType, bool genValue) {
-            Debug.Assert (env is not null);
-            Debug.Assert (destType is not null);
-
-            var typeUnkn = env.TypeUnknownValue;
-
-            switch (destType->TypeTag) {
-                case ES_TypeTag.Interface:
-                case ES_TypeTag.Reference:
-                case ES_TypeTag.Array: {
-                    retType = destType;
-
-                    if (genValue)
-                        return LiteralExpression (SyntaxKind.NullLiteralExpression);
-
-                    return null;
-                }
-
-                case ES_TypeTag.UNKNOWN:
-                default:
-                    throw new CompilationException (ES_BackendErrors.FrontendError);
-            }
-        }
-
-        private void GenerateCode_EnsureImplicitCompat (ref ExpressionData exprData, ES_TypeInfo* dstType) {
-            var srcType = exprData.Type;
-
-            Debug.Assert (srcType is not null);
-
-            if (exprData.Type == dstType)
-                return;
-
-            if (exprData.Type->TypeTag == ES_TypeTag.Null) {
-                exprData.Value = GenerateCode_IsNullable (dstType, out exprData.Type, true);
-                return;
-            } else if (dstType->TypeTag == ES_TypeTag.Int && dstType->TypeTag == ES_TypeTag.Int) {
-                var dstIntType = (ES_IntTypeData*) dstType;
-                var srcIntType = (ES_IntTypeData*) srcType;
-
-                if (srcIntType->IntSize <= dstIntType->IntSize && dstIntType->Unsigned == srcIntType->Unsigned) {
-                    exprData = GenerateCode_Cast (exprData, dstType);
-                    return;
-                }
-            }
-
-            throw new CompilationException (ES_BackendErrors.FrontendError);
-        }
-
-        private ExpressionData GenerateCode_Expression (
-            ref TranslationUnitData transUnit, SymbolStack<Symbol> symbols, ReadOnlySpan<char> src,
-            ES_AstExpression expr, ES_TypeInfo* expectedType
-        ) {
-            Debug.Assert (expr is not null);
-
-            var idPool = env!.IdPool;
-            var typeUnkn = env.TypeUnknownValue;
-
-            switch (expr) {
-                case ES_AstParenthesisExpression parenExpr: {
-                    var innerExpr = GenerateCode_Expression (ref transUnit, symbols, src, parenExpr.Inner, expectedType);
-
-                    if (innerExpr.Value is not null)
-                        innerExpr.Value = ParenthesizedExpression (innerExpr.Value);
-
-                    return innerExpr;
-                }
-
-                #region Primary expressions
-
-                case ES_AstFunctionCallExpression funcCallExpr:
-                    return GenerateCode_Expression_FunctionCall (ref transUnit, symbols, src, funcCallExpr, expectedType);
-
-                case ES_AstIndexingExpression indexExpr:
-                    return GenerateCode_Expression_Indexing (ref transUnit, symbols, src, indexExpr, expectedType);
-
-                case ES_AstNewObjectExpression newObjExpr:
-                    return GenerateCode_Expression_NewObject (ref transUnit, symbols, src, newObjExpr, expectedType);
-
-                case ES_AstNewArrayExpression newArrayExpr:
-                    return GenerateCode_Expression_NewArray (ref transUnit, symbols, src, newArrayExpr, expectedType);
-
-                case ES_AstIntegerLiteralExpression:
-                case ES_AstBooleanLiteralExpression:
-                case ES_AstFloatLiteralExpression:
-                    throw new CompilationException (ES_BackendErrors.FrontendError);
-
-                case ES_AstNullLiteralExpression:
-                    return new ExpressionData { Expr = expr, Type = env.TypeNull, Value = null, Constant = true, Writable = false };
-
-                case ES_AstIntegerConstantExpression intConstExpr: {
-                    Debug.Assert (intConstExpr.IntType->TypeTag == ES_TypeTag.Int);
-                    var type = intConstExpr.IntType;
-                    var intType = (ES_IntTypeData*) type;
-
-                    SyntaxToken value;
-
-                    bool unsigned = intType->Unsigned;
-                    ulong constVal = intConstExpr.Value;
-                    switch (intType->IntSize) {
-                        case ES_IntSize.Int8:
-                            value = !unsigned ? Literal ((sbyte) constVal) : Literal ((byte) constVal);
-                            break;
-                        case ES_IntSize.Int16:
-                            value = !unsigned ? Literal ((short) constVal) : Literal ((ushort) constVal);
-                            break;
-                        case ES_IntSize.Int32:
-                            value = !unsigned ? Literal ((int) constVal) : Literal ((uint) constVal);
-                            break;
-                        case ES_IntSize.Int64:
-                            value = !unsigned ? Literal ((long) constVal) : Literal (constVal);
-                            break;
-
-                        default:
-                            throw new NotImplementedException ("Size not implemented.");
-                    }
-
-                    var valueExpr = LiteralExpression (SyntaxKind.NumericLiteralExpression, value);
-                    return new ExpressionData { Expr = expr, Type = type, Value = valueExpr, Constant = true, Writable = false };
-                }
-
-                case ES_AstBooleanConstantExpression boolConstExpr: {
-                    var value = LiteralExpression (boolConstExpr.Value ? SyntaxKind.TrueLiteralExpression : SyntaxKind.FalseLiteralExpression);
-                    return new ExpressionData { Expr = expr, Type = env.TypeBool, Value = value, Constant = true, Writable = false };
-                }
-
-                case ES_AstFloat32ConstantExpression floatConstLit: {
-                    var value = LiteralExpression (SyntaxKind.NumericLiteralExpression, Literal (floatConstLit.Value));
-                    return new ExpressionData { Expr = expr, Type = env.TypeFloat32, Value = value, Constant = true, Writable = false };
-                }
-
-                case ES_AstFloat64ConstantExpression doubleConstLit: {
-                    var value = LiteralExpression (SyntaxKind.NumericLiteralExpression, Literal (doubleConstLit.Value));
-                    return new ExpressionData { Expr = expr, Type = env.TypeFloat64, Value = value, Constant = true, Writable = false };
-                }
-
-                case ES_AstStringLiteralExpression:
-                    throw new NotImplementedException ("[TODO] String literals not implemented yet.");
-
-                case ES_AstCharLiteralExpression:
-                    throw new NotImplementedException ("[TODO] Character literals not implemented yet.");
-
-                case ES_AstNameExpression nameExpr: {
-                    var id = idPool.GetIdentifier (nameExpr.Value.Text.Span);
-                    var symbol = symbols.GetSymbol (id);
-
-                    switch (symbol.Tag) {
-                        case SymbolType.None:
-                            throw new CompilationException (ES_BackendErrors.NonExistentSymbol);
-
-                        case SymbolType.Variable: {
-                            var varData = symbol.MatchVariable ();
-                            var valueExpr = varData.RoslynExpr;
-                            return new ExpressionData { Expr = expr, Type = varData.Type, Value = valueExpr, Constant = false, Writable = true };
-                        }
-
-                        case SymbolType.Type: {
-                            if (expectedType is not null)
-                                throw new CompilationException (ES_BackendErrors.FrontendError);
-
-                            var type = symbol.MatchType ();
-                            return new ExpressionData { Expr = expr, TypeInfo = type, Value = null, Constant = true, Writable = true };
-                        }
-
-                        case SymbolType.Function: {
-                            var func = symbol.MatchFunction ();
-                            return new ExpressionData { Expr = expr, Function = func, Value = null, Constant = true, Writable = true };
-                        }
-
-                        default:
-                            throw new NotImplementedException ("Symbol type not implemented.");
-                    }
-                }
-
-                case ES_AstMemberAccessExpression memberAccessExpr:
-                    return GenerateCode_Expression_MemberAccess (ref transUnit, symbols, src, memberAccessExpr, expectedType);
-
-                #endregion
-
-                case ES_AstIncDecExpression incDecExpr: {
-                    var inner = GenerateCode_Expression (ref transUnit, symbols, src, incDecExpr.Inner, expectedType);
-
-                    var ret = GenerateCode_IncDecExpression (inner, incDecExpr.Decrement, incDecExpr.Postfix);
-                    ret.Expr = expr;
-                    return ret;
-                }
-
-                #region Unary expressions
-
-                case ES_AstSimpleUnaryExpression unaryExpr: {
-                    var inner = GenerateCode_Expression (ref transUnit, symbols, src, unaryExpr.Inner, expectedType);
-
-                    var ret = GenerateCode_UnaryExpr (inner, unaryExpr.ExpressionType);
-                    ret.Expr = expr;
-                    return ret;
-                }
-
-                case ES_AstCastExpression castExpr: {
-                    var innerExpr = GenerateCode_Expression (ref transUnit, symbols, src, castExpr.InnerExpression, typeUnkn);
-                    return GenerateCode_Cast (innerExpr, GetTypeRef (castExpr.DestinationType));
-                }
-
-                #endregion
-
-                case ES_AstSimpleBinaryExpression simpleBinaryExpr: {
-                    if (simpleBinaryExpr.ExpressionType.IsLogical ())
-                        return GenerateCode_LogicalBinaryExpr (ref transUnit, symbols, src, simpleBinaryExpr);
-
-                    var expectedRHSType = expectedType;
-
-                    var lhs = GenerateCode_Expression (ref transUnit, symbols, src, simpleBinaryExpr.Left, expectedType);
-
-                    if (simpleBinaryExpr.ExpressionType.IsBitShift () && lhs.Type->TypeTag == ES_TypeTag.Int)
-                        expectedRHSType = env.GetIntType (((ES_IntTypeData*) expectedType)->IntSize, true);
-
-                    var rhs = GenerateCode_Expression (ref transUnit, symbols, src, simpleBinaryExpr.Right, expectedRHSType);
-
-                    if (!envBuilder!.BinaryOpCompat (lhs.Type, rhs.Type, simpleBinaryExpr.ExpressionType, out _, out _))
-                        throw new CompilationException (ES_BackendErrors.FrontendError);
-
-                    if (simpleBinaryExpr.ExpressionType.IsAssignment () && !lhs.Writable)
-                        throw new CompilationException (ES_BackendErrors.FrontendError);
-
-                    var ret = GenerateCode_BinaryExpr (lhs, rhs, simpleBinaryExpr.ExpressionType);
-                    ret.Expr = expr;
-                    return ret;
-                }
-
-                case ES_AstConditionalExpression condExpr:
-                    return GenerateCode_ConditionalExpression (ref transUnit, symbols, src, condExpr, expectedType);
-
-                default:
-                    throw new NotImplementedException ("Expression type not implemented.");
-            }
-        }
-
-        private ExpressionData GenerateCode_IncDecExpression (ExpressionData val, bool decrement, bool postfix) {
-            if (!val.Writable || val.Type is null || val.Value is null)
-                throw new CompilationException (ES_BackendErrors.FrontendError);
-
-            ExpressionSyntax value;
-
-            if (val.Type->TypeTag == ES_TypeTag.Int || val.Type->TypeTag == ES_TypeTag.Float) {
-                if (postfix) {
-                    var exprType = !decrement ? SyntaxKind.PostIncrementExpression : SyntaxKind.PostDecrementExpression;
-                    value = PostfixUnaryExpression (exprType, val.Value);
-                } else {
-                    var exprType = !decrement ? SyntaxKind.PreIncrementExpression : SyntaxKind.PreDecrementExpression;
-                    value = PrefixUnaryExpression (exprType, val.Value);
-                }
-            } else
-                throw new CompilationException (ES_BackendErrors.FrontendError);
-
-            return new ExpressionData { Type = val.Type, Value = value, Constant = false, Writable = false };
-        }
-
-        private ExpressionData GenerateCode_Expression_FunctionCall (
-            ref TranslationUnitData transUnit, SymbolStack<Symbol> symbols, ReadOnlySpan<char> src,
-            ES_AstFunctionCallExpression funcCallExpr, ES_TypeInfo* expectedType
-        ) {
-            Debug.Assert (env is not null);
-
-            var funcExpr = GenerateCode_Expression (ref transUnit, symbols, src, funcCallExpr.FunctionExpression, env.TypeUnknownValue);
-            ES_FunctionData* func = null;
-            ES_FunctionPrototypeData* funcType = null;
-
-            if (funcExpr.Function is not null) {
-                func = funcExpr.Function;
-                funcType = func->FunctionType;
-            } else {
-                if (funcExpr.TypeInfo is not null) {
-                    throw new CompilationException (ES_BackendErrors.FrontendError);
-                } else if (funcExpr.Type is not null) {
-                    // TODO: Some types might be allowed to have `()` overrides too in the future. But not now.
-                    throw new CompilationException (ES_BackendErrors.FrontendError);
-                } else
-                    Debug.Fail ("???");
-            }
-
-            int funcArgCount = funcType->ArgumentsList.Length;
-            int callArgCount = funcCallExpr.Arguments.Length;
-            int reqArgCount = 0;
-
-            if (!envBuilder!.PointerAstMap.TryGetValue ((IntPtr) func, out var funcASTNode))
-                throw new CompilationException (ES_BackendErrors.NonExistentASTMap);
-
-            var funcAST = funcASTNode as ES_AstFunctionDefinition;
-            Debug.Assert (funcAST is not null);
-
-            if (func is not null)
-                reqArgCount = funcArgCount - func->OptionalArgsCount;
-            else
-                reqArgCount = funcArgCount;
-
-            if (callArgCount < reqArgCount)
-                throw new CompilationException (ES_BackendErrors.FrontendError);
-            if (callArgCount > funcArgCount)
-                throw new CompilationException (ES_BackendErrors.FrontendError);
-
-            ExpressionSyntax innerExpression;
-            if (true) {
-                innerExpression = MemberAccessExpression (
-                    SyntaxKind.SimpleMemberAccessExpression,
-                    IdentifierName (GlobalStorageTypeName),
-                    IdentifierName (MangleGlobalFunctionName (func))
-                );
-            } else {
-                // TODO: Handle member functions.
-            }
-
-            using var argsArr = new StructPooledList<SyntaxNodeOrToken> (CL_ClearMode.Auto);
-            argsArr.EnsureCapacity (funcArgCount + Math.Max (funcArgCount - 1, 0));
-            int argIdx = 0;
-
-            // Handle passed-in args.
-            for (; argIdx < callArgCount; argIdx++) {
-                var argData = func->Arguments.Elements + argIdx;
-                var argTypeData = funcType->ArgumentsList.Elements + argIdx;
-
-                if (argTypeData->ArgType == ES_ArgumentType.In || argTypeData->ArgType == ES_ArgumentType.Out)
-                    throw new NotImplementedException ("[TODO] Argument type not implemented yet.");
-
-                var argValType = argTypeData->ValueType;
-                ES_AstExpression argValExpr;
-                if (argIdx < callArgCount) {
-                    var arg = funcCallExpr.Arguments [argIdx];
-
-                    if (argTypeData->ArgType == ES_ArgumentType.Normal && arg.ArgType != ES_ArgumentType.Normal)
-                        throw new CompilationException (ES_BackendErrors.FrontendError);
-                    else if (argTypeData->ArgType != ES_ArgumentType.Normal && arg.ArgType != argTypeData->ArgType)
-                        throw new CompilationException (ES_BackendErrors.FrontendError);
-
-                    argValExpr = arg.ValueExpression;
-                } else {
-                    var arg = funcAST.ArgumentsList [argIdx];
-
-                    if (arg.DefaultExpression is null)
-                        throw new CompilationException (ES_BackendErrors.FrontendError);
-                    if (argTypeData->ArgType != ES_ArgumentType.Normal && argTypeData->ArgType != ES_ArgumentType.In)
-                        throw new CompilationException (ES_BackendErrors.FrontendError);
-
-                    argValExpr = arg.DefaultExpression;
-                }
-
-                var argExprData = GenerateCode_Expression (ref transUnit, symbols, src, argValExpr, argValType);
-
-                GenerateCode_EnsureImplicitCompat (ref argExprData, argValType);
-                Debug.Assert (argExprData.Value is not null);
-
-                if (argIdx > 0)
-                    argsArr.Add (Token (SyntaxKind.CommaToken));
-
-                var argExpr = Argument (argExprData.Value);
-
-                if (argTypeData->ArgType == ES_ArgumentType.Ref)
-                    argExpr = argExpr.WithRefKindKeyword (Token (SyntaxKind.RefKeyword));
-
-                argsArr.Add (argExpr);
-            }
-
-            var value = InvocationExpression (innerExpression)
-                .WithArgumentList (ArgumentList (SeparatedListSpan<ArgumentSyntax> (argsArr.Span)));
-
-            return new ExpressionData { Expr = funcCallExpr, Type = funcType->ReturnType, Value = value, Constant = false, Writable = false };
-        }
-
-        private ExpressionData GenerateCode_Expression_Indexing (
-            ref TranslationUnitData transUnit, SymbolStack<Symbol> symbols, ReadOnlySpan<char> src,
-            ES_AstIndexingExpression indexExpr, ES_TypeInfo* expectedType
-        ) {
-            var typeUnkn = env!.TypeUnknownValue;
-            var typeIndex = env.GetArrayIndexType ();
-
-            var indexedExprData = GenerateCode_Expression (ref transUnit, symbols, src, indexExpr.IndexedExpression, typeUnkn);
-
-            using var rankExprs = new StructPooledList<ExpressionData> (CL_ClearMode.Auto);
-            rankExprs.EnsureCapacity (indexExpr.RankExpressions.Length);
-            foreach (var rankExpr in indexExpr.RankExpressions) {
-                Debug.Assert (rankExpr is not null);
-
-                var rankExprData = GenerateCode_Expression (ref transUnit, symbols, src, rankExpr, typeIndex);
-                GenerateCode_EnsureImplicitCompat (ref rankExprData, typeIndex);
-
-                rankExprs.Add (rankExprData);
-            }
-
-            if (indexedExprData.Type is not null) {
-                var indexedTypeTag = indexedExprData.Type->TypeTag;
-
-                if (indexedTypeTag == ES_TypeTag.Array)
-                    return GenerateCode_Expression_Indexing_Array (indexExpr, indexedExprData, rankExprs.Span, expectedType);
-            }
-
-            throw new NotImplementedException ("Indexing not implemented for type.");
-        }
-
-        private ExpressionData GenerateCode_Expression_Indexing_Array (
-            ES_AstIndexingExpression expr, ExpressionData indexedExpr, ReadOnlySpan<ExpressionData> rankExprs, ES_TypeInfo* expectedType
-        ) {
-            var arrayType = (ES_ArrayTypeData*) indexedExpr.Type;
-            var elemType = arrayType->ElementType;
-            var dimCount = arrayType->DimensionsCount;
-
-            Debug.Assert (dimCount == rankExprs.Length);
-
-            var elemIsRef = elemType->TypeTag == ES_TypeTag.Reference;
-
-            var elemRoslynType = GetRoslynType (elemType);
-            var elemPtrRoslynType = PointerType (elemRoslynType);
-
-            var typeArrayHeader = IdentifierName (nameof (ES_ArrayHeader));
-            var typeArrayHeaderPtr = PointerType (IdentifierName (nameof (ES_ArrayHeader)));
-
-            var arrayPtr = indexedExpr.Value!;
-
-            // Get the arguments.
-            using var argsList = new StructPooledList<ArgumentSyntax> (CL_ClearMode.Auto);
-            argsList.Add (Argument (arrayPtr));
-
-            for (int i = 0; i < dimCount; i++)
-                argsList.Add (Argument (rankExprs [i].Value!));
-
-            var ret = (
-                InvocationExpression (MemberAccessExpression (
-                    SyntaxKind.SimpleMemberAccessExpression,
-                    IdentifierName (MangleTypeName (&arrayType->TypeInfo)),
-                    IdentifierName (ArrayIndexFuncName)
-                )).WithArgumentList (ArgumentList (
-                    SimpleSeparatedList<ArgumentSyntax> (argsList.Span, Token (SyntaxKind.CommaToken))
-                ))
-            );
-
-            return new ExpressionData { Expr = expr, Type = elemType, Value = ret, Constant = false, Writable = true };
-        }
-
-        private ExpressionSyntax GenerateCode_NewObject (ES_TypeInfo* type, ExpressionSyntax assignValue) {
+        private static ExpressionSyntax CompileCode_NewObject (ES_TypeInfo* type, ExpressionSyntax? assignValue) {
             bool isReference = type->TypeTag == ES_TypeTag.Reference;
 
             // Get the roslyn type.
@@ -498,13 +65,15 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
             // Add the "pinned" bool.
             argsList.Add (Token (SyntaxKind.CommaToken));
-            argsList.Add (Argument (LiteralExpression (SyntaxKind.FalseLiteralExpression)));
+            argsList.Add (Argument (BoolLiteral (false)));
 
             // Add the value to assign.
-            argsList.Add (Token (SyntaxKind.CommaToken));
-            if (isReference)
-                assignValue = CastExpression (intPtrType, assignValue);
-            argsList.Add (Argument (assignValue));
+            if (assignValue is not null) {
+                argsList.Add (Token (SyntaxKind.CommaToken));
+                if (isReference)
+                    assignValue = CastExpression (intPtrType, assignValue);
+                argsList.Add (Argument (assignValue));
+            }
 
             // Generate the function call.
             ExpressionSyntax ret = InvocationExpression (accessExpr)
@@ -516,21 +85,19 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             return ret;
         }
 
-        private ExpressionSyntax GenerateCode_NewArray (ES_ArrayTypeData* arrayType, ReadOnlySpan<ExpressionData> ranks, ExpressionSyntax? elemAssignValue) {
+        private static ExpressionSyntax CompileCode_NewArray (ES_ArrayTypeData* arrayType, ReadOnlySpan<ExpressionData> ranks, ExpressionSyntax? elemAssignValue) {
             Debug.Assert (arrayType->DimensionsCount == ranks.Length);
 
             // Get the roslyn type.
             var roslynArrType = GetRoslynType (&arrayType->TypeInfo);
             var roslynElemType = GetRoslynType (arrayType->ElementType);
 
-            /** Generate the function name **/
-
             /** Construct the args list **/
             using var argsList = new StructPooledList<SyntaxNodeOrToken> (CL_ClearMode.Auto);
             argsList.EnsureCapacity (1 + ranks.Length * 2 + (elemAssignValue is not null ? 2 : 0));
 
             // Add the "pinned" bool.
-            argsList.Add (Argument (LiteralExpression (SyntaxKind.FalseLiteralExpression)));
+            argsList.Add (Argument (BoolLiteral (false)));
 
             // Add the ranks.
             foreach (var rank in ranks) {
@@ -557,88 +124,310 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             return ret;
         }
 
-        private ExpressionData GenerateCode_Expression_NewObject (
-            ref TranslationUnitData transUnit, SymbolStack<Symbol> symbols, ReadOnlySpan<char> src,
-            ES_AstNewObjectExpression newObjExpr, ES_TypeInfo* expectedType
+        private static ExpressionData CompileExpression (
+            ref PassData passData,
+            ref FunctionData funcData,
+            ESIR_Expression expr
         ) {
-            //var typeUnkn = env!.TypeUnknownValue;
+            if (expr is ESIR_SimpleBinaryExpression simpleBinaryExpr)
+                return CompileExpression_SimpleBinary (ref passData, ref funcData, simpleBinaryExpr);
+            else if (expr is ESIR_UnaryExpression unaryExpr)
+                return CompileExpression_Unary (ref passData, ref funcData, unaryExpr);
 
-            var objType = GetTypeRef (newObjExpr.TypeDeclaration);
-            var ptrType = envBuilder!.CreateReferenceType (objType);
+            switch (expr.Kind) {
+                case ESIR_NodeKind.ErrorExpression:
+                    throw new CompilationException (ES_BackendErrors.FrontendError);
 
-            // Evaluate the constructor arguments.
-            using var args = new StructPooledList<ExpressionData> (CL_ClearMode.Auto);
-            args.EnsureCapacity (newObjExpr.Arguments.Length);
+                case ESIR_NodeKind.AssignExpression when expr is ESIR_AssignExpression assignExpr: {
+                    var assigneeExpr = CompileExpression (ref passData, ref funcData, assignExpr.Assignee);
+                    var valueExpr = CompileExpression (ref passData, ref funcData, assignExpr.Value);
 
-            if (newObjExpr.Arguments.Length > 0) {
-                throw new NotImplementedException ("[TODO] Parametrized constructors not implemented yet.");
+                    Debug.Assert (assigneeExpr.Type == valueExpr.Type);
+
+                    var value = AssignmentExpression (
+                        SyntaxKind.SimpleAssignmentExpression,
+                        assigneeExpr.Value!,
+                        valueExpr.Value!
+                    );
+
+                    return new ExpressionData { Type = assigneeExpr.Type, Value = value, };
+                }
+
+                case ESIR_NodeKind.LiteralTrue:
+                case ESIR_NodeKind.LiteralFalse:
+                    return new ExpressionData { Type = passData.Env.TypeBool, Value = BoolLiteral (expr.Kind == ESIR_NodeKind.LiteralTrue), };
+
+                case ESIR_NodeKind.LiteralInt when expr is ESIR_LiteralExpression litIntExpr: {
+                    bool unsigned;
+                    ExpressionSyntax value;
+
+                    if (litIntExpr.Value!.TryGetInt (out var longVal)) {
+                        value = NumericLiteral (longVal);
+                        unsigned = false;
+                    } else if (litIntExpr.Value!.TryGetUInt (out var ulongVal)) {
+                        value = NumericLiteral (ulongVal);
+                        unsigned = true;
+                    } else
+                        throw new CompilationException (ES_BackendErrors.FrontendError);
+
+                    var type = passData.Env.GetIntType (ES_IntSize.Int64, unsigned);
+                    return new ExpressionData { Type = type, Value = value, };
+                }
+
+                case ESIR_NodeKind.LiteralFloat when expr is ESIR_LiteralExpression litFloatExpr: {
+                    ES_TypeInfo* type;
+                    ExpressionSyntax value;
+
+                    if (litFloatExpr.Value!.TryGetFloat32 (out var float32Val)) {
+                        value = NumericLiteral (float32Val);
+                        type = passData.Env.TypeFloat32;
+                    } else if (litFloatExpr.Value!.TryGetFloat64 (out var float64Val)) {
+                        value = NumericLiteral (float64Val);
+                        type = passData.Env.TypeFloat64;
+                    } else
+                        throw new CompilationException (ES_BackendErrors.FrontendError);
+
+                    return new ExpressionData { Type = type, Value = value, };
+                }
+
+                //case ESIR_NodeKind.LiteralChar;
+
+                case ESIR_NodeKind.LiteralNull when expr is ESIR_NullLiteralExpression nullLitExpr: {
+                    var nullType = nullLitExpr.Type.Pointer;
+
+                    if (nullType is null || nullType->TypeTag == ES_TypeTag.Null || nullType->TypeTag == ES_TypeTag.UNKNOWN)
+                        throw new CompilationException (ES_BackendErrors.FrontendError);
+
+                    ExpressionSyntax value;
+                    switch (nullType->TypeTag) {
+                        case ES_TypeTag.Reference:
+                        case ES_TypeTag.Array:
+                            value = LiteralExpression (SyntaxKind.NullLiteralExpression);
+                            break;
+
+                        default:
+                            throw new CompilationException (ES_BackendErrors.FrontendError);
+                    }
+
+                    return new ExpressionData { Type = nullType, Value = value, };
+                }
+
+                //case ESIR_NodeKind.StringConstant:
+
+                case ESIR_NodeKind.StaticVariableExpression when expr is ESIR_StaticVariableExpression staticVarExpr: {
+                    if (!passData.StaticVariables.TryGetValue (staticVarExpr.Name, out var staticVar))
+                        throw new CompilationException (ES_BackendErrors.FrontendError);
+
+                    var mangledName = MangleStaticVariable (staticVar);
+                    var value = SimpleMemberAccess (GlobalStorageTypeName, mangledName);
+
+                    return new ExpressionData { Type = staticVar.Type.Pointer, Value = value, };
+                }
+
+                case ESIR_NodeKind.ArgumentExpression when expr is ESIR_ArgumentExpression argExpr: {
+                    var type = funcData.Args [argExpr.Index].ValueType.Pointer;
+                    var value = IdentifierName (GetArgName (argExpr.Index));
+                    return new ExpressionData { Type = type, Value = value };
+                }
+
+                case ESIR_NodeKind.LocalValueExpression when expr is ESIR_LocalValueExpression localExpr: {
+                    var type = funcData.Locals [localExpr.Index].Pointer;
+                    var value = IdentifierName (GetLocalVarName (localExpr.Index));
+                    return new ExpressionData { Type = type, Value = value };
+                }
+
+                case ESIR_NodeKind.DefaultValueExpression when expr is ESIR_DefaultValueExpression defExpr: {
+                    var type = defExpr.Type.Pointer;
+                    var value = GetDefaultValue (type);
+                    return new ExpressionData { Type = type, Value = value, };
+                }
+
+                case ESIR_NodeKind.MemberAccessExpression when expr is ESIR_MemberAccessExpression memberAccessExpr:
+                    return CompileExpression_MemberAccess (ref passData, ref funcData, memberAccessExpr);
+
+                case ESIR_NodeKind.FunctionCallExpression when expr is ESIR_FunctionCallExpression callExpr: {
+                    var funcNameStr = callExpr.Name.GetPooledString (Encoding.ASCII);
+                    var funcId = IdentifierName (funcNameStr);
+
+                    if (!passData.Functions.TryGetValue (callExpr.Name, out var funcDef))
+                        throw new CompilationException ($"Unknown function {funcNameStr}");
+
+                    var argValues = callExpr.Arguments.Elements;
+                    var argDefs = funcDef.Arguments.Elements;
+
+                    using var argsArr = PooledArray<ArgumentSyntax>.GetArray (argValues.Length);
+                    var argsSpan = argsArr.Span;
+                    for (int i = 0; i < argValues.Length; i++) {
+                        var argValue = argValues [i];
+                        var argExpr = CompileExpression (ref passData, ref funcData, argValue.Expression);
+                        var arg = Argument (argExpr.Value!);
+
+                        if (argDefs [i].ArgType != argValue.ArgType)
+                            throw new CompilationException ("Mismatched arg types.");
+
+                        switch (argValues [i].ArgType) {
+                            case ES_ArgumentType.Normal: break;
+
+                            case ES_ArgumentType.Ref:
+                                arg = arg.WithRefKindKeyword (Token (SyntaxKind.RefKeyword));
+                                break;
+
+                            default:
+                                throw new NotImplementedException ("Arg type not implemented yet.");
+                        }
+
+                        argsSpan [i] = arg;
+                    }
+
+                    var value = InvocationExpression (
+                        funcId,
+                        ArgumentList (SimpleSeparatedList (argsSpan, Token (SyntaxKind.CommaToken)))
+                    );
+
+                    return new ExpressionData { Type = funcDef.ReturnType.Pointer, Value = value, };
+                }
+
+                //case ESIR_NodeKind.VirtualCallExpression:
+
+                case ESIR_NodeKind.IndexingExpression when expr is ESIR_IndexingExpression indexExpr:
+                    return CompileExpression_Indexing (ref passData, ref funcData, indexExpr);
+
+                case ESIR_NodeKind.NewObjectExpression when expr is ESIR_NewObjectExpression newObjExpr:
+                    return CompileExpression_NewObject (ref passData, ref funcData, newObjExpr);
+
+                case ESIR_NodeKind.NewArrayExpression when expr is ESIR_NewArrayExpression newArrExpr:
+                    return CompileExpression_NewArray (ref passData, ref funcData, newArrExpr);
+
+                case ESIR_NodeKind.CastExpression when expr is ESIR_CastExpression castExpr:
+                    return CompileExpression_Cast (ref passData, ref funcData, castExpr);
+
+                case ESIR_NodeKind.ConditionalExpression when expr is ESIR_ConditionalExpression condExpr:
+                    return CompileExpression_Conditional (ref passData, ref funcData, condExpr);
+
+                default:
+                    throw new NotImplementedException ("Expression type not implemented.");
             }
-            /*int argCount = 0;
-            foreach (var arg in newObjExpr.Arguments)
-                args [argCount++] = GenerateCode_Expression (ref transUnit, symbols, src, arg.ValueExpression, typeUnkn);*/
-
-            var value = GenerateCode_NewObject (objType, GetDefaultValue (objType));
-
-            // Default-initialize the object.
-            return new ExpressionData { Expr = newObjExpr, Type = ptrType, Value = value, Constant = false, Writable = false };
         }
 
-        private ExpressionData GenerateCode_Expression_NewArray (
-            ref TranslationUnitData transUnit, SymbolStack<Symbol> symbols, ReadOnlySpan<char> src,
-            ES_AstNewArrayExpression newArrExpr, ES_TypeInfo* expectedType
+        private static ExpressionData CompileExpression_Conditional (
+            ref PassData passData,
+            ref FunctionData funcData,
+            ESIR_ConditionalExpression expr
         ) {
-            var typeUnkn = env!.TypeUnknownValue;
-            var typeIndex = env.GetArrayIndexType ();
+            var condExpr = CompileExpression (ref passData, ref funcData, expr.Condition);
+            var thenExpr = CompileExpression (ref passData, ref funcData, expr.ThenExpression);
+            var elseExpr = CompileExpression (ref passData, ref funcData, expr.ElseExpression);
 
-            var elemType = GetTypeRef (newArrExpr.ElementType);
-            var arrType = (ES_ArrayTypeData*) envBuilder!.CreateArrayType (elemType, newArrExpr.Ranks.Length);
+            Debug.Assert (condExpr.Type->TypeTag == ES_TypeTag.Bool);
+            Debug.Assert (thenExpr.Type == elseExpr.Type);
+
+            var value = ConditionalExpression (condExpr.Value!, thenExpr.Value!, elseExpr.Value!);
+            return new ExpressionData { Type = thenExpr.Type, Value = value, };
+        }
+
+        private static ExpressionData CompileExpression_Indexing (
+            ref PassData passData,
+            ref FunctionData funcData,
+            ESIR_IndexingExpression expr
+        ) {
+            var typeUnkn = passData.Env.TypeUnknownValue;
+            var typeIndex = passData.Env.GetArrayIndexType ();
+
+            var indexedExpr = CompileExpression (ref passData, ref funcData, expr.IndexedExpr);
+            var indices = expr.Indices.Elements;
+
+            using var idxExprs = new StructPooledList<ExpressionData> (CL_ClearMode.Auto);
+            idxExprs.EnsureCapacity (indices.Length);
+            foreach (var idxExpr in indices) {
+                var rankExprData = CompileExpression (ref passData, ref funcData, idxExpr);
+                if (rankExprData.Type != typeIndex)
+                    throw new CompilationException ("Index expression must be of the index type.");
+
+                idxExprs.Add (rankExprData);
+            }
+
+            if (indexedExpr.Type is not null) {
+                var indexedTypeTag = indexedExpr.Type->TypeTag;
+
+                if (indexedTypeTag == ES_TypeTag.Array)
+                    return CompileExpression_Indexing_Array (ref passData, ref funcData, expr, indexedExpr, idxExprs.Span);
+            }
+
+            throw new NotImplementedException ("Indexing not implemented for type.");
+        }
+
+        private static ExpressionData CompileExpression_Indexing_Array (
+            ref PassData passData,
+            ref FunctionData funcData,
+            ESIR_IndexingExpression expr,
+            ExpressionData indexedExpr,
+            ReadOnlySpan<ExpressionData> indices
+        ) {
+            var arrayType = (ES_ArrayTypeData*) indexedExpr.Type;
+            var elemType = arrayType->ElementType;
+            var dimCount = arrayType->DimensionsCount;
+
+            Debug.Assert (dimCount == indices.Length);
+
+            var arrayPtr = indexedExpr.Value!;
+
+            using var argsList = new StructPooledList<ArgumentSyntax> (CL_ClearMode.Auto);
+            argsList.Add (Argument (arrayPtr));
+
+            for (int i = 0; i < dimCount; i++)
+                argsList.Add (Argument (indices [i].Value!));
+
+            var value = (
+                InvocationExpression (MemberAccessExpression (
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    IdentifierName (MangleTypeName (&arrayType->TypeInfo)),
+                    IdentifierName (ArrayIndexFuncName)
+                )).WithArgumentList (ArgumentList (
+                    SimpleSeparatedList (argsList.Span, Token (SyntaxKind.CommaToken))
+                ))
+            );
+
+            return new ExpressionData { Type = elemType, Value = value, };
+        }
+
+        private static ExpressionData CompileExpression_NewObject (
+            ref PassData passData,
+            ref FunctionData funcData,
+            ESIR_NewObjectExpression expr
+        ) {
+            var objType = expr.Type.Pointer;
+            var ptrType = passData.EnvBuilder.CreateReferenceType (objType);
+
+            var value = CompileCode_NewObject (objType, GetDefaultValue (objType));
+
+            // Default-initialize the object.
+            return new ExpressionData { Type = ptrType, Value = value, };
+        }
+
+        private static ExpressionData CompileExpression_NewArray (
+            ref PassData passData,
+            ref FunctionData funcData,
+            ESIR_NewArrayExpression expr
+        ) {
+            var typeIndex = passData.Env.GetArrayIndexType ();
+
+            var elemType = expr.ElementType.Pointer;
+            var ranksExprs = expr.Ranks.Elements;
+            var arrType = (ES_ArrayTypeData*) passData.EnvBuilder.CreateArrayType (elemType, ranksExprs.Length);
 
             // Evaluate the ranks.
-            using var ranks = PooledArray<ExpressionData>.GetArray (newArrExpr.Ranks.Length);
+            using var ranks = PooledArray<ExpressionData>.GetArray (ranksExprs.Length);
 
             int rankCount = 0;
-            foreach (var rank in newArrExpr.Ranks) {
-                var rankExprData = GenerateCode_Expression (ref transUnit, symbols, src, rank!, typeIndex);
-                GenerateCode_EnsureImplicitCompat (ref rankExprData, typeIndex);
-
-                ranks.Span [rankCount++] = rankExprData;
-            }
+            foreach (var rank in ranksExprs)
+                ranks.Span [rankCount++] = CompileExpression (ref passData, ref funcData, rank);
 
             // Get default values.
             var defaultElemValue = GetDefaultValue (elemType);
 
-            var value = GenerateCode_NewArray (arrType, ranks.Span, defaultElemValue);
+            var value = CompileCode_NewArray (arrType, ranks.Span, defaultElemValue);
 
-            // Default-initialize the object.
-            return new ExpressionData { Expr = newArrExpr, Type = &arrType->TypeInfo, Value = value, Constant = false, Writable = false };
-        }
-
-        private ExpressionData GenerateCode_ConditionalExpression (
-            ref TranslationUnitData transUnit, SymbolStack<Symbol> symbols, ReadOnlySpan<char> src,
-            ES_AstConditionalExpression expr, ES_TypeInfo* expectedType
-        ) {
-            var condExpr = GenerateCode_Expression (ref transUnit, symbols, src, expr.Condition, env!.TypeBool);
-
-            GenerateCode_EnsureImplicitCompat (ref condExpr, env.TypeBool);
-
-            // Then
-            var leftExpr = GenerateCode_Expression (ref transUnit, symbols, src, expr.Then, expectedType);
-
-            // Else
-            var rightExpr = GenerateCode_Expression (ref transUnit, symbols, src, expr.Else, expectedType);
-
-            // Checks
-            GenerateCode_EnsureImplicitCompat (ref leftExpr, expectedType);
-            GenerateCode_EnsureImplicitCompat (ref rightExpr, expectedType);
-
-            Debug.Assert (condExpr.Value is not null);
-            Debug.Assert (leftExpr.Value is not null);
-            Debug.Assert (rightExpr.Value is not null);
-
-            var exprValue = ConditionalExpression (condExpr.Value, leftExpr.Value, rightExpr.Value);
-            bool constant = condExpr.Constant & leftExpr.Constant & rightExpr.Constant;
-
-            return new ExpressionData { Expr = expr, Type = leftExpr.Type, Value = exprValue, Constant = constant, Writable = false };
+            return new ExpressionData { Type = &arrType->TypeInfo, Value = value, };
         }
     }
 }

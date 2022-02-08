@@ -11,6 +11,7 @@ using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using ChronosLib.Pooled;
+using CommunityToolkit.HighPerformance;
 using EchelonScriptCommon;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.GarbageCollection;
@@ -22,7 +23,7 @@ using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace EchelonScriptCompiler.Backends.RoslynBackend {
     public unsafe sealed partial class RoslynCompilerBackend {
-        private string GetArrayDimensionMember (int index) {
+        private static string GetArrayDimensionMember (int index) {
             const string dimPrefix = "LengthD";
 
             Span<char> chars = stackalloc char [dimPrefix.Length + 3];
@@ -38,7 +39,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             return chars [..charCount].GetPooledString ();
         }
 
-        private ExpressionSyntax GenerateCode_BoundsCheck (
+        private static ExpressionSyntax CompileCode_BoundsCheck (
             int dimNum, ExpressionSyntax boundsExpr, ExpressionSyntax valExpr
         ) {
             return (InvocationExpression (
@@ -53,13 +54,10 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             );
         }
 
-        private MemberDeclarationSyntax GenerateCode_Array (ES_ArrayTypeData* arrayType) {
-            Debug.Assert (env is not null);
-            Debug.Assert (envBuilder is not null);
-
+        private static void CompileCode_Array (ref PassData passData, ES_ArrayTypeData* arrayType) {
             using var memberTypes = new StructPooledList<SyntaxNode> (CL_ClearMode.Auto);
 
-            var typeIndex = GetRoslynType (env.GetArrayIndexType ());
+            var typeIndex = GetRoslynType (passData.Env.GetArrayIndexType ());
             var typeHeader = IdentifierName (nameof (ES_ArrayHeader));
 
             var attrAggressiveInlining = Attribute_MethodImpl_AggressiveInlining ();
@@ -107,12 +105,12 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             );
 
             // Add the alloc functions.
-            var allocFuncs = GenerateCode_Array_AllocFunc (arrayType);
+            var allocFuncs = CompileCode_Array_AllocFunc (ref passData, arrayType);
             memberTypes.Add (allocFuncs.Item1);
             memberTypes.Add (allocFuncs.Item2);
 
             // Add the index function.
-            memberTypes.Add (GenerateCode_Array_IndexFunc (arrayType));
+            memberTypes.Add (CompileCode_Array_IndexFunc (ref passData, arrayType));
 
             // Create the declaration.
             var arrayDecl = StructDeclaration (
@@ -130,11 +128,14 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 ))
             ));
 
-            return arrayDecl;
+            passData.GlobalMembers.Add (arrayDecl);
         }
 
-        private (MethodDeclarationSyntax, MethodDeclarationSyntax) GenerateCode_Array_AllocFunc (ES_ArrayTypeData* arrayType) {
-            var typeIndex = GetRoslynType (env!.GetArrayIndexType ());
+        private static (MethodDeclarationSyntax, MethodDeclarationSyntax) CompileCode_Array_AllocFunc (
+            ref PassData passData,
+            ES_ArrayTypeData* arrayType
+        ) {
+            var typeIndex = GetRoslynType (passData.Env.GetArrayIndexType ());
             var typeIntPtr = IdentifierName (nameof (IntPtr));
             var typeArray = GetRoslynType (&arrayType->TypeInfo);
 
@@ -259,7 +260,27 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             return (allocFuncDefBasic, allocFuncDefElemDefault);
         }
 
-        private MethodDeclarationSyntax GenerateCode_Array_IndexFunc (ES_ArrayTypeData* arrayType) {
+        private static ExpressionSyntax CompileCode_GetArrayBaseExpr (ES_ArrayTypeData* arrayType, ExpressionSyntax arrayPtr) {
+            var arrayArgumentList = ArgumentList (SingletonSeparatedList (Argument (arrayPtr)));
+
+            var elemPtrRoslynType = PointerType (GetRoslynType (arrayType->ElementType));
+            var typeArrayHeader = IdentifierName (nameof (ES_ArrayHeader));
+
+            return CastExpression (elemPtrRoslynType,
+                InvocationExpression (
+                    MemberAccessExpression (SyntaxKind.SimpleMemberAccessExpression,
+                        typeArrayHeader,
+                        IdentifierName (nameof (ES_ArrayHeader.GetArrayDataPointer))
+                    )
+                ).WithArgumentList (ArgumentList (
+                    SingletonSeparatedList (Argument (
+                        CastExpression (PointerType (typeArrayHeader), arrayPtr)
+                    ))
+                ))
+            );
+        }
+
+        private static MethodDeclarationSyntax CompileCode_Array_IndexFunc (ref PassData passData, ES_ArrayTypeData* arrayType) {
             const string arrayArgName = "arrayPtr";
 
             var elemType = arrayType->ElementType;
@@ -270,13 +291,13 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
             var typeArray = GetRoslynType (&arrayType->TypeInfo);
             var typeArrayHeader = IdentifierName (nameof (ES_ArrayHeader));
-            var typeIndex = GetRoslynType (env!.GetArrayIndexType ());
+            var typeIndex = GetRoslynType (passData.Env.GetArrayIndexType ());
 
             using var paramsList = new StructPooledList<ParameterSyntax> (CL_ClearMode.Auto);
             using var funcBody = new StructPooledList<StatementSyntax> (CL_ClearMode.Auto);
 
             // Generate the null check.
-            funcBody.Add (ExpressionStatement (GenerateCode_NullCheck (IdentifierName (arrayArgName))));
+            funcBody.Add (ExpressionStatement (CompileCode_NullCheck (IdentifierName (arrayArgName))));
 
             // Calculate the rank sizes.
             using var rankSizeExprs = PooledArray<ExpressionSyntax>.GetArray (dimCount);
@@ -309,26 +330,11 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 var rankExpr = IdentifierName (dimValueParamName);
                 rankExprs.Span [i] = rankExpr;
 
-                funcBody.Add (ExpressionStatement (GenerateCode_BoundsCheck (i, rankSizeExprsSpan [i], rankExpr)));
+                funcBody.Add (ExpressionStatement (CompileCode_BoundsCheck (i, rankSizeExprsSpan [i], rankExpr)));
             }
 
             // Get the base address of the array's data.
-            var arrayArgumentList = ArgumentList (SingletonSeparatedList (Argument (IdentifierName (arrayArgName))));
-
-            var baseAddrExpr = (
-                CastExpression (elemPtrRoslynType,
-                    InvocationExpression (
-                        MemberAccessExpression (SyntaxKind.SimpleMemberAccessExpression,
-                            typeArrayHeader,
-                            IdentifierName (nameof (ES_ArrayHeader.GetArrayDataPointer))
-                        )
-                    ).WithArgumentList (ArgumentList (
-                        SingletonSeparatedList (Argument (
-                            CastExpression (PointerType (typeArrayHeader), IdentifierName (arrayArgName))
-                        ))
-                    ))
-                )
-            );
+            var baseAddrExpr = CompileCode_GetArrayBaseExpr (arrayType, IdentifierName (arrayArgName));
 
             // Calculate the flattened index.
             var flattenedIndex = rankExprs.Span [0];
@@ -362,7 +368,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                     SingletonAttributeList (Attribute_ExcludeFromStackTrace ()),
                     SingletonAttributeList (Attribute_MethodImpl_AggressiveInlining ())
                 )).WithParameterList (ParameterList (
-                    SimpleSeparatedList<ParameterSyntax> (
+                    SimpleSeparatedList (
                         paramsList.Span,
                         Token (SyntaxKind.CommaToken)
                     )

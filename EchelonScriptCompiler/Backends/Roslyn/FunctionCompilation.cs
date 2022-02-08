@@ -15,9 +15,7 @@ using ChronosLib.Pooled;
 using EchelonScriptCommon;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.Utilities;
-using EchelonScriptCompiler.CompilerCommon;
-using EchelonScriptCompiler.Data;
-using EchelonScriptCompiler.Frontend;
+using EchelonScriptCompiler.CompilerCommon.IR;
 using EchelonScriptCompiler.Utilities;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -190,17 +188,49 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             }
         }
 
-        private ExpressionSyntax GetDefaultValue (ES_TypeInfo* varType) {
+        internal struct LabelSymbol {
+            public ArrayPointer<byte> Name { get; init; }
+            public string JumpTarget { get; init; }
+            public string? BreakTarget { get; init; }
+            public string? ContinueTarget { get; init; }
+
+            public LabelSymbol (ArrayPointer<byte> name, string jumpTarget, string? breakTarget, string? continueTarget) {
+                Name = name;
+                JumpTarget = jumpTarget;
+                BreakTarget = breakTarget;
+                ContinueTarget = continueTarget;
+            }
+
+            public LabelSymbol (ArrayPointer<byte> name, string jumpTarget) {
+                Name = name;
+                JumpTarget = jumpTarget;
+                BreakTarget = null;
+                ContinueTarget = null;
+            }
+        }
+
+        private ref struct FunctionData {
+            public ES_TypeInfo* ReturnType { get; init; }
+
+            public ReadOnlySpan<ESIR_ArgumentDefinition> Args;
+            public ReadOnlySpan<ESIR_TypeNode> Locals;
+
+            public int LabelIndex;
+            public string? CurBreakTarget;
+            public string? CurContinueTarget;
+        }
+
+        private static ExpressionSyntax GetDefaultValue (ES_TypeInfo* varType) {
             switch (varType->TypeTag) {
                 case ES_TypeTag.Bool:
-                    return LiteralExpression (SyntaxKind.FalseLiteralExpression);
-                case ES_TypeTag.Int:
-                    return LiteralExpression (SyntaxKind.NumericLiteralExpression, Literal (0));
+                    return BoolLiteral (false);
 
+                case ES_TypeTag.Int:
                 case ES_TypeTag.Float:
-                    return LiteralExpression (SyntaxKind.NumericLiteralExpression, Literal (0));
+                    return NumericLiteral (0);
 
                 case ES_TypeTag.Reference:
+                case ES_TypeTag.Array:
                     return LiteralExpression (SyntaxKind.NullLiteralExpression);
 
                 case ES_TypeTag.Struct: {
@@ -240,511 +270,458 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             }
         }
 
-        private MethodDeclarationSyntax GenerateFunction (
-            ES_NamespaceData? namespaceData, ES_TypeInfo* parentType, ArrayPointer<byte> funcId,
-            out ES_FunctionData* funcData
-        ) {
-            if (namespaceData is not null) {
-                if (!namespaceData.Functions.TryGetValue (funcId, out var ptr))
-                    throw new CompilationException (ES_BackendErrors.FrontendError);
+        private static string GetIndexedName (ReadOnlySpan<char> prefix, int idx) {
+            const int intLen = 15;
+            var formatProv = NumberFormatInfo.InvariantInfo;
 
-                funcData = ptr;
-            } else if (parentType is not null) {
-                throw new NotImplementedException ("[TODO] Member functions not implemented yet.");
-            } else
-                throw new CompilationException (ES_BackendErrors.FrontendError);
+            using var chars = PooledArray<char>.GetArray (prefix.Length + intLen);
 
-            Debug.Assert (funcData is not null);
-            var funcType = funcData->FunctionType;
+            prefix.CopyTo (chars);
+            if (!idx.TryFormat (chars.Span [prefix.Length..], out var intCharsWritten, provider: formatProv))
+                Debug.Fail ("This shouldn't happen.");
 
-            var protoArgsList = funcType->ArgumentsList.Span;
-            var funcArgsList = funcData->Arguments.Span;
-            Debug.Assert (protoArgsList.Length == funcArgsList.Length);
+            return chars.Span [..^(intLen - intCharsWritten)].GetPooledString ();
+        }
 
-            using var argsArr = new StructPooledList<SyntaxNodeOrToken> (CL_ClearMode.Auto);
-            argsArr.EnsureCapacity (funcType->ArgumentsList.Length);
-            for (int argNum = 0; argNum < funcArgsList.Length; argNum++) {
-                var protoArg = protoArgsList [argNum];
-                var funcArg = funcArgsList [argNum];
+        private static string GetPrefixedName (ReadOnlySpan<char> prefix, ReadOnlySpan<char> name) {
+            using var chars = PooledArray<char>.GetArray (prefix.Length + name.Length);
 
-                if (protoArg.ArgType == ES_ArgumentType.In || protoArg.ArgType == ES_ArgumentType.Out)
-                    throw new NotImplementedException ("[TODO] Argument type not implemented yet.");
+            prefix.CopyTo (chars);
+            name.CopyTo (chars.Span [prefix.Length..]);
 
-                var roslynType = GetRoslynType (protoArg.ValueType);
-                var argIdent = Identifier (funcArg.Name.GetPooledString (Encoding.ASCII));
+            return chars.GetPooledString ();
+        }
 
-                var parameterData = Parameter (argIdent).WithType (roslynType);
+        private static string GetLocalVarName (int idx) => GetIndexedName ("esLocal_", idx);
 
-                if (protoArg.ArgType == ES_ArgumentType.Ref)
-                    parameterData = parameterData.WithModifiers (TokenList (Token (SyntaxKind.RefKeyword)));
+        private static string GetArgName (int idx) => GetIndexedName ("esArg_", idx);
 
-                if (argNum > 0)
-                    argsArr.Add (Token (SyntaxKind.CommaToken));
-                argsArr.Add (parameterData);
+        private static string GetIndexedLabel (int idx) => GetIndexedName ("esLabel_", idx);
+
+        private static string GetLabelNameLoopBreak (ReadOnlySpan<char> labelName) => GetPrefixedName (labelName, "_LoopBreak");
+
+        private static string GetLabelNameLoopContinue (ReadOnlySpan<char> labelName) => GetPrefixedName (labelName, "_LoopContinue");
+
+        private static void CompileFunction (ref PassData passData, ESIR_Function func) {
+            var roslynFuncName = func.Name.GetPooledString (Encoding.ASCII);
+            using var argsList = new StructPooledList<ParameterSyntax> (CL_ClearMode.Auto);
+
+            passData.LabelStack.Push ();
+
+            var argCount = 0;
+            foreach (var arg in func.Arguments.Elements) {
+                var argNum = argCount++;
+                var argName = GetArgName (argNum);
+                var argValType = GetRoslynType (arg.ValueType.Pointer);
+
+                var parameter = Parameter (Identifier (argName)).WithType (argValType);
+                switch (arg.ArgType) {
+                    case ES_ArgumentType.Normal: break;
+
+                    case ES_ArgumentType.Ref:
+                        parameter = parameter.WithModifiers (TokenList (Token (SyntaxKind.RefKeyword)));
+                        break;
+
+                    case ES_ArgumentType.Out:
+                        throw new NotImplementedException ("[TODO] Argument type not implemented yet.");
+
+                    default:
+                        throw new NotImplementedException ("Argument type not implemented.");
+                }
+
+                argsList.Add (parameter);
             }
 
-            var retType = funcData->FunctionType->ReturnType;
-            var paramsList = ParameterList (SeparatedListSpan<ParameterSyntax> (argsArr.Span));
+            var funcData = new FunctionData {
+                ReturnType = func.ReturnType.Pointer,
 
-            if (namespaceData is not null) {
-                return (MethodDeclaration (GetRoslynType (retType), MangleGlobalFunctionName (funcData))
-                    .WithParameterList (paramsList)
-                    .WithModifiers (TokenList (
+                Args = func.Arguments.Elements,
+                Locals = func.LocalValues.Elements,
+            };
+
+            using var attrsList = new StructPooledList<AttributeSyntax> (CL_ClearMode.Auto);
+
+            var hasTraceData = false;
+            var hasFuncData = false;
+            foreach (var attr in func.Attributes.Elements) {
+                if (attr is ESIR_TraceDataAttribute traceData) {
+                    Debug.Assert (!hasTraceData);
+                    hasTraceData = true;
+
+                    var parentTypeExpr = LiteralExpression (SyntaxKind.NullLiteralExpression);
+                    var fileNameExpr = LiteralExpression (SyntaxKind.NullLiteralExpression);
+
+                    if (traceData.ParentType.Elements != null)
+                        parentTypeExpr = StringLiteral (traceData.ParentType.GetPooledString (Encoding.ASCII));
+                    if (traceData.FileName is not null)
+                        fileNameExpr = StringLiteral (traceData.FileName);
+
+                    attrsList.Add (Attribute (
+                        IdentifierName (nameof (ES_MethodTraceDataAttribute)),
+                        SimpleAttributeArgumentList (
+                            AttributeArgument (StringLiteral (traceData.Namespace.GetPooledString (Encoding.ASCII))),
+                            AttributeArgument (StringLiteral (traceData.Name.GetPooledString (Encoding.ASCII))),
+
+                            AttributeArgument (
+                                NameEquals (IdentifierName (nameof (ES_MethodTraceDataAttribute.ParentType))), null,
+                                parentTypeExpr
+                            ),
+                            AttributeArgument (
+                                NameEquals (IdentifierName (nameof (ES_MethodTraceDataAttribute.FileName))), null,
+                                fileNameExpr
+                            )
+                        )
+                    ));
+                } else if (attr is ESIR_FunctionDataAttribute funcDataAttr) {
+                    Debug.Assert (!hasFuncData);
+                    hasFuncData = true;
+
+                    passData.Mappings.Add (BackendMapping.Function (funcDataAttr.FunctionData, roslynFuncName));
+                }
+            }
+
+            var stmtsList = new StructPooledList<StatementSyntax> (CL_ClearMode.Auto);
+            try {
+                var localsCount = 0;
+                foreach (var local in func.LocalValues.Elements) {
+                    var localIdx = localsCount++;
+
+                    var varDeclarator = VariableDeclarator (GetLocalVarName (localIdx));
+                    var declStmt = LocalDeclarationStatement (
+                        VariableDeclaration (GetRoslynType (local.Pointer))
+                            .WithVariables (SingletonSeparatedList (varDeclarator))
+                    );
+                    stmtsList.Add (declStmt);
+                }
+
+                CompileStatements (ref passData, ref funcData, ref stmtsList, func.Statements.Elements);
+
+                passData.GlobalMembers.Add (
+                    MethodDeclaration (
+                        GetRoslynType (func.ReturnType.Pointer),
+                        roslynFuncName
+                    ).AddAttributeLists (AttributeList (
+                        SimpleSeparatedList (attrsList.Span, Token (SyntaxKind.CommaToken))
+                    )).WithParameterList (ParameterList (
+                        SimpleSeparatedList (
+                            argsList.Span,
+                            Token (SyntaxKind.CommaToken)
+                        )
+                    )).WithModifiers (TokenList (
                         Token (SyntaxKind.PublicKeyword),
                         Token (SyntaxKind.StaticKeyword)
-                    ))
+                    )).WithBody (BlockSpan (stmtsList.Span))
                 );
-            } else if (parentType is not null) {
-                throw new NotImplementedException ("[TODO] Member functions not implemented yet.");
-            } else
-                throw new CompilationException (ES_BackendErrors.FrontendError);
-        }
-
-        private MethodDeclarationSyntax GenerateCode_Function (
-            ref TranslationUnitData transUnit, ref AstUnitData astUnit, ES_NamespaceData? namespaceData,
-            SymbolStack<Symbol> symbols, ReadOnlySpan<char> src,
-            ES_TypeInfo* parentType, ES_AstFunctionDefinition funcDef
-        ) {
-            Debug.Assert (env is not null);
-            Debug.Assert (namespaceData is not null || parentType is not null);
-
-            var funcInfo = new FunctionInfo ();
-
-            try {
-                symbols.Push ();
-
-                funcInfo.Definition = GenerateFunction (
-                    namespaceData, parentType, env.IdPool.GetIdentifier (funcDef.Name.Text.Span),
-                    out funcInfo.Data
-                );
-
-                var namespaceName = parentType is not null ? parentType->Name.NamespaceNameString : namespaceData!.NamespaceNameString;
-                var parentTypeAttrExpr = parentType is not null
-                ? LiteralExpression (SyntaxKind.StringLiteralExpression, Literal (parentType->Name.GetNameAsTypeString ()))
-                : LiteralExpression (SyntaxKind.NullLiteralExpression);
-
-                funcInfo.Definition = funcInfo.Definition.AddAttributeLists (SingletonAttributeList (Attribute (
-                    IdentifierName (nameof (ES_MethodTraceDataAttribute)),
-                    SimpleAttributeArgumentList (
-                        AttributeArgument (LiteralExpression (SyntaxKind.StringLiteralExpression, Literal (NamespaceName))),
-                        AttributeArgument (LiteralExpression (SyntaxKind.StringLiteralExpression, Literal (funcDef.Name.Text.Span.GetPooledString ()))),
-
-                        AttributeArgument (
-                            NameEquals (IdentifierName (nameof (ES_MethodTraceDataAttribute.ParentType))), null,
-                            parentTypeAttrExpr
-                        ),
-                        AttributeArgument (
-                            NameEquals (IdentifierName (nameof (ES_MethodTraceDataAttribute.FileName))), null,
-                            LiteralExpression (SyntaxKind.StringLiteralExpression, Literal (astUnit.Ast.FileName.Span.GetPooledString ()))
-                        )
-                    )
-                )));
-
-                funcInfo.Type = funcInfo.Data->FunctionType;
-                var retType = funcInfo.Type->ReturnType;
-
-                var protoArgsList = funcInfo.Type->ArgumentsList.Span;
-                var funcArgsList = funcInfo.Data->Arguments.Span;
-                Debug.Assert (protoArgsList.Length == funcArgsList.Length);
-
-                for (uint i = 0; i < funcArgsList.Length; i++) {
-                    ref var argTypeInfo = ref protoArgsList [(int) i];
-                    ref var argData = ref funcArgsList [(int) i];
-
-                    var argFlags = (VariableFlags) 0;
-
-                    switch (argTypeInfo.ArgType) {
-                        case ES_ArgumentType.Normal:
-                            break;
-
-                        case ES_ArgumentType.Ref:
-                            argFlags |= VariableFlags.Ref;
-                            break;
-
-                        case ES_ArgumentType.In:
-                        case ES_ArgumentType.Out:
-                            throw new NotImplementedException ("[TODO] Argument type not implemented.");
-
-                        default:
-                            throw new NotImplementedException ("Argument type not implemented.");
-                    }
-
-                    symbols.AddSymbol (argData.Name, new Symbol (new VariableData (
-                        argTypeInfo.ValueType,
-                        argFlags,
-                        IdentifierName (argData.Name.GetPooledString (Encoding.ASCII))
-                    )));
-                }
-
-                Debug.Assert (funcDef.Statement is not null);
-                Debug.Assert (funcDef.Statement.Endpoint is null);
-                if (funcDef.ExpressionBody) {
-                    Debug.Assert (funcDef.Statement is ES_AstExpressionStatement);
-
-                    var exprExpType = retType->TypeTag != ES_TypeTag.Void ? retType : env.TypeUnknownValue;
-                    var exprStmt = (funcDef.Statement as ES_AstExpressionStatement)!;
-                    var exprData = GenerateCode_Expression (ref transUnit, symbols, src, exprStmt.Expression, exprExpType);
-
-                    if (exprData.TypeInfo is not null || exprData.Function is not null)
-                        throw new CompilationException (ES_BackendErrors.FrontendError);
-
-                    if (retType->TypeTag != ES_TypeTag.Void)
-                        GenerateCode_EnsureImplicitCompat (ref exprData, retType);
-
-                    Debug.Assert (exprData.Value is not null);
-
-                    funcInfo.Definition = funcInfo.Definition.WithExpressionBody (ArrowExpressionClause (exprData.Value));
-                } else {
-                    using var stmtData = GenerateCode_Statement (ref transUnit, symbols, src, ref funcInfo, retType, funcDef.Statement);
-
-                    funcInfo.RegAlloc.ReturnRegisters (stmtData.Registers);
-
-                    if (!stmtData.AlwaysReturns && retType->TypeTag != ES_TypeTag.Void)
-                        throw new CompilationException (ES_BackendErrors.FrontendError);
-
-                    Debug.Assert (stmtData.Statements.RealLength == 1);
-                    Debug.Assert (stmtData.Statements.Span [0] is BlockSyntax);
-
-                    var bodyBlock = stmtData.Statements.Span [0] as BlockSyntax;
-
-                    using var functionBody = new StructPooledList<StatementSyntax> (CL_ClearMode.Auto);
-
-                    using var regStmts = funcInfo.RegAlloc.GetStatements ();
-                    functionBody.AddRange (regStmts.Span);
-
-                    functionBody.EnsureCapacity (bodyBlock!.Statements.Count);
-                    foreach (var stmt in bodyBlock.Statements)
-                        functionBody.Add (stmt!);
-
-                    bodyBlock = BlockSpan (functionBody.Span);
-
-                    funcInfo.Definition = funcInfo.Definition.WithBody (bodyBlock);
-                }
             } finally {
-                funcInfo.RegAlloc.Dispose ();
-
-                symbols.Pop ();
+                stmtsList.Dispose ();
             }
 
-            return funcInfo.Definition;
+            passData.LabelStack.Pop ();
         }
 
-        private StatementData GenerateCode_Statement (
-            ref TranslationUnitData transUnit, SymbolStack<Symbol> symbols, ReadOnlySpan<char> src,
-            ref FunctionInfo funcInfo, ES_TypeInfo* retType, ES_AstStatement stmt
+        private static PooledArray<StatementSyntax> CompileStatements (
+            ref PassData passData,
+            ref FunctionData funcData,
+            ReadOnlySpan<ESIR_Statement> statements
         ) {
-            Debug.Assert (stmt is not null);
-            var idPool = env!.IdPool;
-            var typeUnkn = env.TypeUnknownValue;
+            var stmtsList = new StructPooledList<StatementSyntax> (CL_ClearMode.Auto);
+            try {
+                CompileStatements (ref passData, ref funcData, ref stmtsList, statements);
+                return stmtsList.MoveToArray ();
+            } finally {
+                stmtsList.Dispose ();
+            }
+        }
 
-            switch (stmt) {
-                case ES_AstEmptyStatement:
-                    return new StatementData (EmptyStatement (), false);
+        private static void CompileStatements (
+            ref PassData passData,
+            ref FunctionData funcData,
+            ref StructPooledList<StatementSyntax> stmtsList,
+            ReadOnlySpan<ESIR_Statement> statements
+        ) {
+            foreach (var stmt in statements)
+                CompileStatement (ref passData, ref funcData, ref stmtsList, stmt);
+        }
 
-                case ES_AstLabeledStatement labelStmt: {
-                    throw new NotImplementedException ("[TODO] Labels not implemented yet.");
-                    //return GenerateCode_Statement (ref transUnit, symbols, src, retType, labelStmt.Statement);
-                }
+        private static StatementSyntax CompileStatementOptionalBlock (
+            ref PassData passData,
+            ref FunctionData funcData,
+            ESIR_Statement stmt
+        ) {
+            var stmtsList = new StructPooledList<StatementSyntax> (CL_ClearMode.Auto);
 
-                case ES_AstBlockStatement blockStmt: {
-                    symbols.Push ();
+            try {
+                CompileStatement (ref passData, ref funcData, ref stmtsList, stmt);
 
-                    bool alwaysReturns = false;
+                if (stmtsList.Count < 1)
+                    return EmptyStatement ();
+                else if (stmtsList.Count == 1)
+                    return stmtsList [0];
+                else
+                    return BlockSpan (stmtsList.Span);
+            } finally {
+                stmtsList.Dispose ();
+            }
+        }
 
-                    using var stmtsList = new StructPooledList<StatementSyntax> (CL_ClearMode.Auto);
-                    using var registers = new StructPooledList<int> (CL_ClearMode.Auto);
+        private static PooledArray<StatementSyntax> CompileStatementUnwrapBlock (
+            ref PassData passData,
+            ref FunctionData funcData,
+            ESIR_Statement stmt
+        ) {
+            var stmtsList = new StructPooledList<StatementSyntax> (CL_ClearMode.Auto);
 
-                    ES_AstStatement? subStmt = blockStmt.Statement;
-                    while (subStmt is not null) {
-                        using var subStmtData = GenerateCode_Statement (ref transUnit, symbols, src, ref funcInfo, retType, subStmt);
+            try {
+                if (stmt is ESIR_BlockStatement blockStmt) {
+                    foreach (var innerStmt in blockStmt.Statements.Elements)
+                        CompileStatement (ref passData, ref funcData, ref stmtsList, innerStmt);
+                } else
+                    CompileStatement (ref passData, ref funcData, ref stmtsList, stmt);
 
-                        stmtsList.AddRange (subStmtData.Statements);
-                        registers.AddRange (subStmtData.Registers.Span);
+                return stmtsList.MoveToArray ();
+            } finally {
+                stmtsList.Dispose ();
+            }
+        }
 
-                        if (subStmtData.AlwaysReturns) {
-                            alwaysReturns = true;
-                            break;
-                        }
+        private static void CompileStatement (
+            ref PassData passData,
+            ref FunctionData funcData,
+            ref StructPooledList<StatementSyntax> stmtsList,
+            ESIR_Statement stmt
+        ) {
+            switch (stmt.Kind) {
+                case ESIR_NodeKind.BlockStatement when stmt is ESIR_BlockStatement blockStmt:
+                    CompileStatements (ref passData, ref funcData, ref stmtsList, blockStmt.Statements.Elements);
+                    break;
 
-                        subStmt = subStmt.Endpoint;
-                    }
+                case ESIR_NodeKind.LabeledStatement when stmt is ESIR_LabeledStatement labelStmt:
+                    CompileStatement_Label (ref passData, ref funcData, ref stmtsList, labelStmt);
+                    break;
 
-                    symbols.Pop ();
+                case ESIR_NodeKind.ConditionalStatement when stmt is ESIR_ConditionalStatement condStmt: {
+                    var condExpr = CompileExpression (ref passData, ref funcData, condStmt.Condition);
+                    var thenStmt = CompileStatementOptionalBlock (ref passData, ref funcData, condStmt.Then);
 
-                    return new StatementData (BlockSpan (stmtsList.Span), registers.Span, alwaysReturns);
-                }
-
-                #region Symbol definition
-
-                case ES_AstImportStatement importStmt:
-                    AST_HandleImport (symbols, importStmt);
-                    return new StatementData (false);
-
-                case ES_AstTypeAlias aliasStmt:
-                    AST_HandleAlias (symbols, aliasStmt);
-                    return new StatementData (false);
-
-                case ES_AstLocalVarDefinition varDef: {
-                    bool implicitType = varDef.ValueType is null;
-
-                    var baseVarFlags = (VariableFlags) 0;
-                    if (varDef.UsingVar)
-                        baseVarFlags |= VariableFlags.Using;
-
-                    using var declStatements = new StructPooledList<StatementSyntax> (CL_ClearMode.Auto);
-                    using var registers = new StructPooledList<int> (CL_ClearMode.Auto);
-                    foreach (var variable in varDef.Variables) {
-                        var varName = variable.Name.Text.Span;
-                        var varNameId = idPool.GetIdentifier (varName);
-
-                        var varFlags = baseVarFlags;
-                        var varData = new VariableData {
-                            Flags = varFlags,
-                        };
-
-                        ExpressionSyntax initVal;
-                        if (!implicitType) {
-                            varData.Type = GetTypeRef (varDef.ValueType);
-
-                            if (variable.InitializationExpression is not null) {
-                                var initExprData = GenerateCode_Expression (ref transUnit, symbols, src, variable.InitializationExpression, varData.Type);
-                                GenerateCode_EnsureImplicitCompat (ref initExprData, varData.Type);
-
-                                Debug.Assert (initExprData.Value is not null);
-
-                                initVal = initExprData.Value;
-                            } else
-                                initVal = GetDefaultValue (varData.Type);
-                        } else {
-                            Debug.Assert (variable.InitializationExpression is not null);
-                            var initExprData = GenerateCode_Expression (ref transUnit, symbols, src, variable.InitializationExpression, typeUnkn);
-
-                            Debug.Assert (initExprData.Value is not null);
-
-                            varData.Type = initExprData.Type;
-                            initVal = initExprData.Value;
-                        }
-
-                        int regIdx;
-                        (regIdx, varData.RoslynExpr) = funcInfo.RegAlloc.RentRegister (varData.Type);
-                        registers.Add (regIdx);
-
-                        if (!symbols.AddSymbol (varNameId, new Symbol (varData)))
-                            throw new CompilationException (ES_BackendErrors.FrontendError);
-
-                        declStatements.Add (ExpressionStatement (
-                            AssignmentExpression (
-                                SyntaxKind.SimpleAssignmentExpression,
-                                varData.RoslynExpr,
-                                initVal
-                            )
-                        ));
-                    }
-
-                    return new StatementData (declStatements.Span, registers.Span, false);
-                }
-
-                #endregion
-
-                #region Jumps
-
-                case ES_AstConditionalStatement condStmt: {
-                    var boolType = env!.TypeBool;
-
-                    bool hasElse = condStmt.ElseStatement is not null;
-
-                    // Generate the condition.
-                    var condExpr = GenerateCode_Expression (ref transUnit, symbols, src, condStmt.ConditionExpression, boolType);
-                    GenerateCode_EnsureImplicitCompat (ref condExpr, boolType);
-
-                    Debug.Assert (condExpr.Value is not null);
-
-                    // Generate the then block.
-                    using var thenStmtData = GenerateCode_Statement (ref transUnit, symbols, src, ref funcInfo, retType, condStmt.ThenStatement);
-                    StatementSyntax thenStmt;
-                    if (thenStmtData.Statements.RealLength != 1) {
-                        Debug.Assert (thenStmtData.Statements.RealLength > 1);
-                        thenStmt = Block (thenStmtData.Statements.Span.ToArray ());
+                    if (condStmt.Else is not null) {
+                        var elseStmt = CompileStatementOptionalBlock (ref passData, ref funcData, condStmt.Else);
+                        stmtsList.Add (IfStatement (condExpr.Value!, thenStmt, ElseClause (elseStmt)));
                     } else
-                        thenStmt = thenStmtData.Statements.Span [0];
+                        stmtsList.Add (IfStatement (condExpr.Value!, thenStmt));
 
-                    funcInfo.RegAlloc.ReturnRegisters (thenStmtData.Registers);
+                    break;
+                }
 
-                    // Generate the else block (if any) and the Roslyn statement.
-                    if (hasElse) {
-                        using var elseStmtData = GenerateCode_Statement (ref transUnit, symbols, src, ref funcInfo, retType, condStmt.ElseStatement!);
-                        StatementSyntax elseStmt;
-                        if (elseStmtData.Statements.RealLength != 1) {
-                            Debug.Assert (elseStmtData.Statements.RealLength > 1);
-                            elseStmt = Block (elseStmtData.Statements.Span.ToArray ());
-                        } else
-                            elseStmt = elseStmtData.Statements.Span [0];
+                //case ESIR_NodeKind.SwitchStatement:
 
-                        funcInfo.RegAlloc.ReturnRegisters (elseStmtData.Registers);
+                case ESIR_NodeKind.BreakStatement when stmt is ESIR_BreakStatement breakStmt: {
+                    string targetLabel;
 
-                        var ifStatement = IfStatement (condExpr.Value, thenStmt, ElseClause (elseStmt));
-                        var alwaysReturns = thenStmtData.AlwaysReturns && elseStmtData.AlwaysReturns;
-                        return new StatementData (ifStatement, alwaysReturns);
+                    if (breakStmt.Label is not null) {
+                        var label = passData.LabelStack.GetSymbol (breakStmt.Label.Value);
+
+                        if (label.Name.Elements is null)
+                            throw new CompilationException ("Break label doesn't exist.");
+                        else if (label.BreakTarget is null)
+                            throw new CompilationException ("Break label has no continue target.");
+
+                        targetLabel = label.BreakTarget;
                     } else {
-                        var ifStatement = IfStatement (condExpr.Value, thenStmt);
-                        return new StatementData (ifStatement);
-                    }
-                }
+                        if (funcData.CurBreakTarget is null)
+                            throw new CompilationException ("No continue target");
 
-                case ES_AstSwitchStatement switchStmt: {
-                    throw new NotImplementedException ("[TODO] Switches not implemented yet.");
-                    /*var exprTypeData = GenerateCode_Expression (ref transUnit, symbols, src, switchStmt.ValueExpression, null);
-
-                    foreach (var section in switchStmt.Sections) {
-                        foreach (var expr in section.Expressions) {
-                            if (expr is not null) {
-                                var sectionTypeData = GenerateCode_Expression (ref transUnit, symbols, src, expr, exprTypeData.Type);
-
-                                if (!sectionTypeData.Constant) {
-                                    errorList.Add (new EchelonScriptErrorMessage (
-                                        src, expr.NodeBounds, ES_FrontendErrors.ConstantExprExpected
-                                    ));
-                                }
-
-                                if (!CheckTypes_MustBeCompat (exprTypeData.Type, sectionTypeData.Type)) {
-                                    errorList.Add (ES_FrontendErrors.GenNoCast (
-                                        exprTypeData.Type->FullyQualifiedNameString, sectionTypeData.Type->FullyQualifiedNameString,
-                                        src, sectionTypeData.Expr.NodeBounds
-                                    ));
-                                }
-                            }
-                        }
-
-                        foreach (var subStmt in section.StatementsBlock)
-                            GenerateCode_Statement (ref transUnit, symbols, src, retType, subStmt);
+                        targetLabel = funcData.CurBreakTarget;
                     }
 
-                    // TODO: Change Switch statements to check if they always return.
-                    return new StatementData (false);*/
+                    stmtsList.Add (GotoStatement (SyntaxKind.GotoStatement, IdentifierName (targetLabel)));
+
+                    break;
+                }
+                case ESIR_NodeKind.ContinueStatement when stmt is ESIR_ContinueStatement continueStmt: {
+                    string targetLabel;
+
+                    if (continueStmt.Label is not null) {
+                        var label = passData.LabelStack.GetSymbol (continueStmt.Label.Value);
+
+                        if (label.Name.Elements is null)
+                            throw new CompilationException ("Continue label doesn't exist.");
+                        else if (label.ContinueTarget is null)
+                            throw new CompilationException ("Continue label has no continue target.");
+
+                        targetLabel = label.ContinueTarget;
+                    } else {
+                        if (funcData.CurContinueTarget is null)
+                            throw new CompilationException ("No continue target");
+
+                        targetLabel = funcData.CurContinueTarget;
+                    }
+
+                    stmtsList.Add (GotoStatement (SyntaxKind.GotoStatement, IdentifierName (targetLabel)));
+
+                    break;
                 }
 
-                case ES_AstGotoCaseStatement gotoCaseStmt:
-                    throw new NotImplementedException ("[TODO] 'goto case' not implemented yet.");
+                case ESIR_NodeKind.GotoLabelStatement when stmt is ESIR_GotoLabelStatement gotoLabelStmt: {
+                    var label = passData.LabelStack.GetSymbol (gotoLabelStmt.Label);
 
-                case ES_AstReturnStatement retStmt: {
-                    if (retType->TypeTag == ES_TypeTag.Void) {
-                        if (retStmt.ReturnExpression is not null)
-                            throw new CompilationException (ES_BackendErrors.FrontendError);
+                    if (label.Name.Elements is null)
+                        throw new CompilationException ("Goto label doesn't exist.");
 
-                        return new StatementData (ReturnStatement (), true);
-                    } else if (retStmt.ReturnExpression is not null) {
-                        var exprData = GenerateCode_Expression (ref transUnit, symbols, src, retStmt.ReturnExpression, retType);
-                        GenerateCode_EnsureImplicitCompat (ref exprData, retType);
+                    stmtsList.Add (GotoStatement (SyntaxKind.GotoStatement, IdentifierName (label.JumpTarget)));
 
+                    break;
+                }
+                //case ESIR_NodeKind.GotoCaseStatement:
+
+                case ESIR_NodeKind.ReturnStatement when stmt is ESIR_ReturnStatement retStmt: {
+                    if (retStmt.ReturnExpr is not null) {
+                        var exprData = CompileExpression (ref passData, ref funcData, retStmt.ReturnExpr);
                         Debug.Assert (exprData.Value is not null);
 
-                        return new StatementData (ReturnStatement (exprData.Value), true);
-                    } else // if (retType->TypeTag != ES_TypeTag.Void)
-                        throw new CompilationException (ES_BackendErrors.FrontendError);
+                        stmtsList.Add (ReturnStatement (exprData.Value));
+                    } else
+                        stmtsList.Add (ReturnStatement ());
+
+                    break;
                 }
 
-                #endregion
+                case ESIR_NodeKind.LoopStatement when stmt is ESIR_LoopStatement loopStmt:
+                    CompileStatement_Loop (ref passData, ref funcData, ref stmtsList, loopStmt, null);
+                    break;
 
-                #region Loops
-
-                case ES_AstLoopStatement loopStmt: {
-                    var boolType = env!.TypeBool;
-
-                    symbols.Push ();
-
-                    using var loopBlock = new StructPooledList<StatementSyntax> (CL_ClearMode.Auto);
-                    using var registers = new StructPooledList<int> (CL_ClearMode.Auto);
-
-                    // Emit the init statements, if any.
-                    if (loopStmt.InitializationStatement is not null) {
-                        using var initStmt = GenerateCode_Statement (ref transUnit, symbols, src, ref funcInfo, retType, loopStmt.InitializationStatement);
-
-                        loopBlock.AddRange (initStmt.Statements);
-                        registers.AddRange (initStmt.Registers);
-                    }
-
-                    // Emit the body.
-                    Debug.Assert (loopStmt.LoopBody is not null);
-                    Debug.Assert (loopStmt.LoopBody.Endpoint is null);
-
-                    using var loopBodyStmt = GenerateCode_Statement (ref transUnit, symbols, src, ref funcInfo, retType, loopStmt.LoopBody);
-                    var loopBody = Block (loopBodyStmt.Statements.Span.ToArray ());
-
-                    registers.AddRange (loopBodyStmt.Registers);
-
-                    // Emit the loop.
-                    var statement = ForStatement (loopBody);
-
-                    // Emit the condition, if any.
-                    if (loopStmt.ConditionExpression is not null) {
-                        var condExprData = GenerateCode_Expression (ref transUnit, symbols, src, loopStmt.ConditionExpression, boolType);
-                        GenerateCode_EnsureImplicitCompat (ref condExprData, boolType);
-
-                        Debug.Assert (condExprData.Value is not null);
-                        statement = statement.WithCondition (condExprData.Value);
-                    }
-
-                    // Attach the increment expressions, if any.
-                    if (loopStmt.IterationExpressions is not null) {
-                        using var iterExprs = new StructPooledList<SyntaxNodeOrToken> (CL_ClearMode.Auto);
-
-                        foreach (var expr in loopStmt.IterationExpressions) {
-                            Debug.Assert (expr is not null);
-                            var exprData = GenerateCode_Expression (ref transUnit, symbols, src, expr, null);
-
-                            Debug.Assert (exprData.Value is not null);
-                            iterExprs.Add (exprData.Value);
-                        }
-
-                        statement = statement.WithIncrementors (SeparatedListSpan<ExpressionSyntax> (iterExprs.Span));
-                    }
-
-                    loopBlock.Add (statement);
-
-                    funcInfo.RegAlloc.ReturnRegisters (registers.Span);
-
-                    symbols.Pop ();
-
-                    return new StatementData (BlockSpan (loopBlock.Span), false);
-                }
-
-                #endregion
-
-                case ES_AstExpressionStatement exprStmt: {
-                    var exprData = GenerateCode_Expression (ref transUnit, symbols, src, exprStmt.Expression, typeUnkn);
+                case ESIR_NodeKind.ExpressionStatement when stmt is ESIR_ExpressionStatement exprStmt: {
+                    var exprData = CompileExpression (ref passData, ref funcData, exprStmt.Expression);
                     Debug.Assert (exprData.Value is not null);
 
-                    return new StatementData (ExpressionStatement (exprData.Value), false);
-                }
+                    stmtsList.Add (ExpressionStatement (exprData.Value));
 
-                case ES_AstExpressionListStatement exprListStmt: {
-                    using var expressions = new StructPooledList<StatementSyntax> (CL_ClearMode.Auto);
-
-                    foreach (var expr in exprListStmt.Expressions) {
-                        var exprData = GenerateCode_Expression (ref transUnit, symbols, src, expr, typeUnkn);
-                        Debug.Assert (exprData.Value is not null);
-
-                        expressions.Add (ExpressionStatement (exprData.Value));
-                    }
-
-                    return new StatementData (expressions.Span, false);
+                    break;
                 }
 
                 default:
-                    throw new NotImplementedException ("Expression type not implemented.");
+                    throw new NotImplementedException ("Statement type not implemented.");
             }
         }
 
-        private string GenerateCode_Statement_GenerateVarName (SymbolStack<Symbol> symbols, ReadOnlySpan<char> name) {
-            using var nameChars = PooledArray<char>.GetArray (name.Length + 50);
-            name.CopyTo (nameChars);
+        private static void CompileStatement_Label (
+            ref PassData passData,
+            ref FunctionData funcData,
+            ref StructPooledList<StatementSyntax> stmtsList,
+            ESIR_LabeledStatement labelStmt
+        ) {
+            const string alreadyInUseError = "Name already in use in label stack?";
 
-            var intChars = nameChars.Span.Slice (name.Length);
-            if (!symbols.ScopesCount.TryFormat (intChars, out int charsWritten, provider: CultureInfo.InvariantCulture))
-                Debug.Fail ("This shouldn't happen.");
+            var labelName = labelStmt.Label;
+            var labelNameStr = labelName.GetPooledString (Encoding.ASCII);
 
+            if (labelStmt.Statement is ESIR_LoopStatement labeledLoop) {
+                var labelSymbol = new LabelSymbol (
+                    labelName,
+                    labelNameStr,
+                    GetLabelNameLoopBreak (labelNameStr),
+                    GetLabelNameLoopContinue (labelNameStr)
+                );
 
-            return nameChars.Span.Slice (0, name.Length + charsWritten).GetPooledString ();
+                if (!passData.LabelStack.AddSymbol (labelName, labelSymbol))
+                    throw new CompilationException (alreadyInUseError);
+
+                var loopStmts = new StructPooledList<StatementSyntax> (CL_ClearMode.Auto);
+                try {
+                    CompileStatement_Loop (ref passData, ref funcData, ref loopStmts, labeledLoop, labelNameStr);
+                    Debug.Assert (loopStmts.Count > 0);
+                    stmtsList.Add (LabeledStatement (labelNameStr, loopStmts [0]));
+                    stmtsList.AddRange (loopStmts.Span [1..]);
+                } finally {
+                    loopStmts.Dispose ();
+                }
+            } else {
+                if (!passData.LabelStack.AddSymbol (labelName, new (labelName, labelNameStr)))
+                    throw new CompilationException (alreadyInUseError);
+
+                var labelStmts = new StructPooledList<StatementSyntax> (CL_ClearMode.Auto);
+                try {
+                    CompileStatement (ref passData, ref funcData, ref labelStmts, labelStmt.Statement);
+                    Debug.Assert (labelStmts.Count > 0);
+
+                    if (labelStmts.Count == 0)
+                        stmtsList.Add (LabeledStatement (labelNameStr, EmptyStatement ()));
+                    else
+                        stmtsList.Add (LabeledStatement (labelNameStr, labelStmts [0]));
+
+                    stmtsList.AddRange (labelStmts.Span [1..]);
+                } finally {
+                    labelStmts.Dispose ();
+                }
+            }
+        }
+
+        private static void CompileStatement_Loop (
+            ref PassData passData,
+            ref FunctionData funcData,
+            ref StructPooledList<StatementSyntax> stmtsList,
+            ESIR_LoopStatement loopStmt,
+            string? labelName
+        ) {
+            if (labelName is null)
+                labelName = GetIndexedLabel (funcData.LabelIndex++);
+
+            var breakLabel = GetLabelNameLoopBreak (labelName);
+            var continueLabel = GetLabelNameLoopContinue (labelName);
+
+            var prevBreakTarget = funcData.CurBreakTarget;
+            var prevContinueTarget = funcData.CurContinueTarget;
+            funcData.CurBreakTarget = breakLabel;
+            funcData.CurContinueTarget = continueLabel;
+
+            using var bodyStmts = new StructPooledList<StatementSyntax> (CL_ClearMode.Auto);
+            using var condExprs = PooledArray<ExpressionSyntax>.GetArray (loopStmt.ConditionExpr.Elements.Length);
+            using var iterExprs = PooledArray<ExpressionSyntax>.GetArray (loopStmt.IterationExpr?.Elements.Length ?? 0);
+
+            // Compile the condition expressions.
+            var condNum = 0;
+            foreach (var expr in loopStmt.ConditionExpr.Elements)
+                condExprs.Span [condNum++] = CompileExpression (ref passData, ref funcData, expr).Value!;
+
+            // Compile the iteration expressions.
+            if (loopStmt.IterationExpr is not null) {
+                var iterNum = 0;
+                foreach (var expr in loopStmt.IterationExpr.Elements)
+                    iterExprs.Span [iterNum++] = CompileExpression (ref passData, ref funcData, expr).Value!;
+            }
+
+            // Compile the loop body.
+            using var loopBody = CompileStatementUnwrapBlock (ref passData, ref funcData, loopStmt.Body);
+
+            // Add the conditions.
+            if (condExprs.RealLength > 0) {
+                foreach (var expr in condExprs.Span [..^1])
+                    bodyStmts.Add (ExpressionStatement (expr));
+                bodyStmts.Add (IfStatement (
+                    PrefixUnaryExpression (SyntaxKind.LogicalNotExpression, condExprs.Span [^1]),
+                    GotoStatement (SyntaxKind.GotoStatement, IdentifierName (breakLabel))
+                ));
+            }
+
+            // Add the loop body.
+            bodyStmts.AddRange (loopBody.Span);
+            bodyStmts.Add (GotoStatement (SyntaxKind.GotoStatement, IdentifierName (continueLabel)));
+
+            // Add the break section.
+            bodyStmts.Add (LabeledStatement (breakLabel, BreakStatement ()));
+
+            // Add the continue/iterator section.
+            if (iterExprs.RealLength > 0) {
+                bodyStmts.Add (LabeledStatement (continueLabel, ExpressionStatement (iterExprs.Span [0])));
+                foreach (var expr in iterExprs.Span [1..])
+                    bodyStmts.Add (ExpressionStatement (expr));
+            } else
+                bodyStmts.Add (LabeledStatement (continueLabel, EmptyStatement ()));
+
+            // Emit the while loop.
+            stmtsList.Add (WhileStatement (LiteralExpression (SyntaxKind.TrueLiteralExpression), BlockSpan (bodyStmts.Span)));
+
+            funcData.CurBreakTarget = prevBreakTarget;
+            funcData.CurContinueTarget = prevContinueTarget;
         }
     }
 }

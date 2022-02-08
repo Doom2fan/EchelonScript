@@ -8,7 +8,6 @@
  */
 
 using System;
-using EchelonScriptCommon;
 using EchelonScriptCommon.Data.Types;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
