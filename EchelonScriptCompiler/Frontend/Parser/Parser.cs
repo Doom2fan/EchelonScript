@@ -926,7 +926,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
 
             #region Binary ops
 
-            AddSimpleBinaryExpr (ExpressionPrecedence.Concatenation, EchelonScriptTokenType.Tilde, SimpleBinaryExprType.Concatenation);
+            AddSimpleBinaryExpr (ExpressionPrecedence.Concatenation, EchelonScriptTokenType.DotDot, SimpleBinaryExprType.Concatenation);
 
             AddSimpleBinaryExpr (ExpressionPrecedence.Exponentiation, EchelonScriptTokenType.PowerOp, SimpleBinaryExprType.Power);
 
