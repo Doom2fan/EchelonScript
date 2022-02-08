@@ -140,6 +140,48 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             #endregion
         }
 
+        protected class AssignExpressionParselet : IPostfixExpressionParselet {
+            #region ================== Instance fields
+
+            protected ExpressionPrecedence opPrecedence;
+            protected EchelonScriptTokenType tokenType;
+            protected SimpleBinaryExprType expressionType;
+
+            #endregion
+
+            #region ================== Instance properties
+
+            public ExpressionPrecedence PostfixPrecedence => opPrecedence;
+
+            #endregion
+
+            #region ================== Constructors
+
+            public AssignExpressionParselet (ExpressionPrecedence precedence, EchelonScriptTokenType type, SimpleBinaryExprType exprType) {
+                opPrecedence = precedence;
+                tokenType = type;
+                expressionType = exprType;
+            }
+
+            #endregion
+
+            #region ================== Instance methods
+
+            public bool CheckCanParse (EchelonScriptParser parser, ES_AstExpression left, EchelonScriptToken token) {
+                return token.Type == tokenType;
+            }
+
+            public ES_AstExpression Parse (EchelonScriptParser parser, ES_AstExpression left, EchelonScriptToken token) {
+                parser.tokenizer.NextToken ();
+
+                var right = parser.ParseExpression (opPrecedence - 1);
+
+                return new ES_AstSimpleBinaryExpression (expressionType, left, right, token);
+            }
+
+            #endregion
+        }
+
         protected class SimpleUnaryExpressionParselet : IPrefixExpressionParselet {
             #region ================== Instance fields
 
@@ -841,10 +883,21 @@ namespace EchelonScriptCompiler.Frontend.Parser {
         }
 
         static void AddSimpleBinaryExpr (ExpressionPrecedence precedence, EchelonScriptTokenType tokenType, SimpleBinaryExprType exprType) {
+            Debug.Assert (!exprType.IsAssignment ());
+
             if (!PostfixExprParsers.ContainsKey (tokenType))
                 PostfixExprParsers.Add (tokenType, new List<IPostfixExpressionParselet> ());
 
             PostfixExprParsers [tokenType].Add (new SimpleBinaryExpressionParselet (precedence, tokenType, exprType));
+        }
+
+        static void AddAssignExpr (ExpressionPrecedence precedence, EchelonScriptTokenType tokenType, SimpleBinaryExprType exprType) {
+            Debug.Assert (exprType.IsAssignment ());
+
+            if (!PostfixExprParsers.ContainsKey (tokenType))
+                PostfixExprParsers.Add (tokenType, new List<IPostfixExpressionParselet> ());
+
+            PostfixExprParsers [tokenType].Add (new AssignExpressionParselet (precedence, tokenType, exprType));
         }
 
         static void AddSimpleUnaryExpr (ExpressionPrecedence precedence, EchelonScriptTokenType tokenType, SimpleUnaryExprType exprType) {
@@ -961,25 +1014,25 @@ namespace EchelonScriptCompiler.Frontend.Parser {
 
             #region Assignments
 
-            AddSimpleBinaryExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.Equals, SimpleBinaryExprType.Assign);
+            AddAssignExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.Equals, SimpleBinaryExprType.Assign);
 
-            AddSimpleBinaryExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.PlusEq, SimpleBinaryExprType.AssignAdd);
-            AddSimpleBinaryExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.MinusEq, SimpleBinaryExprType.AssignSubtract);
+            AddAssignExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.PlusEq, SimpleBinaryExprType.AssignAdd);
+            AddAssignExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.MinusEq, SimpleBinaryExprType.AssignSubtract);
 
-            AddSimpleBinaryExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.MultiplyEq, SimpleBinaryExprType.AssignMultiply);
-            AddSimpleBinaryExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.DivideEq, SimpleBinaryExprType.AssignDivide);
-            AddSimpleBinaryExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.ModuloEq, SimpleBinaryExprType.AssignModulo);
-            AddSimpleBinaryExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.PowerOpEq, SimpleBinaryExprType.AssignPower);
+            AddAssignExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.MultiplyEq, SimpleBinaryExprType.AssignMultiply);
+            AddAssignExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.DivideEq, SimpleBinaryExprType.AssignDivide);
+            AddAssignExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.ModuloEq, SimpleBinaryExprType.AssignModulo);
+            AddAssignExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.PowerOpEq, SimpleBinaryExprType.AssignPower);
 
-            AddSimpleBinaryExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.AndEq, SimpleBinaryExprType.AssignBitAnd);
-            AddSimpleBinaryExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.BitOrEq, SimpleBinaryExprType.AssignBitOr);
-            AddSimpleBinaryExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.XorEq, SimpleBinaryExprType.AssignXor);
+            AddAssignExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.AndEq, SimpleBinaryExprType.AssignBitAnd);
+            AddAssignExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.BitOrEq, SimpleBinaryExprType.AssignBitOr);
+            AddAssignExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.XorEq, SimpleBinaryExprType.AssignXor);
 
-            AddSimpleBinaryExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.TildeEq, SimpleBinaryExprType.AssignConcatenate);
+            AddAssignExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.TildeEq, SimpleBinaryExprType.AssignConcatenate);
 
-            AddSimpleBinaryExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.ShiftLeftEq, SimpleBinaryExprType.AssignShiftLeft);
-            AddSimpleBinaryExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.ShiftRightEq, SimpleBinaryExprType.AssignShiftRight);
-            AddSimpleBinaryExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.ShiftRightUEq, SimpleBinaryExprType.AssignShiftRightUnsigned);
+            AddAssignExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.ShiftLeftEq, SimpleBinaryExprType.AssignShiftLeft);
+            AddAssignExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.ShiftRightEq, SimpleBinaryExprType.AssignShiftRight);
+            AddAssignExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.ShiftRightUEq, SimpleBinaryExprType.AssignShiftRightUnsigned);
 
             #endregion
 
