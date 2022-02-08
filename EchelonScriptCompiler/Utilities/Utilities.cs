@@ -29,5 +29,25 @@ namespace EchelonScriptCompiler.Utilities {
 
         public static string GetPooledString (this PooledArray<char> chars)
             => StringPool.Shared.GetOrAdd (chars.Span);
+
+        public static PooledArray<T> Merge<T> (this PooledArray<T> left, PooledArray<T> right) => left.Merge (right.Span);
+
+        public static PooledArray<T> Merge<T> (this PooledArray<T> left, ReadOnlySpan<T> right) {
+            var newArr = PooledArray<T>.GetArray (left.RealLength + right.Length);
+
+            left.Span.CopyTo (newArr.Span);
+            right.CopyTo (newArr.Span [left.RealLength..]);
+
+            return newArr;
+        }
+
+        public static PooledArray<T> Add<T> (this PooledArray<T> left, T right) {
+            var newArr = PooledArray<T>.GetArray (left.RealLength + 1);
+
+            left.Span.CopyTo (newArr.Span);
+            newArr.Span [left.RealLength] = right;
+
+            return newArr;
+        }
     }
 }
