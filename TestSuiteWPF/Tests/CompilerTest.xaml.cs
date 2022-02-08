@@ -19,7 +19,6 @@ using ChronosLib.Pooled;
 using CommunityToolkit.HighPerformance.Buffers;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCompiler;
-using EchelonScriptCompiler.Backends.LLVMBackend;
 using EchelonScriptCompiler.Backends.RoslynBackend;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Frontend;
@@ -89,7 +88,6 @@ namespace TestSuiteWPF.Tests {
             cultureInfo.NumberFormat.NumberGroupSeparator = "'";
 
             AddCompiler ("Frontend only", EchelonScript_Compiler.Create ());
-            AddCompiler ("LLVM", EchelonScript_Compiler.Create<LLVMCompilerBackend> ());
             AddCompiler ("Roslyn", EchelonScript_Compiler.Create<RoslynCompilerBackend> ());
 
             compilerComboBox.SelectedIndex = 0;
