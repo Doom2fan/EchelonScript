@@ -20,10 +20,8 @@
   <ItemGroup>
     <PackageReference Include="ChronosLib" Version="3.0.0-pre-0005-g5a613d7986" />
     <PackageReference Include="Collections.Pooled" Version="2.0.0-preview.27" />
-    <PackageReference Include="CommunityToolkit.HighPerformance" Version="7.1.2" />
-    <PackageReference Include="LibLLVM" Version="12.0.0" />
-    <PackageReference Include="LLVMSharp" Version="12.0.0-beta1" />
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.1.0-1.final" />
+    <PackageReference Include="CommunityToolkit.HighPerformance" Version="8.0.0-preview1" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.1.0-3.final" />
     <PackageReference Include="TerraFX.Interop.Mimalloc" Version="1.6.0-beta2" />
   </ItemGroup>
 
