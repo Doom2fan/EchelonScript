@@ -423,7 +423,7 @@ namespace EchelonScriptCompiler.Frontend {
 
                     var innerExpr = FoldExpression (ref passData, ref unaryExpr.Inner, expectedType);
 
-                    if (passData.EnvBuilder.UnaryOpCompat (innerExpr.Type, unaryExpr.ExpressionType, out _, out _))
+                    if (CompilerFrontend.UnaryOpCompat (passData.Env, innerExpr.Type, unaryExpr.ExpressionType, out _, out _))
                         return ExpressionData.NewValue (expr, typeUnkn);
 
                     FoldExpression_Unary (ref expr);
@@ -461,7 +461,7 @@ namespace EchelonScriptCompiler.Frontend {
                     if (leftType.Type is null || rightType.Type is null)
                         return ExpressionData.NewValue (expr, typeUnkn);
 
-                    if (!passData.EnvBuilder.BinaryOpCompat (leftType.Type, rightType.Type, simpleBinaryExpr.ExpressionType, out var finalType, out _))
+                    if (!CompilerFrontend.BinaryOpCompat (passData.Env, leftType.Type, rightType.Type, simpleBinaryExpr.ExpressionType, out var finalType, out _))
                         return ExpressionData.NewValue (expr, typeUnkn);
 
                     FoldExpression_Binary (ref expr);

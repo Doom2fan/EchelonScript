@@ -998,7 +998,7 @@ namespace EchelonScriptCompiler.Frontend {
 
             var exprData = CheckExpression (ref passData, expr.Inner, expectedType);
 
-            if (!passData.EnvBuilder.UnaryOpCompat (exprData.Type, expr.ExpressionType, out var finalType, out _)) {
+            if (!CompilerFrontend.UnaryOpCompat (passData.Env, exprData.Type, expr.ExpressionType, out var finalType, out _)) {
                 passData.ErrorList.Add (ES_FrontendErrors.GenCantApplyUnaryOp (
                     expr.OperatorToken.Text.Span.GetPooledString (), exprData.Type->Name.GetNameAsTypeString (),
                     passData.Source, exprData.Expr.NodeBounds
@@ -1213,7 +1213,7 @@ namespace EchelonScriptCompiler.Frontend {
             var rhsInt = rhs.Type->TypeTag == ES_TypeTag.Int;
 
             Debug.Assert (!(lhsNull & rhsNull));
-            if (!passData.EnvBuilder.BinaryOpCompat (lhs.Type, rhs.Type, op, out finalType, out _))
+            if (!CompilerFrontend.BinaryOpCompat (passData.Env, lhs.Type, rhs.Type, op, out finalType, out _))
                 return false;
 
             if (lhsNull && rhsRef) {
