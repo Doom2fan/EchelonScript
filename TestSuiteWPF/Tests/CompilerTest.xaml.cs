@@ -219,6 +219,8 @@ namespace TestSuiteWPF.Tests {
         public delegate float FloatFloatFloatDelegate (float a, float b);
 
         private unsafe void CompileCode () {
+            using var d = Dispatcher.DisableProcessing ();
+
             var code = codeText.Text;
 
             using var codeUnits = new StructPooledList<(ReadOnlyMemory<char>, ReadOnlyMemory<char>)> (CL_ClearMode.Auto);
@@ -300,6 +302,8 @@ namespace TestSuiteWPF.Tests {
         private unsafe void RunCode () {
             if (env is null)
                 return;
+
+            using var d = Dispatcher.DisableProcessing ();
 
             var newErrList = errList.Where (msg => msg.Type != "Output").ToArray ();
             errList.Clear ();
@@ -430,6 +434,7 @@ namespace TestSuiteWPF.Tests {
             var error = (CompilerMessage) errorsList.SelectedItem;
             codeText.Focus ();
             codeText.Select (error.StartPos, error.Length);
+            codeText.ScrollTo (error.Line, error.Column);
         }
 
         private void symbolsTreeView_ClickItem (object sender, MouseButtonEventArgs e) {

@@ -71,6 +71,8 @@ namespace TestSuiteWPF.Tests {
         #region ================== Event handlers
 
         private void codeText_TextChanged (object sender, EventArgs e) {
+            using var d = Dispatcher.DisableProcessing ();
+
             string code = codeText.Text;
 
             textMarkerService.Clear ();
@@ -932,6 +934,7 @@ namespace TestSuiteWPF.Tests {
             var error = errList [errorsList.SelectedIndex];
             codeText.Focus ();
             codeText.Select (error.StartPos, error.Length);
+            codeText.ScrollTo (error.Line, error.Column);
         }
 
         private void astTreeView_ClickItem (object sender, MouseButtonEventArgs e) {

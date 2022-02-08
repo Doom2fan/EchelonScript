@@ -46,6 +46,7 @@ namespace TestSuiteWPF.Tests {
 
         private void Update () {
             ES_GarbageCollector.GetImmixInfo (out var allocInfo, out var overflowInfo);
+            using var d = Dispatcher.DisableProcessing ();
 
             PrintInfo (gcInfoTextBlock, ref allocInfo);
             PrintInfo (gcOverflowInfoTextBlock, ref overflowInfo);

@@ -69,6 +69,8 @@ namespace TestSuiteWPF.Tests {
         #region ================== Event handlers
 
         private void codeText_TextChanged (object sender, EventArgs e) {
+            using var d = Dispatcher.DisableProcessing ();
+
             string code = codeText.Text;
             errors.Clear ();
             tokenizer.SetSource ("Buffer".AsMemory (), code.AsMemory ());
@@ -118,6 +120,7 @@ namespace TestSuiteWPF.Tests {
 
             codeText.Focus ();
             codeText.Select (error.StartPos, error.Length);
+            codeText.ScrollTo (error.Line, error.Column);
         }
 
         private void tokensTree_ClickItem (object sender, MouseButtonEventArgs e) {
