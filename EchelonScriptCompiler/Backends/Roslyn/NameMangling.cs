@@ -26,6 +26,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
         internal const string ArrayAllocFuncName = "$Allocate";
         internal const string ArrayIndexFuncName = "$Index";
+        internal const string ArrayConcatFuncName = "$Concat";
 
         private static string MangleDefaultConstructorName (ES_TypeInfo* typeName, bool isStatic) {
             // Sample name: "struct.System.Numerics__Vector2"

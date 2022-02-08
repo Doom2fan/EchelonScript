@@ -112,6 +112,9 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             // Add the index function.
             memberTypes.Add (CompileCode_Array_IndexFunc (ref passData, arrayType));
 
+            // Add the concat function.
+            memberTypes.Add (CompileCode_Array_ConcatFunc (ref passData, arrayType));
+
             // Create the declaration.
             var arrayDecl = StructDeclaration (
                 MangleArrayType (arrayType)
@@ -375,6 +378,117 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 )).WithBody (
                     Block (ListSpan (funcBody.Span))
                 )
+            );
+        }
+        private static MethodDeclarationSyntax CompileCode_Array_ConcatFunc (ref PassData passData, ES_ArrayTypeData* arrayType) {
+            static ExpressionSyntax ArrayLength (ExpressionSyntax arr) {
+                return MemberAccessExpression (
+                    SyntaxKind.PointerMemberAccessExpression,
+                    arr,
+                    IdentifierName ("Length")
+                );
+            }
+
+            static ExpressionSyntax CreateSpan (ExpressionSyntax arr, ES_ArrayTypeData* arrType) {
+                var baseAddrExpr = CompileCode_GetArrayBaseExpr (arrType, arr);
+                return Roslyn_CreateSpan (GetRoslynType (arrType->ElementType), baseAddrExpr, ArrayLength (arr));
+            }
+
+            static ExpressionSyntax CopySpan (ExpressionSyntax src, ExpressionSyntax dst, ExpressionSyntax? start) {
+                if (start is not null) {
+                    dst = ElementAccessExpression (
+                        dst,
+                        BracketedArgumentList (SingletonSeparatedList (
+                            Argument (RangeExpression (
+                                start, null
+                            ))
+                        ))
+                    );
+                }
+
+                return InvocationExpression (
+                    MemberAccessExpression (
+                         SyntaxKind.SimpleMemberAccessExpression,
+                         src,
+                         IdentifierName ("CopyTo")
+                    ),
+                    ArgumentList (
+                        SingletonSeparatedList (Argument (dst))
+                    )
+                );
+            }
+
+            const string lhsArrName = "lhsArr";
+            const string rhsArrName = "rhsArr";
+
+            var roslynArrType = GetRoslynType (&arrayType->TypeInfo);
+            var roslynElemType = GetRoslynType (arrayType->ElementType);
+
+            using var funcBody = new StructPooledList<StatementSyntax> (CL_ClearMode.Auto);
+
+            var lhsArr = IdentifierName (lhsArrName);
+            var rhsArr = IdentifierName (rhsArrName);
+
+            funcBody.Add (ExpressionStatement (CompileCode_NullCheck (lhsArr)));
+            funcBody.Add (ExpressionStatement (CompileCode_NullCheck (rhsArr)));
+
+            var lhsLen = ArrayLength (lhsArr);
+            var rhsLen = ArrayLength (rhsArr);
+
+            var sizeExpr = new ExpressionData {
+                Value = BinaryExpression (
+                    SyntaxKind.AddExpression,
+                    lhsLen,
+                    rhsLen
+                )
+            };
+            var dimsSpan = MemoryMarshal.CreateSpan (ref sizeExpr, 1);
+
+            const string newArrName = "newArr";
+            var newArr = IdentifierName (newArrName);
+
+            funcBody.Add (LocalDeclarationStatement (
+                VariableDeclaration (
+                    roslynArrType,
+                    SimpleSeparatedList (
+                        Token (SyntaxKind.CommaToken),
+                        VariableDeclarator (newArrName)
+                    )
+                )
+            ));
+            funcBody.Add (ExpressionStatement (
+                AssignmentExpression (
+                    SyntaxKind.SimpleAssignmentExpression,
+                    newArr,
+                    CompileCode_NewArray (arrayType, dimsSpan, null)
+                )
+            ));
+
+
+            var lhsArrSpan = CreateSpan (lhsArr, arrayType);
+            var rhsArrSpan = CreateSpan (rhsArr, arrayType);
+            var newArrSpan = CreateSpan (newArr, arrayType);
+
+            funcBody.Add (ExpressionStatement (CopySpan (lhsArrSpan, newArrSpan, null)));
+            funcBody.Add (ExpressionStatement (CopySpan (rhsArrSpan, newArrSpan, lhsLen)));
+
+            funcBody.Add (ReturnStatement (newArr));
+
+            return MethodDeclaration (
+                roslynArrType,
+                ArrayConcatFuncName
+            ).WithModifiers (TokenList (
+                Token (SyntaxKind.PublicKeyword),
+                Token (SyntaxKind.StaticKeyword)
+            )).WithAttributeLists (ListParams (
+                SingletonAttributeList (Attribute_ExcludeFromStackTrace ()),
+                SingletonAttributeList (Attribute_MethodImpl_AggressiveInlining ())
+            )).WithParameterList (ParameterList (SimpleSeparatedList (
+                Token (SyntaxKind.CommaToken),
+                Parameter (Identifier (lhsArrName)).WithType (roslynArrType),
+                Parameter (Identifier (rhsArrName)).WithType (roslynArrType)
+            ))).WithBody (
+                Block (ListSpan (funcBody.Span))
             );
         }
     }

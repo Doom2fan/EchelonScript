@@ -337,6 +337,30 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                     return new ExpressionData { Type = passData.Env.TypeBool, Value = value, };
                 }
 
+                case ESIR_NodeKind.BinaryExprConcat: {
+                    if (lhsArray->DimensionsCount != rhsArray->DimensionsCount)
+                        throw new CompilationException ("Both arrays must have the same rank.");
+                    else if (lhsArray->DimensionsCount != 1)
+                        throw new CompilationException ("The arrays must have rank 1.");
+
+                    Debug.Assert (lhsExpr.Value is not null);
+                    Debug.Assert (rhsExpr.Value is not null);
+
+                    var value = InvocationExpression (MemberAccessExpression (
+                        SyntaxKind.SimpleMemberAccessExpression,
+                        IdentifierName (MangleTypeName (&lhsArray->TypeInfo)),
+                        IdentifierName (ArrayConcatFuncName)
+                    )).WithArgumentList (ArgumentList (
+                        SimpleSeparatedList (
+                            Token (SyntaxKind.CommaToken),
+                            Argument (lhsExpr.Value),
+                            Argument (rhsExpr.Value)
+                        )
+                    ));
+
+                    return new ExpressionData { Type = lhsExpr.Type, Value = value, };
+                }
+
                 default:
                     throw new CompilationException ("Invalid binary op for array/array.");
             }
