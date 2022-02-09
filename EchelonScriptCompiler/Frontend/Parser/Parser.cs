@@ -1028,7 +1028,7 @@ namespace EchelonScriptCompiler.Frontend.Parser {
             AddAssignExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.BitOrEq, SimpleBinaryExprType.AssignBitOr);
             AddAssignExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.XorEq, SimpleBinaryExprType.AssignXor);
 
-            AddAssignExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.TildeEq, SimpleBinaryExprType.AssignConcatenate);
+            AddAssignExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.ConcatEq, SimpleBinaryExprType.AssignConcatenate);
 
             AddAssignExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.ShiftLeftEq, SimpleBinaryExprType.AssignShiftLeft);
             AddAssignExpr (ExpressionPrecedence.Assignment, EchelonScriptTokenType.ShiftRightEq, SimpleBinaryExprType.AssignShiftRight);

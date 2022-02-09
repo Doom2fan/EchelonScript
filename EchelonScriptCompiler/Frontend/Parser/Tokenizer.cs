@@ -315,11 +315,11 @@ namespace EchelonScriptCompiler.Frontend.Parser {
                     (EchelonScriptTokenType.DivideEq, "/="),
                     (EchelonScriptTokenType.ModuloEq, "%="),
                     (EchelonScriptTokenType.PowerOpEq, "**="),
+                    (EchelonScriptTokenType.ConcatEq, "..="),
 
                     (EchelonScriptTokenType.AndEq, "&="),
                     (EchelonScriptTokenType.BitOrEq, "|="),
                     (EchelonScriptTokenType.XorEq, "^="),
-                    (EchelonScriptTokenType.TildeEq, "~="),
                     (EchelonScriptTokenType.ShiftLeftEq, "<<="),
                     (EchelonScriptTokenType.ShiftRightEq, ">>="),
                     (EchelonScriptTokenType.ShiftRightUEq, ">>>="),

@@ -53,11 +53,11 @@ namespace EchelonScriptCompiler.CompilerCommon {
         DivideEq,
         ModuloEq,
         PowerOpEq,
+        ConcatEq,
 
         AndEq,
         BitOrEq,
         XorEq,
-        TildeEq,
         ShiftLeftEq,
         ShiftRightEq,
         ShiftRightUEq,
