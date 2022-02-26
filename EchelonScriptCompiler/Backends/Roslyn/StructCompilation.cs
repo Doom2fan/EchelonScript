@@ -9,7 +9,6 @@
 
 using System;
 using System.Runtime.InteropServices;
-using System.Text;
 using ChronosLib.Pooled;
 using EchelonScriptCommon;
 using EchelonScriptCompiler.CompilerCommon.IR;

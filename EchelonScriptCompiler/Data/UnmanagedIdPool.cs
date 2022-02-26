@@ -12,7 +12,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
-using System.Text;
 using ChronosLib.Pooled;
 using Collections.Pooled;
 using CommunityToolkit.HighPerformance;

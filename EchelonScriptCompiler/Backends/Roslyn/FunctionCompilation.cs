@@ -10,7 +10,6 @@
 using System;
 using System.Diagnostics;
 using System.Globalization;
-using System.Text;
 using ChronosLib.Pooled;
 using EchelonScriptCommon;
 using EchelonScriptCommon.Data.Types;

@@ -8,7 +8,6 @@
  */
 
 using System;
-using System.Text;
 using ChronosLib.Pooled;
 using EchelonScriptCommon;
 using EchelonScriptCommon.Data.Types;
