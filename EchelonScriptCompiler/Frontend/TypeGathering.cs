@@ -115,9 +115,23 @@ namespace EchelonScriptCompiler.Frontend {
 
                     switch (basicDecl.Type) {
                         case ES_AstTypeDeclaration_Basic.DeclType.Const:
+                            if (innerType->IsConstant ()) {
+                                errorList.Add (ES_FrontendErrors.GenTypeAlreadyConst (
+                                    false, innerType->TypeTag == ES_TypeTag.Immutable,
+                                    src, basicDecl.NodeBounds
+                                ));
+                                return innerType;
+                            }
                             return EnvironmentBuilder.CreateConstType (innerType);
 
                         case ES_AstTypeDeclaration_Basic.DeclType.Immutable:
+                            if (innerType->IsConstant ()) {
+                                errorList.Add (ES_FrontendErrors.GenTypeAlreadyConst (
+                                    false, innerType->TypeTag == ES_TypeTag.Immutable,
+                                    src, basicDecl.NodeBounds
+                                ));
+                                return innerType;
+                            }
                             return EnvironmentBuilder.CreateImmutableType (innerType);
 
                         case ES_AstTypeDeclaration_Basic.DeclType.Nullable:

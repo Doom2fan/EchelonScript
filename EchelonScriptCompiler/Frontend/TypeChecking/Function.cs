@@ -45,8 +45,8 @@ namespace EchelonScriptCompiler.Frontend {
             var irWriter = passData.IRWriter;
 
             var funcName = idPool.GetIdentifier (funcDef.Name.Text.Span);
-            var retType = GetTypeRef (funcDef.ReturnType);
-            Debug.Assert (retType is not null);
+            var retType = UnpackFirstConst (GetTypeRef (funcDef.ReturnType));
+            Debug.Assert (retType.Type is not null);
 
             ES_FunctionData* funcData;
             if (namespaceData is not null) {
@@ -59,11 +59,11 @@ namespace EchelonScriptCompiler.Frontend {
 
             symbols.Push ();
 
-            irWriter.StartFunction (MangleFunctionName (ref passData, funcData), TypeNode (retType));
+            irWriter.StartFunction (MangleFunctionName (ref passData, funcData), TypeNode (ref passData, retType));
 
             foreach (var arg in funcDef.ArgumentsList) {
                 var argName = idPool.GetIdentifier (arg.Name.Text.Span);
-                var argValType = GetTypeRef (arg.ValueType);
+                var argValType = UnpackFirstConst (GetTypeRef (arg.ValueType));
 
                 var flags = (SymbolFlags) 0;
 
@@ -77,7 +77,16 @@ namespace EchelonScriptCompiler.Frontend {
                         break;
 
                     case ES_ArgumentType.In:
-                        argValType = passData.EnvBuilder.CreateConstType (argValType);
+                        if (argValType.Constness != Constness.Mutable) {
+                            passData.ErrorList.Add (ES_FrontendErrors.GenTypeAlreadyConst (
+                                false, argValType.Constness == Constness.Immutable,
+                                arg.Name
+                            ));
+                            break;
+                        }
+
+                        argType = ES_ArgumentType.Normal;
+                        argValType = argValType.WithConst (Constness.Const);
                         break;
 
                     case ES_ArgumentType.Out:
@@ -87,12 +96,10 @@ namespace EchelonScriptCompiler.Frontend {
                         throw new NotImplementedException ("Argument type not implemented yet.");
                 }
 
-                if (argValType->IsConstant ())
-                    flags |= SymbolFlags.Constant;
-                if (argValType->IsWritable ())
+                if (argValType.IsWritable)
                     flags |= SymbolFlags.Writable;
 
-                var argIdx = irWriter.AddArgument (ArgumentDefinition (argType, TypeNode (argValType)));
+                var argIdx = irWriter.AddArgument (ArgumentDefinition (argType, TypeNode (ref passData, argValType)));
                 if (!symbols.AddSymbol (argName, TCSymbol.NewVariable (argValType, ArgumentExpression (argIdx), flags)))
                     Debug.Fail ("This shouldn't be reachable.");
 
@@ -108,11 +115,11 @@ namespace EchelonScriptCompiler.Frontend {
             if (funcDef.ExpressionBody) {
                 Debug.Assert (funcDef.Statement is ES_AstExpressionStatement);
 
-                var exprExpType = retType->TypeTag != ES_TypeTag.Void ? retType : passData.Env.TypeUnknownValue;
+                var exprExpType = retType.Type->TypeTag != ES_TypeTag.Void ? retType : passData.GetUnknownType (Constness.Mutable);
                 var exprStmt = (funcDef.Statement as ES_AstExpressionStatement)!;
                 var exprData = CheckExpression (ref passData, exprStmt.Expression, exprExpType);
 
-                if (retType->TypeTag != ES_TypeTag.Void) {
+                if (retType.Type->TypeTag != ES_TypeTag.Void) {
                     if (!EnsureCompat (ref exprData, retType, ref passData, exprData.Expr.NodeBounds))
                         passData.ErrorList.Add (new (funcDef.Name, ES_FrontendErrors.MissingReturnStatement));
                 }
@@ -122,7 +129,7 @@ namespace EchelonScriptCompiler.Frontend {
                 foreach (var expr in exprList.Expressions)
                     irWriter.AddStatement (ExpressionStatement (expr));
 
-                if (retType->TypeTag != ES_TypeTag.Void)
+                if (retType.Type->TypeTag != ES_TypeTag.Void)
                     irWriter.AddStatement (ReturnStatement (exprData.Value));
                 else
                     irWriter.AddStatement (ExpressionStatement (exprData.Value));
@@ -132,7 +139,7 @@ namespace EchelonScriptCompiler.Frontend {
             } else {
                 var stmtData = CheckStatement (ref passData, retType, funcDef.Statement);
 
-                if (!stmtData.AlwaysReturns && retType->TypeTag != ES_TypeTag.Void)
+                if (!stmtData.AlwaysReturns && retType.Type->TypeTag != ES_TypeTag.Void)
                     passData.ErrorList.Add (new (funcDef.Name, ES_FrontendErrors.MissingReturnStatement));
             }
 

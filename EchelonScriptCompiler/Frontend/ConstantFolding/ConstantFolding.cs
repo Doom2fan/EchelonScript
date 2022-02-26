@@ -305,6 +305,9 @@ namespace EchelonScriptCompiler.Frontend {
                         break;
 
                     case ES_ArgumentType.In:
+                        argValType = passData.EnvBuilder.CreateConstType (argValType);
+                        break;
+
                     case ES_ArgumentType.Out:
                         throw new NotImplementedException ("[TODO] Argument type not implemented yet.");
 

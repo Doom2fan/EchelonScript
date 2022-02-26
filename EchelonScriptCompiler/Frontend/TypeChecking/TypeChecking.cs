@@ -35,24 +35,30 @@ namespace EchelonScriptCompiler.Frontend {
 
             public SymbolStack<TCSymbol> Symbols { get; set; }
             public ESIR_Writer IRWriter { get; init; }
+
+            public TypeData GetArrayIndexType () => new (Constness.Const, Env.GetArrayIndexType ());
+            public TypeData GetUnknownType (Constness constness) => new (constness, Env.TypeUnknownValue);
+            public TypeData GetFloat32Type (Constness constness) => new (constness, Env.TypeFloat32);
+            public TypeData GetFloat64Type (Constness constness) => new (constness, Env.TypeFloat64);
+            public TypeData GetBoolType (Constness constness) => new (constness, Env.TypeBool);
         }
 
-        public enum SymbolType {
+        private enum SymbolType {
             None,
             Type,
             Variable,
             Function,
         }
 
-        public enum SymbolFlags {
-            UsingVar = 1,
-            RefVar   = 1 << 1,
-            OutVar   = 1 << 2,
-            Constant = 1 << 3,
-            Writable = 1 << 4,
+        private enum SymbolFlags {
+            UsingVar            = 1,
+            RefVar              = 1 << 1,
+            OutVar              = 1 << 2,
+            CompileTimeConstant = 1 << 3,
+            Writable            = 1 << 4,
         }
 
-        public unsafe struct TCSymbol {
+        private unsafe struct TCSymbol {
             #region ================== Instance fields
 
             private readonly void* valuePtr;
@@ -106,7 +112,7 @@ namespace EchelonScriptCompiler.Frontend {
 
             #endregion
 
-            public static TCSymbol NewVariable (ES_TypeInfo* type, ESIR_Expression expr, SymbolFlags flags = 0)
+            public static TCSymbol NewVariable (TypeData type, ESIR_Expression expr, SymbolFlags flags = 0)
                 => new (new (type, expr), flags);
 
             public static TCSymbol NewType (ES_TypeInfo* type)
@@ -116,11 +122,11 @@ namespace EchelonScriptCompiler.Frontend {
                 => new (SymbolType.Function, data, 0);
         }
 
-        public unsafe struct TCVariable {
-            public readonly ES_TypeInfo* Type;
+        private unsafe struct TCVariable {
+            public readonly TypeData Type;
             public readonly ESIR_Expression IRExpression;
 
-            internal TCVariable (ES_TypeInfo* type, ESIR_Expression irExpr) {
+            internal TCVariable (TypeData type, ESIR_Expression irExpr) {
                 Type = type;
                 IRExpression = irExpr;
             }
@@ -366,7 +372,7 @@ namespace EchelonScriptCompiler.Frontend {
         ) {
             var idPool = passData.Env.IdPool;
             var irWriter = passData.IRWriter;
-            var irTypeVoid = TypeNode (passData.Env.TypeVoid);
+            var irTypeVoid = TypeNode (ref passData, passData.Env.TypeVoid);
 
             using var defStaticConsBody = new StructPooledList<ESIR_Statement> (CL_ClearMode.Auto);
 
@@ -376,12 +382,12 @@ namespace EchelonScriptCompiler.Frontend {
                         Debug.Assert (varDef.ValueType is not null);
 
                         var varId = idPool.GetIdentifier (varDef.Name.Text.Span);
-                        var varType = GetTypeRef (varDef.ValueType);
+                        var varType = UnpackFirstConst (GetTypeRef (varDef.ValueType));
                         var flags = (ES_MemberFlags) 0;
 
-                        if (varType->Flags.HasFlag (ES_TypeFlag.NoNew)) {
+                        if (varType.Type->Flags.HasFlag (ES_TypeFlag.NoNew)) {
                             passData.ErrorList.Add (ES_FrontendErrors.GenNoTypeNew (
-                                varType->Name.GetNameAsTypeString (), passData.Source, varDef.ValueType.NodeBounds
+                                varType.Type->Name.GetNameAsTypeString (), passData.Source, varDef.ValueType.NodeBounds
                             ));
                         }
 
@@ -396,7 +402,7 @@ namespace EchelonScriptCompiler.Frontend {
                             var defExpr = CheckExpression (ref passData, varDef.InitializationExpression, varType);
                             var compat = EnsureCompat (ref defExpr, varType, ref passData, defExpr.Expr.NodeBounds);
 
-                            if (!defExpr.Constant) {
+                            if (!defExpr.CompileTimeConst) {
                                 passData.ErrorList.Add (new (
                                     passData.Source, defExpr.Expr.NodeBounds, ES_FrontendErrors.ConstantExprExpected
                                 ));
@@ -404,11 +410,11 @@ namespace EchelonScriptCompiler.Frontend {
 
                             initValue = defExpr.Value;
                         } else
-                            initValue = DefaultValueExpression (TypeNode (varType));
+                            initValue = DefaultValueExpression (TypeNode (ref passData, varType));
 
                         if (varDef.Static) {
                             var mangledStaticVar = MangleStaticVar (ref passData, typeFQN, varId);
-                            passData.IRWriter.AddStaticVar (StaticVariable (TypeNode (varType), mangledStaticVar));
+                            passData.IRWriter.AddStaticVar (StaticVariable (TypeNode (ref passData, varType), mangledStaticVar));
 
                             var staticVarName = MangleStaticVar (ref passData, typeFQN, varId);
 
@@ -472,7 +478,7 @@ namespace EchelonScriptCompiler.Frontend {
                     var staticVarName = MangleStaticVar (ref passData, structType->TypeInfo.Name, memberName);
                     irMember = StaticField (memberName, staticVarName);
                 } else
-                    irMember = Field (TypeNode (field->Type), field->Offset, memberName);
+                    irMember = Field (TypeNode (ref passData, field->Type), field->Offset, memberName);
 
                 membersList.Add (irMember);
             }
@@ -482,15 +488,15 @@ namespace EchelonScriptCompiler.Frontend {
 
         private static bool IsNullable (
             ref PassData passData,
-            ES_TypeInfo* destType, out ES_TypeInfo* retType
+            TypeData destType, out TypeData retType
         ) {
-            Debug.Assert (destType is not null);
+            Debug.Assert (destType.Type is not null);
 
             var typeUnkn = passData.Env.TypeUnknownValue;
 
-            switch (destType->TypeTag) {
+            switch (destType.Type->TypeTag) {
                 case ES_TypeTag.UNKNOWN:
-                    retType = typeUnkn;
+                    retType = destType.WithType (typeUnkn);
                     return true;
 
                 case ES_TypeTag.Interface:
@@ -499,12 +505,17 @@ namespace EchelonScriptCompiler.Frontend {
                     retType = destType;
                     return true;
 
-                default: {
-                    retType = typeUnkn;
+                default:
+                    retType = destType.WithType (typeUnkn);
                     return false;
-                }
             }
         }
+
+        private static ESIR_TypeNode TypeNode (ref PassData passData, ES_TypeInfo* type)
+            => ESIR_Factory.TypeNode (StripFirstConst (type, out _));//passData.EnvBuilder.RemoveConstness (type));
+
+        private static ESIR_TypeNode TypeNode (ref PassData passData, TypeData type)
+            => TypeNode (ref passData, type.Type);
 
         private static void GenerateGlobalStaticConstructor (ref PassData passData) {
             var irWriter = passData.IRWriter;
@@ -548,7 +559,7 @@ namespace EchelonScriptCompiler.Frontend {
             }
 
             var globalStaticConsName = passData.Env.IdPool.GetIdentifier (ES_Constants.GlobalStaticConstructorName);
-            irWriter.StartFunction (globalStaticConsName, TypeNode (passData.Env.TypeVoid));
+            irWriter.StartFunction (globalStaticConsName, TypeNode (ref passData, passData.Env.TypeVoid));
             irWriter.AddStatements (globalStaticConsBody.Span);
             irWriter.EndFunction (null);
         }

@@ -203,6 +203,8 @@ namespace EchelonScriptCompiler.Frontend {
         public const string MissingReturnValue = "A return value of or convertible to type \"{retType}\" is required.";
         public const string MissingReturnStatement = "Not all code paths return a value.";
 
+        public const string TypeAlreadyConst = "Cannot apply {newConst}, type is already {oldConst}.";
+
         public const string FieldCausesCycle = "Field \"{fieldName}\" causes a cycle in type {typeName}.";
 
         #region Generation functions
@@ -388,6 +390,17 @@ namespace EchelonScriptCompiler.Frontend {
             var errorMessage = MissingReturnValue.Replace ("{retType}", retType);
             return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
         }
+
+        private static string GenTypeAlreadyConst (bool newImmut, bool oldImmut) {
+            var newConst = newImmut ? "immutable" : "const";
+            var oldConst = oldImmut ? "immutable" : "const";
+
+            return TypeAlreadyConst.Replace ("{newConst}", newConst).Replace ("{oldConst}", oldConst);
+        }
+        public static EchelonScriptErrorMessage GenTypeAlreadyConst (bool newImmut, bool oldImmut, EchelonScriptToken tk)
+            => new EchelonScriptErrorMessage (tk, GenTypeAlreadyConst (newImmut, oldImmut));
+        public static EchelonScriptErrorMessage GenTypeAlreadyConst (bool newImmut, bool oldImmut, SourceData src, ES_AstNodeBounds errorBounds)
+            => new EchelonScriptErrorMessage (src, errorBounds, GenTypeAlreadyConst (newImmut, oldImmut));
 
         public static EchelonScriptErrorMessage GenFieldCausesCycle (string fieldName, string typeName, EchelonScriptToken tk) {
             var errorMessage = FieldCausesCycle.Replace ("{fieldName}", fieldName).Replace ("{typeName}", typeName);

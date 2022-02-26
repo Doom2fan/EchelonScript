@@ -23,9 +23,7 @@ namespace EchelonScriptCompiler.Frontend {
             Debug.Assert (Environment is not null);
             Debug.Assert (EnvironmentBuilder is not null);
 
-            var refListRefType = EnvironmentBuilder.MemoryManager.GetArrayAligned<nint> (1, sizeof (nint));
-            refListRefType.Span [0] = 0;
-
+            var refListRefType = EnvironmentBuilder.ReferenceTypeRefList;
             foreach (var nmData in Environment.Namespaces.Values) {
                 foreach (var type in nmData.Types) {
                     if (TypeSizing_AnalyzeCycles (type))
@@ -40,6 +38,9 @@ namespace EchelonScriptCompiler.Frontend {
             Debug.Assert (Environment is not null);
             Debug.Assert (EnvironmentBuilder is not null);
 
+            if (type->Flags.HasFlag (ES_TypeFlag.Analyzed))
+                return;
+
             var hasRefs = !type->Flags.HasFlag (ES_TypeFlag.NoRefs);
 
             switch (type->TypeTag) {
@@ -49,6 +50,7 @@ namespace EchelonScriptCompiler.Frontend {
                     type->RuntimeSize = sizeof (void*);
                     type->RefsList = refListRefType;
                     type->Flags &= ~ES_TypeFlag.NoRefs;
+                    type->Flags |= ES_TypeFlag.Analyzed;
                     return;
                 }
 
@@ -58,9 +60,22 @@ namespace EchelonScriptCompiler.Frontend {
                 case ES_TypeTag.Float:
                 case ES_TypeTag.Function:
                 case ES_TypeTag.Enum:
-                case ES_TypeTag.Const:
-                case ES_TypeTag.Immutable:
+                    type->Flags |= ES_TypeFlag.Analyzed;
                     return;
+
+                case ES_TypeTag.Const:
+                case ES_TypeTag.Immutable: {
+                    var constData = (ES_ConstData*) type;
+
+                    TypeSizing_SizeType (constData->InnerType, refListRefType);
+
+                    type->RuntimeSize = constData->InnerType->RuntimeSize;
+                    type->RefsList = constData->InnerType->RefsList;
+
+                    type->Flags = constData->InnerType->Flags | ES_TypeFlag.Analyzed;
+
+                    return;
+                }
 
                 case ES_TypeTag.Struct:
                 case ES_TypeTag.Class:
@@ -69,9 +84,6 @@ namespace EchelonScriptCompiler.Frontend {
                 default:
                     throw new NotImplementedException ("Type not implemented yet.");
             }
-
-            if (type->RuntimeSize > -1)
-                return;
 
             using var refsList = new StructPooledList<nint> (CL_ClearMode.Auto);
             var curOffs = 0;
@@ -108,6 +120,8 @@ namespace EchelonScriptCompiler.Frontend {
             type->Flags &= ~ES_TypeFlag.NoRefs;
             if (!hasRefs)
                 type->Flags |= ES_TypeFlag.NoRefs;
+
+            type->Flags |= ES_TypeFlag.Analyzed;
         }
 
         private bool TypeSizing_AnalyzeCycles ([NotNull] ES_TypeInfo* type) {
@@ -169,6 +183,12 @@ namespace EchelonScriptCompiler.Frontend {
                 case ES_TypeTag.Class:
                     break;
 
+                case ES_TypeTag.Const:
+                case ES_TypeTag.Immutable: {
+                    var constData = (ES_ConstData*) innerType;
+                    return TypeSizing_AnalyzeCycles_Traverse (constData->InnerType, containingType);
+                }
+
                 case ES_TypeTag.Array:
                 case ES_TypeTag.Void:
                 case ES_TypeTag.Bool:
@@ -178,8 +198,6 @@ namespace EchelonScriptCompiler.Frontend {
                 case ES_TypeTag.Enum:
                 case ES_TypeTag.Interface:
                 case ES_TypeTag.Reference:
-                case ES_TypeTag.Const:
-                case ES_TypeTag.Immutable:
                     return false;
 
                 default:

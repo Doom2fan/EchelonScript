@@ -24,11 +24,11 @@ namespace EchelonScriptCompiler.Frontend {
         }
 
         private static StatementData CheckStatement (
-            ref PassData passData, ES_TypeInfo* retType,
+            ref PassData passData, TypeData retType,
             ES_AstStatement stmt
         ) {
             var idPool = passData.Env.IdPool;
-            var typeUnkn = passData.Env.TypeUnknownValue;
+            var typeUnknMut = passData.GetUnknownType (Constness.Mutable);
 
             switch (stmt) {
                 case ES_AstEmptyStatement:
@@ -134,7 +134,7 @@ namespace EchelonScriptCompiler.Frontend {
                     return CheckStatement_Loop (ref passData, retType, loopStmt);
 
                 case ES_AstExpressionStatement exprStmt: {
-                    var exprData = CheckExpression (ref passData, exprStmt.Expression, typeUnkn);
+                    var exprData = CheckExpression (ref passData, exprStmt.Expression, typeUnknMut);
                     FinishExpression (ref passData, ref exprData);
 
                     return new StatementData { AlwaysReturns = false };
@@ -142,7 +142,7 @@ namespace EchelonScriptCompiler.Frontend {
 
                 case ES_AstExpressionListStatement exprListStmt: {
                     foreach (var expr in exprListStmt.Expressions) {
-                        var exprData = CheckExpression (ref passData, expr, typeUnkn);
+                        var exprData = CheckExpression (ref passData, expr, passData.GetUnknownType (Constness.Mutable));
                         FinishExpression (ref passData, ref exprData);
                     }
 
@@ -155,7 +155,7 @@ namespace EchelonScriptCompiler.Frontend {
         }
 
         private static StatementData CheckStatement_Block (
-            ref PassData passData, ES_TypeInfo* retType,
+            ref PassData passData, TypeData retType,
             ES_AstBlockStatement blockStmt
         ) {
             var symbols = passData.Symbols;
@@ -194,18 +194,18 @@ namespace EchelonScriptCompiler.Frontend {
         }
 
         private static StatementData CheckStatement_LocalVarDef (
-            ref PassData passData, ES_TypeInfo* retType,
+            ref PassData passData, TypeData retType,
             ES_AstLocalVarDefinition varDef
         ) {
             var idPool = passData.Env.IdPool;
             var symbols = passData.Symbols;
             var irWriter = passData.IRWriter;
 
-            var typeUnkn = passData.Env.TypeUnknownValue;
+            var typeUnknMut = passData.GetUnknownType (Constness.Mutable);
 
             var implicitType = varDef.ValueType is null;
 
-            var varType = !implicitType ? GetTypeRef (varDef.ValueType) : null;
+            var varType = !implicitType ? UnpackFirstConst (GetTypeRef (varDef.ValueType)) : TypeData.Null;
             var allVarsFlags = (SymbolFlags) 0;
 
             if (varDef.UsingVar)
@@ -216,6 +216,7 @@ namespace EchelonScriptCompiler.Frontend {
                 var varNameId = idPool.GetIdentifier (varName);
 
                 using var exprList = new ExpressionList (null, null);
+                ExpressionData varExprData;
                 ESIR_Expression? valueExpr;
                 int? valueReg;
 
@@ -223,49 +224,52 @@ namespace EchelonScriptCompiler.Frontend {
 
                 if (!implicitType) {
                     if (variable.InitializationExpression is not null) {
-                        var exprData = CheckExpression (ref passData, variable.InitializationExpression, varType);
-                        EnsureCompat (ref exprData, varType, ref passData, exprData.Expr.NodeBounds);
+                        varExprData = CheckExpression (ref passData, variable.InitializationExpression, varType);
+                        EnsureCompat (ref varExprData, varType, ref passData, varExprData.Expr.NodeBounds);
 
-                        exprList.Merge (ref exprData.Expressions);
+                        exprList.Merge (ref varExprData.Expressions);
 
-                        valueExpr = exprData.Value;
-                        valueReg = exprData.ValueRegister;
+                        valueExpr = varExprData.Value;
+                        valueReg = varExprData.ValueRegister;
                     } else {
+                        varExprData = default;
                         valueExpr = null;
                         valueReg = null;
                     }
                 } else {
                     Debug.Assert (variable.InitializationExpression is not null);
-                    var exprData = CheckExpression (ref passData, variable.InitializationExpression, typeUnkn);
+                    varExprData = CheckExpression (ref passData, variable.InitializationExpression, typeUnknMut);
 
-                    exprList.Merge (ref exprData.Expressions);
+                    exprList.Merge (ref varExprData.Expressions);
 
-                    varType = exprData.Type;
-                    valueExpr = exprData.Value;
-                    valueReg = exprData.ValueRegister;
+                    varType = varExprData.Type;
+                    valueExpr = varExprData.Value;
+                    valueReg = varExprData.ValueRegister;
 
-                    if (varType is not null && varType->TypeTag == ES_TypeTag.Null) {
-                        varType = typeUnkn;
-                        passData.ErrorList.Add (new (passData.Source, exprData.Expr.NodeBounds, ES_FrontendErrors.NoImplicitNullVars));
-                    } else if (exprData.Type is null) {
-                        varType = typeUnkn;
+                    if (varType.Type is not null && varType.Type->TypeTag == ES_TypeTag.Null) {
+                        passData.ErrorList.Add (new (passData.Source, varExprData.Expr.NodeBounds, ES_FrontendErrors.NoImplicitNullVars));
+
+                        varType = typeUnknMut;
+                    } else if (varExprData.Type.Type is null) {
+                        passData.ErrorList.Add (new (passData.Source, varExprData.Expr.NodeBounds, ES_FrontendErrors.NotValueExpression));
+
+                        varType = typeUnknMut;
+                        varExprData = default;
                         valueExpr = null;
                         valueReg = null;
-                        passData.ErrorList.Add (new (passData.Source, exprData.Expr.NodeBounds, ES_FrontendErrors.NotValueExpression));
                     }
                 }
 
-                var constant = varType->IsConstant ();
-                var writable = varType->IsWritable ();
-                if (constant)
-                    varFlags |= SymbolFlags.Constant;
-                if (writable)
+                // TODO: Handle constants.
+                if (varType.IsWritable)
                     varFlags |= SymbolFlags.Writable;
+                if (varType.Constness != Constness.Mutable && varExprData.CompileTimeConst)
+                    varFlags |= SymbolFlags.CompileTimeConstant;
 
                 foreach (var expr in exprList.Expressions)
                     irWriter.AddStatement (ExpressionStatement (expr));
 
-                var varReg = irWriter.RentRegister (TypeNode (varType));
+                var varReg = irWriter.RentRegister (TypeNode (ref passData, varType));
                 irWriter.AddScopeRegister (varReg);
                 var value = LocalValueExpression (varReg);
                 if (valueExpr is not null)
@@ -285,16 +289,16 @@ namespace EchelonScriptCompiler.Frontend {
         }
 
         private static StatementData CheckStatement_Conditional (
-            ref PassData passData, ES_TypeInfo* retType,
+            ref PassData passData, TypeData retType,
             ES_AstConditionalStatement condStmt
         ) {
             var irWriter = passData.IRWriter;
 
-            var typeBool = passData.Env.TypeBool;
+            var typeBoolConst = passData.GetBoolType (Constness.Const);
 
             // Emit the condition expression.
-            var condExprData = CheckExpression (ref passData, condStmt.ConditionExpression, typeBool);
-            EnsureCompat (ref condExprData, typeBool, ref passData, condExprData.Expr.NodeBounds);
+            var condExprData = CheckExpression (ref passData, condStmt.ConditionExpression, typeBoolConst);
+            EnsureCompat (ref condExprData, typeBoolConst, ref passData, condExprData.Expr.NodeBounds);
 
             foreach (var expr in condExprData.Expressions.Expressions)
                 irWriter.AddStatement (ExpressionStatement (expr));
@@ -331,7 +335,7 @@ namespace EchelonScriptCompiler.Frontend {
         }
 
         private static StatementData CheckStatement_Return (
-            ref PassData passData, ES_TypeInfo* retType,
+            ref PassData passData, TypeData retType,
             ES_AstReturnStatement retStmt
         ) {
             var irWriter = passData.IRWriter;
@@ -348,15 +352,16 @@ namespace EchelonScriptCompiler.Frontend {
                 exprList.ReturnRegisters (irWriter);
                 irWriter.ReturnRegister (exprData.ValueRegister);
 
-                if (exprData.Type->TypeTag != ES_TypeTag.Void)
+                if (exprData.Type.Type->TypeTag != ES_TypeTag.Void)
                     irWriter.AddStatement (ReturnStatement (exprData.Value));
                 else {
                     irWriter.AddStatement (ExpressionStatement (exprData.Value));
                     irWriter.AddStatement (ReturnStatement ());
                 }
-            } else if (retType->TypeTag != ES_TypeTag.Void) {
+            } else if (retType.Type->TypeTag != ES_TypeTag.Void) {
                 passData.ErrorList.Add (ES_FrontendErrors.GenMissingReturnValue (
-                    retType->Name.GetNameAsTypeString (), passData.Source, retStmt.NodeBounds
+                    retType.ToType (ref passData)->Name.GetNameAsTypeString (),
+                    passData.Source, retStmt.NodeBounds
                 ));
             } else
                 irWriter.AddStatement (ReturnStatement ());
@@ -365,14 +370,14 @@ namespace EchelonScriptCompiler.Frontend {
         }
 
         private static StatementData CheckStatement_Loop (
-            ref PassData passData, ES_TypeInfo* retType,
+            ref PassData passData, TypeData retType,
             ES_AstLoopStatement loopStmt
         ) {
             var symbols = passData.Symbols;
             var irWriter = passData.IRWriter;
 
-            var typeUnkn = passData.Env.TypeUnknownValue;
-            var typeBool = passData.Env.TypeBool;
+            var typeUnknMut = passData.GetUnknownType (Constness.Mutable);
+            var typeBoolConst = passData.GetBoolType (Constness.Const);
 
             symbols.Push ();
             irWriter.PushScope ();
@@ -384,8 +389,8 @@ namespace EchelonScriptCompiler.Frontend {
             // Emit the condition expression.
             ESIR_List<ESIR_Expression> condExprs;
             if (loopStmt.ConditionExpression is not null) {
-                var condExprData = CheckExpression (ref passData, loopStmt.ConditionExpression, typeBool);
-                EnsureCompat (ref condExprData, typeBool, ref passData, condExprData.Expr.NodeBounds);
+                var condExprData = CheckExpression (ref passData, loopStmt.ConditionExpression, typeBoolConst);
+                EnsureCompat (ref condExprData, typeBoolConst, ref passData, condExprData.Expr.NodeBounds);
 
                 using var condExprList = condExprData.Expressions;
 
@@ -406,7 +411,7 @@ namespace EchelonScriptCompiler.Frontend {
                 foreach (var expr in loopStmt.IterationExpressions) {
                     Debug.Assert (expr is not null);
 
-                    var iterExprData = CheckExpression (ref passData, expr, typeUnkn);
+                    var iterExprData = CheckExpression (ref passData, expr, typeUnknMut);
 
                     exprList.Merge (ref iterExprData.Expressions);
                     exprList.AddExpression (iterExprData.Value);

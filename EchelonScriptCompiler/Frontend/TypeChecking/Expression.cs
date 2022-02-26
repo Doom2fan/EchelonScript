@@ -22,9 +22,72 @@ using static EchelonScriptCompiler.CompilerCommon.IR.ESIR_Factory;
 
 namespace EchelonScriptCompiler.Frontend {
     internal unsafe static partial class Compiler_TypeChecking {
+        private enum Constness {
+            Mutable,
+            Const,
+            Immutable,
+        }
+
+        private struct TypeData {
+            public static TypeData Null => new (Constness.Mutable, null);
+
+            public Constness Constness { get; private init; }
+            public ES_TypeInfo* Type { get; private init; }
+
+            public bool IsWritable => (Type is not null ? Type->IsWritable () : false) & Constness.IsWritable ();
+
+            public TypeData (Constness constness, ES_TypeInfo* type) {
+                Debug.Assert (
+                    type is null ||
+                    (type->TypeTag != ES_TypeTag.Const && type->TypeTag != ES_TypeTag.Immutable)
+                );
+
+                Constness = constness;
+                Type = type;
+            }
+
+            public TypeData WithType (ES_TypeInfo* type) => new (Constness, type);
+            public TypeData WithConst (Constness constness) => new (constness, Type);
+            public TypeData WithInheritedConst (Constness constness)
+                => WithConst (InheritConstness (constness, Constness));
+
+            public ES_TypeInfo* ToType (ref PassData passData) {
+                if (Type is null)
+                    return null;
+
+                switch (Constness) {
+                    case Constness.Mutable:
+                        return Type;
+
+                    case Constness.Const:
+                        return passData.EnvBuilder.CreateConstType (Type);
+
+                    case Constness.Immutable:
+                        return passData.EnvBuilder.CreateImmutableType (Type);
+
+                    default:
+                        throw new NotImplementedException ("Constness type not implemented yet.");
+                }
+            }
+
+            public bool Equals (TypeData other) => Type == other.Type && Constness == other.Constness;
+
+            public override bool Equals (object? obj) {
+                if (obj is TypeData other)
+                    return Equals (other);
+
+                return false;
+            }
+
+            public override int GetHashCode () => HashCode.Combine (Constness, (nint) Type);
+
+            public static bool operator == (TypeData lhs, TypeData rhs) => lhs.Equals (rhs);
+            public static bool operator != (TypeData lhs, TypeData rhs) => !lhs.Equals (rhs);
+        }
+
         private struct ExpressionData {
             public ES_AstExpression Expr;
-            public ES_TypeInfo* Type;
+            public TypeData Type;
             public ES_TypeInfo* TypeInfo;
             public ES_FunctionData* Function;
 
@@ -32,13 +95,13 @@ namespace EchelonScriptCompiler.Frontend {
             public ESIR_Expression Value;
             public int? ValueRegister;
 
-            public bool Constant;
             public bool Writable;
+            public bool CompileTimeConst;
 
             public static ExpressionData NewValue (
                 ES_AstExpression expr,
-                ES_TypeInfo* type, ExpressionList exprs, ESIR_Expression value, int? reg,
-                bool isConst, bool writable
+                TypeData type, ExpressionList exprs, ESIR_Expression value, int? reg,
+                bool writable, bool compTimeConst
             ) {
                 return new ExpressionData {
                     Expr = expr,
@@ -50,16 +113,16 @@ namespace EchelonScriptCompiler.Frontend {
                     Expressions = exprs,
                     Value = value,
                     ValueRegister = reg,
-
-                    Constant = isConst,
+                    
                     Writable = writable,
+                    CompileTimeConst = compTimeConst,
                 };
             }
 
             public static ExpressionData NewValue (
                 ES_AstExpression expr,
-                ES_TypeInfo* type, ESIR_Expression value, int? reg,
-                bool isConst, bool writable
+                TypeData type, ESIR_Expression value, int? reg,
+                bool writable, bool compTimeConst
             ) {
                 return new ExpressionData {
                     Expr = expr,
@@ -72,24 +135,24 @@ namespace EchelonScriptCompiler.Frontend {
                     Value = value,
                     ValueRegister = reg,
 
-                    Constant = isConst,
                     Writable = writable,
+                    CompileTimeConst = compTimeConst,
                 };
             }
 
-            public static ExpressionData NewType (ES_AstExpression expr, ES_TypeInfo* typeInfo, bool isConst) {
+            public static ExpressionData NewType (ES_AstExpression expr, ES_TypeInfo* typeInfo) {
                 var ret = new ExpressionData {
                     Expr = expr,
                     TypeInfo = typeInfo,
 
-                    Type = null,
+                    Type = TypeData.Null,
                     Function = null,
 
                     Value = null!,
                     ValueRegister = null,
 
-                    Constant = isConst,
                     Writable = false,
+                    CompileTimeConst = false,
                 };
 
                 ret.Expressions.Initialize ();
@@ -99,21 +162,20 @@ namespace EchelonScriptCompiler.Frontend {
 
             public static ExpressionData NewFunction (
                 ES_AstExpression expr,
-                ES_FunctionData* func, ES_TypeInfo* funcType,
-                bool isConst
+                ES_FunctionData* func, ES_TypeInfo* funcType
             ) {
                 var ret = new ExpressionData {
                     Expr = expr,
                     Function = func,
                     TypeInfo = funcType,
 
-                    Type = null,
+                    Type = TypeData.Null,
 
                     Value = null!,
                     ValueRegister = null,
 
-                    Constant = isConst,
                     Writable = false,
+                    CompileTimeConst = false,
                 };
 
                 ret.Expressions.Initialize ();
@@ -123,30 +185,28 @@ namespace EchelonScriptCompiler.Frontend {
 
             public static ExpressionData NewFunction (
                 ES_AstExpression expr,
-                ES_FunctionData* func, ES_TypeInfo* funcType, ExpressionList values, ESIR_Expression value, int? reg,
-                bool isConst
+                ES_FunctionData* func, ES_TypeInfo* funcType, ExpressionList values, ESIR_Expression value, int? reg
             ) {
                 return new ExpressionData {
                     Expr = expr,
                     Function = func,
                     TypeInfo = funcType,
 
-                    Type = null,
+                    Type = TypeData.Null,
 
                     Expressions = values,
                     Value = value,
                     ValueRegister = reg,
 
-                    Constant = isConst,
                     Writable = false,
+                    CompileTimeConst = false,
                 };
             }
 
             public static ExpressionData NewFunction (
                 ES_AstExpression expr,
-                ES_FunctionData* func, ES_TypeInfo* funcType, ESIR_Expression value, int? reg,
-                bool isConst
-            ) => NewFunction (expr, func, funcType, new ExpressionList (null, null), value, reg, isConst);
+                ES_FunctionData* func, ES_TypeInfo* funcType, ESIR_Expression value, int? reg
+            ) => NewFunction (expr, func, funcType, new ExpressionList (null, null), value, reg);
         }
 
         private struct ExpressionList : IDisposable {
@@ -239,80 +299,385 @@ namespace EchelonScriptCompiler.Frontend {
         }
 
         private static ExpressionData ExpressionError (
-            ref PassData passData, ES_AstExpression expr, bool constant = false, bool writable = false
-        ) => ExpressionData.NewValue (expr, passData.Env.TypeUnknownValue, ErrorExpression (), null, constant, writable);
+            ref PassData passData, ES_AstExpression expr, Constness constness = Constness.Mutable, bool writable = false
+        ) => ExpressionData.NewValue (expr, passData.GetUnknownType (constness), ErrorExpression (), null, writable, false);
+
+        private static Constness InheritConstness (Constness baseConst, Constness thisConst) {
+            if (baseConst == Constness.Mutable)
+                return thisConst;
+            else if (baseConst == Constness.Const)
+                return (thisConst == Constness.Immutable) ? thisConst : baseConst;
+            else if (baseConst == Constness.Immutable)
+                return Constness.Immutable;
+            else
+                throw new NotImplementedException ("Constness type not implemented.");
+        }
+
+        private static PooledArray<TypeData> DeconstructType (ref PassData passData, TypeData typeData) {
+            using var typeList = new StructPooledList<TypeData> (CL_ClearMode.Auto);
+
+            // Deconstruct the type.
+            var type = typeData.Type;
+            var constness = typeData.Constness;
+            while (type is not null) {
+                switch (type->TypeTag) {
+                    case ES_TypeTag.UNKNOWN:
+                    case ES_TypeTag.Null:
+                    case ES_TypeTag.Void:
+                    case ES_TypeTag.Bool:
+                    case ES_TypeTag.Int:
+                    case ES_TypeTag.Float:
+                    case ES_TypeTag.Function:
+                    case ES_TypeTag.Struct:
+                    case ES_TypeTag.Class:
+                    case ES_TypeTag.Enum:
+                    case ES_TypeTag.Interface:
+                        typeList.Add (new (constness, type));
+                        type = null;
+                        break;
+
+                    case ES_TypeTag.Reference: {
+                        var refData = (ES_ReferenceData*) type;
+
+                        typeList.Add (new (constness, type));
+                        type = refData->PointedType;
+                        break;
+                    }
+
+                    case ES_TypeTag.Const:
+                    case ES_TypeTag.Immutable: {
+                        var constData = (ES_ConstData*) type;
+
+                        if (type->TypeTag == ES_TypeTag.Immutable)
+                            constness = Constness.Immutable;
+                        else if (constness != Constness.Immutable)
+                            constness = Constness.Const;
+                        type = constData->InnerType;
+                        break;
+                    }
+
+                    case ES_TypeTag.Array: {
+                        var arrData = (ES_ArrayTypeData*) type;
+
+                        typeList.Add (new (constness, type));
+                        type = arrData->ElementType;
+                        break;
+                    }
+
+                    default:
+                        throw new NotImplementedException ("Type not implemented.");
+                }
+            }
+
+            // Replace all types in the list with "clean" mutable versions.
+            var typeSpan = typeList.Span;
+            for (int i = typeSpan.Length - 1; i >= 0; i--) {
+                ref var listType = ref typeSpan [i];
+
+                switch (listType.Type->TypeTag) {
+                    case ES_TypeTag.UNKNOWN:
+                    case ES_TypeTag.Null:
+                    case ES_TypeTag.Void:
+                    case ES_TypeTag.Bool:
+                    case ES_TypeTag.Int:
+                    case ES_TypeTag.Float:
+                    case ES_TypeTag.Function:
+                    case ES_TypeTag.Struct:
+                    case ES_TypeTag.Class:
+                    case ES_TypeTag.Enum:
+                    case ES_TypeTag.Interface:
+                        break;
+
+                    case ES_TypeTag.Reference: {
+                        var refData = (ES_ReferenceData*) listType.Type;
+
+                        Debug.Assert (i + 1 < typeSpan.Length);
+                        var innerType = typeSpan [i + 1].Type;
+                        var newRefType = passData.EnvBuilder.CreateReferenceType (innerType);
+                        listType = listType.WithType (newRefType);
+
+                        break;
+                    }
+
+                    case ES_TypeTag.Const:
+                    case ES_TypeTag.Immutable:
+                        Debug.Fail ("This shouldn't happen.");
+                        break;
+
+                    case ES_TypeTag.Array: {
+                        var arrData = (ES_ArrayTypeData*) listType.Type;
+
+                        Debug.Assert (i + 1 < typeSpan.Length);
+                        var innerType = typeSpan [i + 1].Type;
+                        var newArrType = passData.EnvBuilder.CreateArrayType (innerType, arrData->DimensionsCount);
+                        listType = listType.WithType (newArrType);
+
+                        break;
+                    }
+
+                    default:
+                        throw new NotImplementedException ("Type not implemented.");
+                }
+            }
+
+            return typeList.MoveToArray ();
+        }
+
+        private static bool IsConstIgnorantType (TypeData type) {
+            switch (type.Type->TypeTag) {
+                case ES_TypeTag.Null:
+                case ES_TypeTag.Void:
+                case ES_TypeTag.Bool:
+                case ES_TypeTag.Int:
+                case ES_TypeTag.Float:
+                case ES_TypeTag.Enum:
+                    return true;
+
+                default:
+                    return false;
+            }
+        }
+
+        private static bool CanConvertConstness (Constness thisConst, Constness destConst)
+            => thisConst == destConst || destConst == Constness.Const;
+
+        private static bool CanConvertConstness (ref PassData passData, TypeData origType, TypeData newType) {
+            using var origDeconsArr = DeconstructType (ref passData, origType);
+            using var newDeconsArr = DeconstructType (ref passData, newType);
+            var origData = origDeconsArr.Span;
+            var newData = newDeconsArr.Span;
+
+            Debug.Assert (origData.Length > 0);
+            Debug.Assert (newData.Length > 0);
+
+            if (origData.Length != newData.Length)
+                return false;
+
+            if (origData [0].Type != newData [0].Type)
+                return false;
+
+            var typeLen = origData.Length;
+            for (int i = typeLen - 1; i >= 0; i--) {
+                var origConst = origData [i];
+                var newConst = newData [i];
+
+                Debug.Assert (origConst.Type == newConst.Type);
+
+                if (i == 0 && IsConstIgnorantType (newConst))
+                    continue;
+
+                if (!CanConvertConstness (origConst.Constness, newConst.Constness))
+                    return false;
+            }
+
+            return true;
+        }
+
+        private static bool CanMatchConstness (ref PassData passData, TypeData lhs, TypeData rhs, out TypeData finalType) {
+            using var lhsDeconsArr = DeconstructType (ref passData, lhs);
+            using var rhsDeconsArr = DeconstructType (ref passData, rhs);
+            var lhsData = lhsDeconsArr.Span;
+            var rhsData = rhsDeconsArr.Span;
+
+            Debug.Assert (lhsData.Length > 0);
+            Debug.Assert (rhsData.Length > 0);
+
+            if (lhsData.Length != rhsData.Length || lhsData [0].Type != rhsData [0].Type) {
+                finalType = TypeData.Null;
+                return false;
+            }
+
+            var typeLen = lhsData.Length;
+            using var finalDeconsArr = PooledArray<TypeData>.GetArray (typeLen);
+            var finalDecons = finalDeconsArr.Span;
+
+            for (int i = 0; i < typeLen; i++) {
+                var lhsConst = lhsData [i];
+                var rhsConst = rhsData [i];
+                ref var finalConst = ref finalDecons [i];
+
+                Debug.Assert (lhsConst.Type == rhsConst.Type);
+
+                var finalConstness = Constness.Const;
+                if ((lhsConst.Constness, rhsConst.Constness) == (Constness.Mutable, Constness.Mutable))
+                    finalConstness = Constness.Mutable;
+                else if ((lhsConst.Constness, rhsConst.Constness) == (Constness.Immutable, Constness.Immutable))
+                    finalConstness = Constness.Immutable;
+
+                finalConst = lhsConst.WithConst (finalConstness);
+            }
+
+            var innerType = TypeData.Null;
+            for (int i = finalDecons.Length - 1; i >= 0; i--) {
+                ref var listType = ref finalDecons [i];
+
+                if (innerType.Type is not null && listType.Constness != innerType.Constness) {
+                    var innerTypePtr = innerType.Type;
+
+                    if (innerType.Constness == Constness.Const)
+                        innerTypePtr = passData.EnvBuilder.CreateConstType (innerType.Type);
+                    else if (innerType.Constness == Constness.Immutable)
+                        innerTypePtr = passData.EnvBuilder.CreateImmutableType (innerType.Type);
+
+                    innerType = listType.WithType (innerTypePtr);
+                }
+
+                switch (listType.Type->TypeTag) {
+                    case ES_TypeTag.Null:
+                    case ES_TypeTag.Void:
+                    case ES_TypeTag.Bool:
+                    case ES_TypeTag.Int:
+                    case ES_TypeTag.Float:
+                    case ES_TypeTag.Function:
+                    case ES_TypeTag.Struct:
+                    case ES_TypeTag.Class:
+                    case ES_TypeTag.Enum:
+                    case ES_TypeTag.Interface:
+                        Debug.Assert (innerType.Type is null);
+                        innerType = listType;
+                        break;
+
+                    case ES_TypeTag.Reference: {
+                        Debug.Assert (innerType.Type is not null);
+                        Debug.Assert (i + 1 < finalDecons.Length);
+
+                        var refData = (ES_ReferenceData*) listType.Type;
+                        innerType = innerType.WithType (passData.EnvBuilder.CreateReferenceType (innerType.Type));
+
+                        break;
+                    }
+
+                    case ES_TypeTag.Const:
+                    case ES_TypeTag.Immutable:
+                        Debug.Fail ("This shouldn't happen.");
+                        break;
+
+                    case ES_TypeTag.Array: {
+                        Debug.Assert (innerType.Type is not null);
+                        Debug.Assert (i + 1 < finalDecons.Length);
+
+                        var arrData = (ES_ArrayTypeData*) listType.Type;
+                        innerType = innerType.WithType (passData.EnvBuilder.CreateArrayType (innerType.Type, arrData->DimensionsCount));
+
+                        break;
+                    }
+
+                    default:
+                        throw new NotImplementedException ("Type not implemented.");
+                }
+            }
+
+            finalType = innerType;
+            return true;
+        }
+
+        private static bool IsWritable (this Constness constness) => constness == Constness.Mutable;
+
+        private static ES_TypeInfo* StripFirstConst (ES_TypeInfo* type, out Constness constness) {
+            switch (type->TypeTag) {
+                case ES_TypeTag.Const:
+                case ES_TypeTag.Immutable: {
+                    var constType = (ES_ConstData*) type;
+
+                    constness = (type->TypeTag == ES_TypeTag.Immutable) ? Constness.Immutable : Constness.Const;
+
+                    Debug.Assert (constType->InnerType->TypeTag != ES_TypeTag.Const);
+                    Debug.Assert (constType->InnerType->TypeTag != ES_TypeTag.Immutable);
+
+                    return constType->InnerType;
+                }
+
+                default:
+                    constness = Constness.Mutable;
+                    return type;
+            }
+        }
+
+        private static TypeData UnpackFirstConst (ES_TypeInfo* type) {
+            var retType = StripFirstConst (type, out var retConst);
+            return new (retConst, retType);
+        }
 
         private static bool MustBeCompat (
-            ref PassData passData, ref ExpressionData exprData, ES_TypeInfo* destType
+            ref PassData passData, ref ExpressionData exprData, TypeData destType, bool noModify = false
         ) {
             // We don't need to do any checks here if they're *literally* the same type.
             if (destType == exprData.Type)
                 return true;
 
-            if (destType->TypeTag == ES_TypeTag.UNKNOWN || exprData.Type->TypeTag == ES_TypeTag.UNKNOWN)
+            if (CanConvertConstness (ref passData, exprData.Type, destType)) {
+                if (!noModify)
+                    exprData.Value = CastExpression (exprData.Value, TypeNode (ref passData, destType));
+            } else if (destType.Type->TypeTag == ES_TypeTag.UNKNOWN || exprData.Type.Type->TypeTag == ES_TypeTag.UNKNOWN)
                 return true;
-            else if (exprData.Type->TypeTag == ES_TypeTag.Null) {
+            else if (exprData.Type == destType) {
+                // Do nothing
+            } else if (exprData.Type.Type->TypeTag == ES_TypeTag.Null) {
                 if (!IsNullable (ref passData, destType, out _))
                     return false;
 
-                exprData.Value = NullLiteralExpression (TypeNode (destType));
-                exprData.Constant = true;
-                exprData.Writable = false;
-
-                return true;
-            } else if (destType->TypeTag == ES_TypeTag.Int && exprData.Type->TypeTag == ES_TypeTag.Int) {
-                var destIntType = (ES_IntTypeData*) destType;
-                var givenIntType = (ES_IntTypeData*) exprData.Type;
+                if (!noModify) {
+                    exprData.Value = NullLiteralExpression (TypeNode (ref passData, destType));
+                    exprData.Writable = false;
+                }
+            } else if (destType.Type->TypeTag == ES_TypeTag.Int && exprData.Type.Type->TypeTag == ES_TypeTag.Int) {
+                var destIntType = (ES_IntTypeData*) destType.Type;
+                var givenIntType = (ES_IntTypeData*) exprData.Type.Type;
 
                 if (givenIntType->Unsigned != destIntType->Unsigned || givenIntType->IntSize > destIntType->IntSize)
                     return false;
 
-                exprData.Value = CastExpression (exprData.Value, TypeNode (destType));
-                exprData.Constant = true;
-                exprData.Writable = false;
+                if (!noModify) {
+                    exprData.Value = CastExpression (exprData.Value, TypeNode (ref passData, destType));
+                    exprData.Writable = false;
+                }
+            } else
+                return false;
 
-                return true;
-            }
+            exprData.Type = destType;
+            exprData.Writable &= destType.IsWritable;
 
-            return false;
+            return true;
         }
 
         private static bool ExplicitCast (
-            ref PassData passData, ref ExpressionData exprData, ES_TypeInfo* castType,
+            ref PassData passData, ref ExpressionData exprData, TypeData castType,
             out bool castRedundant, bool noModify = false
         ) {
-            if (MustBeCompat (ref passData, ref exprData, castType)) {
+            if (MustBeCompat (ref passData, ref exprData, castType, noModify)) {
                 castRedundant = true;
                 return true;
             }
 
-            if (castType->TypeTag == ES_TypeTag.Int && exprData.Type->TypeTag == ES_TypeTag.Int) {
-                var castIntType = (ES_IntTypeData*) castType;
-                var exprIntType = (ES_IntTypeData*) exprData.Type;
+            if (exprData.Type == castType && exprData.Type.Constness != castType.Constness) {
+                castRedundant = false;
+            } 
+            
+            if (castType.Type->TypeTag == ES_TypeTag.Int && exprData.Type.Type->TypeTag == ES_TypeTag.Int) {
+                var castIntType = (ES_IntTypeData*) castType.Type;
+                var exprIntType = (ES_IntTypeData*) exprData.Type.Type;
 
                 castRedundant = (
                     castIntType->IntSize == exprIntType->IntSize &&
                     castIntType->Unsigned == exprIntType->Unsigned
                 );
-            } else if (castType->TypeTag == ES_TypeTag.Float && exprData.Type->TypeTag == ES_TypeTag.Int) {
+            } else if (castType.Type->TypeTag == ES_TypeTag.Float && exprData.Type.Type->TypeTag == ES_TypeTag.Int) {
                 castRedundant = false;
-            } else if (castType->TypeTag == ES_TypeTag.Int && exprData.Type->TypeTag == ES_TypeTag.Float) {
+            } else if (castType.Type->TypeTag == ES_TypeTag.Int && exprData.Type.Type->TypeTag == ES_TypeTag.Float) {
                 castRedundant = false;
-            } else if (castType->TypeTag == ES_TypeTag.Float && exprData.Type->TypeTag == ES_TypeTag.Float) {
-                var castFloatType = (ES_FloatTypeData*) castType;
-                var exprFloatType = (ES_FloatTypeData*) exprData.Type;
+            } else if (castType.Type->TypeTag == ES_TypeTag.Float && exprData.Type.Type->TypeTag == ES_TypeTag.Float) {
+                var castFloatType = (ES_FloatTypeData*) castType.Type;
+                var exprFloatType = (ES_FloatTypeData*) exprData.Type.Type;
 
                 castRedundant = castFloatType->FloatSize == exprFloatType->FloatSize;
             } else {
-                if (!noModify)
-                    exprData.Constant = false;
                 castRedundant = false;
                 return false;
             }
 
             if (!noModify) {
                 exprData.Type = castType;
-                exprData.Value = CastExpression (exprData.Value, TypeNode (castType));
+                exprData.Value = CastExpression (exprData.Value, TypeNode (ref passData, castType));
                 exprData.Writable = false;
             }
 
@@ -320,39 +685,39 @@ namespace EchelonScriptCompiler.Frontend {
         }
 
         private static bool EnsureCompat (
-            ref ExpressionData exprData, ES_TypeInfo* destType,
+            ref ExpressionData exprData, TypeData destType,
             ref PassData passData, ES_AstNodeBounds bounds
         ) {
-            if (exprData.Type->TypeTag == ES_TypeTag.Null) {
+            if (exprData.Type.Type->TypeTag == ES_TypeTag.Null) {
                 if (!IsNullable (ref passData, destType, out var retType)) {
                     passData.ErrorList.Add (ES_FrontendErrors.GenTypeNotNullable (
-                        destType->Name.GetNameAsTypeString (), passData.Source, bounds
+                        destType.ToType (ref passData)->Name.GetNameAsTypeString (),
+                        passData.Source, bounds
                     ));
 
-                    exprData.Type = passData.Env.TypeUnknownValue;
+                    exprData.Type = exprData.Type.WithType (passData.Env.TypeUnknownValue);
                     exprData.Value = ErrorExpression ();
-                    exprData.Constant = false;
                     return false;
                 }
 
                 exprData.Type = retType;
-                exprData.Value = NullLiteralExpression (TypeNode (retType));
-                exprData.Constant = false;
+                exprData.Value = NullLiteralExpression (TypeNode (ref passData, retType));
                 return true;
             } else if (!MustBeCompat (ref passData, ref exprData, destType)) {
                 if (ExplicitCast (ref passData, ref exprData, destType, out _, true)) {
                     passData.ErrorList.Add (ES_FrontendErrors.GenNoImplicitCast (
-                        destType->Name.GetNameAsTypeString (), exprData.Type->Name.GetNameAsTypeString (),
+                        destType.ToType (ref passData)->Name.GetNameAsTypeString (),
+                        exprData.Type.ToType (ref passData)->Name.GetNameAsTypeString (),
                         passData.Source, bounds
                     ));
                 } else {
                     passData.ErrorList.Add (ES_FrontendErrors.GenNoCast (
-                        destType->Name.GetNameAsTypeString (), exprData.Type->Name.GetNameAsTypeString (),
+                        destType.ToType (ref passData)->Name.GetNameAsTypeString (),
+                        exprData.Type.ToType (ref passData)->Name.GetNameAsTypeString (),
                         passData.Source, bounds
                     ));
                 }
 
-                exprData.Constant = false;
                 return false;
             }
 
@@ -360,18 +725,21 @@ namespace EchelonScriptCompiler.Frontend {
         }
 
         private static void CheckExpression_Dereference (ref ExpressionData exprData) {
-            if (exprData.Type->TypeTag != ES_TypeTag.Reference)
+            if (exprData.Type.Type->TypeTag != ES_TypeTag.Reference)
                 return;
 
-            var refTypeData = (ES_ReferenceData*) exprData.Type;
+            var refTypeData = (ES_ReferenceData*) exprData.Type.Type;
 
-            exprData.Type = refTypeData->PointedType;
+            var pointedType = StripFirstConst (refTypeData->PointedType, out var pointedConstness);
+            pointedConstness = InheritConstness (exprData.Type.Constness, pointedConstness);
+
+            exprData.Type = new (pointedConstness, pointedType);
             exprData.Value = UnaryExpression (ESIR_NodeKind.UnaryDereference, exprData.Value);
         }
 
         private static ExpressionData CheckExpression (
             ref PassData passData, ES_AstExpression expr,
-            ES_TypeInfo* expectedType
+            TypeData expectedType
         ) {
             Debug.Assert (expr is not null);
 
@@ -381,6 +749,7 @@ namespace EchelonScriptCompiler.Frontend {
 
             var typeUnkn = passData.Env.TypeUnknownValue;
             var typeBool = passData.Env.TypeBool;
+            var typeBoolConst = passData.GetBoolType (Constness.Const);
 
             switch (expr) {
                 case ES_AstParenthesisExpression parenExpr:
@@ -412,34 +781,35 @@ namespace EchelonScriptCompiler.Frontend {
                     throw new NotImplementedException ("[TODO] Character literals not implemented yet.");
 
                 case ES_AstIntegerConstantExpression intConstExpr: {
+                    Debug.Assert (intConstExpr.IntType->TypeTag == ES_TypeTag.Int);
                     var intType = (ES_IntTypeData*) intConstExpr.IntType;
 
                     var litVal = intType->Unsigned
                         ? ValueNode (intConstExpr.SignExtend ())
                         : ValueNode ((long) intConstExpr.SignExtend ());
                     var litExpr = LiteralExpression (ESIR_NodeKind.LiteralInt, litVal);
-                    var value = CastExpression (litExpr, TypeNode (intConstExpr.IntType));
+                    var value = CastExpression (litExpr, TypeNode (ref passData, intConstExpr.IntType));
 
-                    return ExpressionData.NewValue (expr, intConstExpr.IntType, value, null, true, false);
+                    return ExpressionData.NewValue (expr, new (Constness.Mutable, &intType->TypeInfo), value, null, false, true);
                 }
 
                 case ES_AstBooleanConstantExpression boolConstExpr: {
                     var value = boolConstExpr.Value ? LiteralTrueExpression () : LiteralFalseExpression ();
-                    return ExpressionData.NewValue (expr, typeBool, value, null, true, false);
+                    return ExpressionData.NewValue (expr, typeBoolConst, value, null, false, true);
                 }
 
                 case ES_AstFloat32ConstantExpression float32ConstExpr: {
                     var value = LiteralExpression (ESIR_NodeKind.LiteralFloat, ValueNode (float32ConstExpr.Value));
-                    return ExpressionData.NewValue (expr, passData.Env.TypeFloat32, value, null, true, false);
+                    return ExpressionData.NewValue (expr, passData.GetFloat32Type (Constness.Mutable), value, null, false, true);
                 }
 
                 case ES_AstFloat64ConstantExpression float64ConstExpr: {
                     var value = LiteralExpression (ESIR_NodeKind.LiteralFloat, ValueNode (float64ConstExpr.Value));
-                    return ExpressionData.NewValue (expr, passData.Env.TypeFloat64, value, null, true, false);
+                    return ExpressionData.NewValue (expr, passData.GetFloat64Type (Constness.Mutable), value, null, false, true);
                 }
 
                 case ES_AstNullLiteralExpression nullLitExpr:
-                    return ExpressionData.NewValue (expr, passData.Env.TypeNull, null!, null, true, false);
+                    return ExpressionData.NewValue (expr, new (Constness.Mutable, passData.Env.TypeNull), null!, null, false, true);
 
                 case ES_AstNameExpression nameExpr:
                     return CheckExpression_Name (ref passData, nameExpr, expectedType);
@@ -466,8 +836,8 @@ namespace EchelonScriptCompiler.Frontend {
                     return CheckExpression_SimpleBinaryExpression (ref passData, binaryExpr, expectedType);
 
                 case ES_AstConditionalExpression condExpr: {
-                    var condData = CheckExpression (ref passData, condExpr.Condition, typeBool);
-                    EnsureCompat (ref condData, typeBool, ref passData, condData.Expr.NodeBounds);
+                    var condData = CheckExpression (ref passData, condExpr.Condition, typeBoolConst);
+                    EnsureCompat (ref condData, typeBoolConst, ref passData, condData.Expr.NodeBounds);
 
                     var leftExpr = CheckExpression (ref passData, condExpr.Then, expectedType);
                     var rightExpr = CheckExpression (ref passData, condExpr.Else, expectedType);
@@ -477,7 +847,7 @@ namespace EchelonScriptCompiler.Frontend {
                         EnsureCompat (ref rightExpr, expectedType, ref passData, rightExpr.Expr.NodeBounds)
                     );
 
-                    var finalType = isCompat ? expectedType : typeUnkn;
+                    var finalType = isCompat ? expectedType : passData.GetUnknownType (Constness.Mutable);
 
                     // Emit IR.
                     var exprList = condData.Expressions;
@@ -497,19 +867,22 @@ namespace EchelonScriptCompiler.Frontend {
 
         private static ExpressionData CheckExpression_NewObject (
             ref PassData passData, ES_AstNewObjectExpression expr,
-            ES_TypeInfo* expectedType
+            TypeData expectedType
         ) {
             var exprList = new ExpressionList (null, null);
 
             var irWriter = passData.IRWriter;
             var typeUnkn = passData.Env.TypeUnknownValue;
+            var typeUnknMut = passData.GetUnknownType (Constness.Mutable);
 
             var objType = GetTypeRef (expr.TypeDeclaration);
-            var refType = passData.EnvBuilder.CreateReferenceType (objType);
-            var retType = refType;
+            var retType = UnpackFirstConst (passData.EnvBuilder.CreateReferenceType (objType));
 
-            var irObjType = TypeNode (objType);
-            var irRefType = TypeNode (refType);
+            // Ensure the non-const version of the type exists.
+            passData.EnvBuilder.RemoveConstness (retType.Type);
+
+            var irObjType = TypeNode (ref passData, objType);
+            var irRefType = TypeNode (ref passData, retType);
 
             var errorFound = false;
 
@@ -527,19 +900,19 @@ namespace EchelonScriptCompiler.Frontend {
             Span<int> argRegisters = stackalloc int [expr.Arguments.Length];
             Span<ES_FunctionPrototypeArgData> argsList = stackalloc ES_FunctionPrototypeArgData [expr.Arguments.Length];
             foreach (var arg in expr.Arguments) {
-                var argValueExpr = CheckExpression (ref passData, arg.ValueExpression, typeUnkn);
+                var argValueExpr = CheckExpression (ref passData, arg.ValueExpression, typeUnknMut);
                 exprList.Merge (ref argValueExpr.Expressions);
                 exprList.AddRegister (argValueExpr.ValueRegister);
 
                 var argType = arg.ArgType;
-                var argValueType = argValueExpr.Type;
+                var argValueType = argValueExpr.Type.ToType (ref passData);
 
-                if (argValueExpr.Type is null || argValueExpr.Type->TypeTag == ES_TypeTag.UNKNOWN)
+                if (argValueExpr.Type.Type is null || argValueExpr.Type.Type->TypeTag == ES_TypeTag.UNKNOWN)
                     errorFound = true;
 
                 var argProtoData = new ES_FunctionPrototypeArgData (argType, argValueType);
 
-                var regIdx = irWriter.RentRegister (TypeNode (argValueType));
+                var regIdx = irWriter.RentRegister (TypeNode (ref passData, argValueType));
                 var thisArgIdx = argIdx++;
 
                 exprList.AddExpression (AssignmentExpression (
@@ -565,7 +938,7 @@ namespace EchelonScriptCompiler.Frontend {
                     objType->Name.GetNameAsTypeString (), passData.Env.GetFunctionSignatureString (argsList),
                     passData.Source, expr.NodeBounds
                 ));
-                retType = typeUnkn;
+                retType = typeUnknMut;
             }
 
             // TODO: Handle constructors.
@@ -575,7 +948,10 @@ namespace EchelonScriptCompiler.Frontend {
             var valueReg = irWriter.RentRegister (irRefType);
             var value = LocalValueExpression (valueReg);
 
-            exprList.AddExpression (AssignmentExpression (value, NewObjectExpression (irObjType)));
+            exprList.AddExpression (AssignmentExpression (
+                value,
+                NewObjectExpression (ESIR_Factory.TypeNode (objType))
+            ));
             exprList.AddExpression (AssignmentExpression (
                 UnaryExpression (ESIR_NodeKind.UnaryDereference, value),
                 DefaultValueExpression (irObjType)
@@ -589,14 +965,15 @@ namespace EchelonScriptCompiler.Frontend {
 
         private static ExpressionData CheckExpression_NewArray (
             ref PassData passData, ES_AstNewArrayExpression expr,
-            ES_TypeInfo* expectedType
+            TypeData expectedType
         ) {
             var irWriter = passData.IRWriter;
             var exprList = new ExpressionList (null, null);
 
-            var indexType = passData.Env.GetArrayIndexType ();
+            var indexTypeConst = passData.GetArrayIndexType ();
             var elemType = GetTypeRef (expr.ElementType);
             var arrType = passData.EnvBuilder.CreateArrayType (elemType, expr.Ranks.Length);
+            var retType = UnpackFirstConst (arrType);
 
             var noNew = elemType->Flags.HasFlag (ES_TypeFlag.NoNew);
             if (noNew) {
@@ -605,12 +982,15 @@ namespace EchelonScriptCompiler.Frontend {
                 ));
             }
 
+            // Ensure the non-const version of the type exists.
+            passData.EnvBuilder.RemoveConstness (arrType);
+
             using var rankValues = new StructPooledList<ESIR_Expression> (CL_ClearMode.Auto);
             foreach (var rank in expr.Ranks) {
                 Debug.Assert (rank is not null);
 
-                var rankExpr = CheckExpression (ref passData, rank, indexType);
-                if (!EnsureCompat (ref rankExpr, indexType, ref passData, rankExpr.Expr.NodeBounds)) {
+                var rankExpr = CheckExpression (ref passData, rank, indexTypeConst);
+                if (!EnsureCompat (ref rankExpr, indexTypeConst, ref passData, rankExpr.Expr.NodeBounds)) {
                     rankExpr.Expressions.Dispose ();
                     continue;
                 }
@@ -625,29 +1005,30 @@ namespace EchelonScriptCompiler.Frontend {
                 return ExpressionError (ref passData, expr);
             }
 
-            var valueReg = irWriter.RentRegister (TypeNode (arrType));
+            var valueReg = irWriter.RentRegister (TypeNode (ref passData, arrType));
             var value = LocalValueExpression (valueReg);
             exprList.AddExpression (AssignmentExpression (
                 value,
-                NewArrayExpression (TypeNode (elemType), List (rankValues.Span))
+                NewArrayExpression (ESIR_Factory.TypeNode (elemType), List (rankValues.Span))
             ));
 
             exprList.ReturnRegisters (irWriter);
 
-            return ExpressionData.NewValue (expr, arrType, exprList, value, valueReg, false, false);
+            return ExpressionData.NewValue (expr, retType, exprList, value, valueReg, false, false);
         }
 
         private static ExpressionData CheckExpression_Indexing (
             ref PassData passData, ES_AstIndexingExpression expr,
-            ES_TypeInfo* expectedType
+            TypeData expectedType
         ) {
             var irWriter = passData.IRWriter;
 
             var typeUnkn = passData.Env.TypeUnknownValue;
-            var typeIndex = passData.Env.GetArrayIndexType ();
+            var typeIndex = passData.GetArrayIndexType ();
+            var typeUnknMut = passData.GetUnknownType (Constness.Mutable);
 
             var rankCount = expr.RankExpressions.Length;
-            var indexedExprData = CheckExpression (ref passData, expr.IndexedExpression, typeUnkn);
+            var indexedExprData = CheckExpression (ref passData, expr.IndexedExpression, typeUnknMut);
 
             var exprList = indexedExprData.Expressions;
 
@@ -666,29 +1047,27 @@ namespace EchelonScriptCompiler.Frontend {
             }
 
             var badRankCount = false;
-            var elemType = typeUnkn;
-            var constant = false;
+            var elemType = typeUnknMut;
             var writable = false;
-            if (indexedExprData.Type is not null) {
+            if (indexedExprData.Type.Type is not null) {
                 var indexedType = indexedExprData.Type;
-                var indexedTypeTag = indexedType->TypeTag;
+                var indexedTypeTag = indexedType.Type->TypeTag;
 
                 if (indexedTypeTag == ES_TypeTag.UNKNOWN) {
                     badRankCount = false;
-                    elemType = typeUnkn;
-                    constant = false;
+                    elemType = typeUnknMut;
                     writable = true;
                 } else if (indexedTypeTag == ES_TypeTag.Array) {
-                    var arrayData = (ES_ArrayTypeData*) indexedExprData.Type;
+                    var arrayData = (ES_ArrayTypeData*) indexedExprData.Type.Type;
 
                     badRankCount = rankCount != arrayData->DimensionsCount;
-                    elemType = arrayData->ElementType;
+                    elemType = UnpackFirstConst (arrayData->ElementType);
+                    elemType = elemType.WithInheritedConst (indexedExprData.Type.Constness);
 
-                    constant = indexedExprData.Constant;
-                    writable = indexedExprData.Writable;
+                    writable = true;
                 } else {
                     passData.ErrorList.Add (ES_FrontendErrors.GenCantApplyIndexingToType (
-                        indexedExprData.Type->Name.GetNameAsTypeString (),
+                        indexedExprData.Type.ToType (ref passData)->Name.GetNameAsTypeString (),
                         passData.Source, indexedExprData.Expr.NodeBounds
                     ));
                 }
@@ -698,8 +1077,7 @@ namespace EchelonScriptCompiler.Frontend {
                 ));
             }
 
-            constant |= elemType->IsConstant ();
-            writable &= elemType->IsWritable ();
+            writable &= elemType.IsWritable;
 
             if (badRankCount) {
                 passData.ErrorList.Add (new (
@@ -709,18 +1087,18 @@ namespace EchelonScriptCompiler.Frontend {
 
             var value = IndexingExpression (indexedExprData.Value, List (ranksList.Span));
 
-            return ExpressionData.NewValue (expr, elemType, exprList, value, null, constant, writable);
+            return ExpressionData.NewValue (expr, elemType, exprList, value, null, writable, false);
         }
 
         private static ExpressionData CheckExpression_Name (
             ref PassData passData, ES_AstNameExpression expr,
-            ES_TypeInfo* expectedType
+            TypeData expectedType
         ) {
             var id = passData.Env.IdPool.GetIdentifier (expr.Value.Text.Span);
             var symbol = passData.Symbols.GetSymbol (id);
 
             var writable = symbol.Flags.HasFlag (SymbolFlags.Writable);
-            var constant = symbol.Flags.HasFlag (SymbolFlags.Constant);
+            var compTimeConst = symbol.Flags.HasFlag (SymbolFlags.CompileTimeConstant);
 
             switch (symbol.Tag) {
                 case SymbolType.None: {
@@ -732,11 +1110,11 @@ namespace EchelonScriptCompiler.Frontend {
 
                 case SymbolType.Variable: {
                     var varData = symbol.MatchVar ();
-                    return ExpressionData.NewValue (expr, varData.Type, varData.IRExpression, null, constant, writable);
+                    return ExpressionData.NewValue (expr, varData.Type, varData.IRExpression, null, writable, compTimeConst);
                 }
 
                 case SymbolType.Type: {
-                    if (expectedType is not null) {
+                    if (expectedType.Type is not null) {
                         passData.ErrorList.Add (ES_FrontendErrors.GenInvalidExprTerm (
                             expr.Value.Text.Span.GetPooledString (),
                             expr.Value
@@ -745,13 +1123,13 @@ namespace EchelonScriptCompiler.Frontend {
                         return ExpressionError (ref passData, expr);
                     }
 
-                    return ExpressionData.NewType (expr, symbol.MatchType (), constant);
+                    return ExpressionData.NewType (expr, symbol.MatchType ());
                 }
 
                 case SymbolType.Function: {
                     var func = symbol.MatchFunction ();
                     var type = (ES_TypeInfo*) func->FunctionType;
-                    return ExpressionData.NewFunction (expr, func, type, constant);
+                    return ExpressionData.NewFunction (expr, func, type);
                 }
 
                 default:
@@ -761,22 +1139,22 @@ namespace EchelonScriptCompiler.Frontend {
 
         private static ExpressionData CheckExpression_MemberAccess (
             ref PassData passData, ES_AstMemberAccessExpression expr,
-            ES_TypeInfo* expectedType
+            TypeData expectedType
         ) {
             Debug.Assert (expr.Member is not null);
 
             var idPool = passData.Env.IdPool;
             var typeUnkn = passData.Env.TypeUnknownValue;
 
-            var parentExpr = CheckExpression (ref passData, expr.Parent, null);
+            var parentExpr = CheckExpression (ref passData, expr.Parent, TypeData.Null);
             var memberId = idPool.GetIdentifier (expr.Member.Value.Text.Span);
 
-            if (parentExpr.Type is not null) {
+            if (parentExpr.Type.Type is not null) {
                 CheckExpression_Dereference (ref parentExpr);
 
                 var type = parentExpr.Type;
 
-                switch (type->TypeTag) {
+                switch (type.Type->TypeTag) {
                     case ES_TypeTag.UNKNOWN:
                         return ExpressionError (ref passData, expr);
 
@@ -793,7 +1171,6 @@ namespace EchelonScriptCompiler.Frontend {
                             expr, parentExpr, memberId, expectedType
                         );
 
-                        ret.Constant = true;
                         ret.Writable = false;
 
                         return ret;
@@ -838,12 +1215,12 @@ namespace EchelonScriptCompiler.Frontend {
         private static ExpressionData CheckExpression_MemberAccess_Basic (
             ref PassData passData, ES_AstMemberAccessExpression expr,
             ExpressionData parentExpr, ArrayPointer<byte> memberId,
-            ES_TypeInfo* expectedType
+            TypeData expectedType
         ) {
             Debug.Assert (expr.Member is not null);
 
             var typeUnkn = passData.Env.TypeUnknownValue;
-            var membersArr = parentExpr.Type->MembersList.MembersList;
+            var membersArr = parentExpr.Type.Type->MembersList.MembersList;
 
             var exprList = parentExpr.Expressions;
             exprList.AddRegister (parentExpr.ValueRegister);
@@ -857,23 +1234,21 @@ namespace EchelonScriptCompiler.Frontend {
                 switch (memberPtr->MemberType) {
                     case ES_MemberType.Field: {
                         var memberVar = (ES_MemberData_Variable*) memberPtr;
-                        var varType = memberVar->Type;
+                        var varType = UnpackFirstConst (memberVar->Type).WithInheritedConst (parentExpr.Type.Constness);
 
                         if (memberVar->Info.Flags.HasFlag (ES_MemberFlags.Static)) {
                             passData.ErrorList.Add (ES_FrontendErrors.GenStaticAccessOnInst (
-                                parentExpr.Type->Name.GetNameAsTypeString (),
+                                parentExpr.Type.ToType (ref passData)->Name.GetNameAsTypeString (),
                                 expr.Member.Value.Text.Span.GetPooledString (),
                                 expr.Member.Value
                             ));
                             exprList.Dispose ();
                         }
 
-                        var writable = parentExpr.Writable & varType->IsWritable ();
-                        var constant = parentExpr.Constant | varType->IsConstant ();
-
+                        var writable = parentExpr.Writable & varType.IsWritable;
                         var value = MemberAccessExpression (parentExpr.Value, memberPtr->Name);
 
-                        return ExpressionData.NewValue (expr, varType, exprList, value, null, constant, writable);
+                        return ExpressionData.NewValue (expr, varType, exprList, value, null, writable, false);
                     }
 
                     case ES_MemberType.Function:
@@ -885,7 +1260,7 @@ namespace EchelonScriptCompiler.Frontend {
             }
 
             passData.ErrorList.Add (ES_FrontendErrors.GenMemberDoesntExist (
-                parentExpr.Type->Name.GetNameAsTypeString (),
+                parentExpr.Type.ToType (ref passData)->Name.GetNameAsTypeString (),
                 expr.Member.Value.Text.Span.GetPooledString (),
                 expr.Member.Value
             ));
@@ -897,7 +1272,7 @@ namespace EchelonScriptCompiler.Frontend {
         private static ExpressionData CheckExpression_MemberAccessStatic_Aggregate (
             ref PassData passData, ES_AstMemberAccessExpression expr,
             ExpressionData parentExpr, ArrayPointer<byte> memberId,
-            ES_TypeInfo* expectedType
+            TypeData expectedType
         ) {
             Debug.Assert (expr.Member is not null);
 
@@ -927,12 +1302,13 @@ namespace EchelonScriptCompiler.Frontend {
                             return ExpressionError (ref passData, expr);
                         }
 
-                        var constant = memberVar->Type->IsConstant ();
-                        var writable = memberVar->Type->IsWritable ();
+                        var memberType = UnpackFirstConst (memberVar->Type);
+                        var writable = memberType.IsWritable;
 
                         var mangledName = MangleStaticVar (ref passData, type->Name, memberPtr->Name);
                         var value = StaticVariableExpression (mangledName);
-                        return ExpressionData.NewValue (expr, memberVar->Type, exprList, value, null, constant, writable);
+                        // TODO: Handle constants.
+                        return ExpressionData.NewValue (expr, memberType, exprList, value, null, writable, false);
                     }
 
                     case ES_MemberType.Function:
@@ -955,16 +1331,16 @@ namespace EchelonScriptCompiler.Frontend {
 
         private static ExpressionData CheckExpression_IncDec (
             ref PassData passData, ES_AstIncDecExpression expr,
-            ES_TypeInfo* expectedType
+            TypeData expectedType
         ) {
             var exprData = CheckExpression (ref passData, expr.Inner, expectedType);
 
-            if (exprData.Type->TypeTag == ES_TypeTag.UNKNOWN) {
+            if (exprData.Type.Type->TypeTag == ES_TypeTag.UNKNOWN) {
                 exprData.Expressions.Dispose ();
                 return ExpressionError (ref passData, expr);
             }
 
-            if (!exprData.Writable || exprData.Constant) {
+            if (!exprData.Writable || !exprData.Type.IsWritable) {
                 passData.ErrorList.Add (new (
                     passData.Source, expr.Inner.NodeBounds, ES_FrontendErrors.TempValueInIncDecOp
                 ));
@@ -981,7 +1357,7 @@ namespace EchelonScriptCompiler.Frontend {
 
             var value = UnaryExpression (op, exprData.Value);
 
-            if (exprData.Type->TypeTag == ES_TypeTag.Int || exprData.Type->TypeTag == ES_TypeTag.Float)
+            if (exprData.Type.Type->TypeTag == ES_TypeTag.Int || exprData.Type.Type->TypeTag == ES_TypeTag.Float)
                 return ExpressionData.NewValue (expr, exprData.Type, exprList, value, exprData.ValueRegister, false, false);
             else
                 throw new NotImplementedException ("[TODO] ?");
@@ -989,18 +1365,17 @@ namespace EchelonScriptCompiler.Frontend {
 
         private static ExpressionData CheckExpression_Unary (
             ref PassData passData, ES_AstSimpleUnaryExpression expr,
-            ES_TypeInfo* expectedType
+            TypeData expectedType
         ) {
             var irWriter = passData.IRWriter;
             var symbols = passData.Symbols;
 
-            var typeUnkn = passData.Env.TypeUnknownValue;
-
             var exprData = CheckExpression (ref passData, expr.Inner, expectedType);
 
-            if (!CompilerFrontend.UnaryOpCompat (passData.Env, exprData.Type, expr.ExpressionType, out var finalType, out _)) {
+            if (!CompilerFrontend.UnaryOpCompat (passData.Env, exprData.Type.Type, expr.ExpressionType, out var finalType, out _)) {
                 passData.ErrorList.Add (ES_FrontendErrors.GenCantApplyUnaryOp (
-                    expr.OperatorToken.Text.Span.GetPooledString (), exprData.Type->Name.GetNameAsTypeString (),
+                    expr.OperatorToken.Text.Span.GetPooledString (),
+                    exprData.Type.ToType (ref passData)->Name.GetNameAsTypeString (),
                     passData.Source, exprData.Expr.NodeBounds
                 ));
 
@@ -1008,8 +1383,8 @@ namespace EchelonScriptCompiler.Frontend {
                 return ExpressionError (ref passData, expr);
             }
 
-            var constant = finalType->IsConstant ();
-            var writable = false;
+            var retType = UnpackFirstConst (finalType).WithInheritedConst (exprData.Type.Constness);
+            var writable = retType.IsWritable;
 
             ESIR_Expression value;
             switch (expr.ExpressionType) {
@@ -1031,31 +1406,26 @@ namespace EchelonScriptCompiler.Frontend {
 
                 case SimpleUnaryExprType.Dereference:
                     value = UnaryExpression (ESIR_NodeKind.UnaryDereference, exprData.Value);
-                    writable = true;
                     break;
 
                 default:
                     throw new NotImplementedException ("Unary operation not implemented.");
             }
 
-            if (exprData.Type->TypeTag == ES_TypeTag.Reference && expr.ExpressionType == SimpleUnaryExprType.Dereference)
-                writable = true;
-
-            return ExpressionData.NewValue (expr, finalType, exprData.Expressions, value, exprData.ValueRegister, constant, writable);
+            return ExpressionData.NewValue (expr, retType, exprData.Expressions, value, exprData.ValueRegister, writable, false);
         }
 
         private static ExpressionData CheckExpression_Cast (
             ref PassData passData, ES_AstCastExpression expr,
-            ES_TypeInfo* expectedType
+            TypeData expectedType
         ) {
-            var typeUnkn = passData.Env.TypeUnknownValue;
-
-            var destType = GetTypeRef (expr.DestinationType);
-            var exprData = CheckExpression (ref passData, expr.InnerExpression, typeUnkn);
+            var destType = UnpackFirstConst (GetTypeRef (expr.DestinationType));
+            var exprData = CheckExpression (ref passData, expr.InnerExpression, passData.GetUnknownType (Constness.Mutable));
 
             if (!ExplicitCast (ref passData, ref exprData, destType, out bool castRedundant)) {
                 passData.ErrorList.Add (ES_FrontendErrors.GenNoExplicitCast (
-                    destType->Name.GetNameAsTypeString (), exprData.Type->Name.GetNameAsTypeString (),
+                    destType.ToType (ref passData)->Name.GetNameAsTypeString (),
+                    exprData.Type.ToType (ref passData)->Name.GetNameAsTypeString (),
                     passData.Source, expr.NodeBounds
                 ));
 
@@ -1076,11 +1446,9 @@ namespace EchelonScriptCompiler.Frontend {
 
         private static ExpressionData CheckExpression_FunctionCall (
             ref PassData passData, ES_AstFunctionCallExpression expr,
-            ES_TypeInfo* expectedType
+            TypeData expectedType
         ) {
-            var typeUnkn = passData.Env.TypeUnknownValue;
-
-            var funcExpr = CheckExpression (ref passData, expr.FunctionExpression, typeUnkn);
+            var funcExpr = CheckExpression (ref passData, expr.FunctionExpression, passData.GetUnknownType (Constness.Mutable));
 
             if (funcExpr.Function is not null)
                 return CheckExpression_SimpleFunctionCall (ref passData, expr, funcExpr);
@@ -1088,9 +1456,9 @@ namespace EchelonScriptCompiler.Frontend {
                 passData.ErrorList.Add (ES_FrontendErrors.GenCantInvokeType (
                     funcExpr.TypeInfo->Name.GetNameAsTypeString (), passData.Source, funcExpr.Expr.NodeBounds
                 ));
-            } else if (funcExpr.Type is not null) {
+            } else if (funcExpr.Type.Type is not null) {
                 // TODO: Some types might be allowed to have `()` overrides too in the future. But not now.
-                if (funcExpr.Type->TypeTag != ES_TypeTag.UNKNOWN) {
+                if (funcExpr.Type.Type->TypeTag != ES_TypeTag.UNKNOWN) {
                     passData.ErrorList.Add (new (
                         passData.Source, funcExpr.Expr.NodeBounds, ES_FrontendErrors.CantInvokeExpr
                     ));
@@ -1105,7 +1473,7 @@ namespace EchelonScriptCompiler.Frontend {
             ref PassData passData, ES_AstFunctionCallExpression expr,
             ExpressionData funcExpr
         ) {
-            var typeUnkn = passData.Env.TypeUnknownValue;
+            var typeUnknMut = passData.GetUnknownType (Constness.Mutable);
 
             var func = funcExpr.Function;
             var funcType = func->FunctionType;
@@ -1145,7 +1513,7 @@ namespace EchelonScriptCompiler.Frontend {
                         ignoreDefArgs = true;
                     }
 
-                    var exprData = CheckExpression (ref passData, arg.ValueExpression, typeUnkn);
+                    var exprData = CheckExpression (ref passData, arg.ValueExpression, typeUnknMut);
                     exprData.Expressions.Dispose ();
                     passData.IRWriter.ReturnRegister (exprData.ValueRegister);
                     continue;
@@ -1154,14 +1522,14 @@ namespace EchelonScriptCompiler.Frontend {
                 var argData = func->Arguments.Elements + argIdx;
                 var argTypeData = funcType->ArgumentsList.Elements + argIdx;
 
-                if (arg.ArgType != argTypeData->ArgType) {
+                if (arg.ArgType != argTypeData->ArgType && argTypeData->ArgType != ES_ArgumentType.In) {
                     passData.ErrorList.Add (ES_FrontendErrors.GenWrongArgType (
                         argData->Name.GetPooledString (Encoding.ASCII),
                         arg.ArgType.ToString (), passData.Source, arg.ValueExpression.NodeBounds
                     ));
                 }
 
-                var argValType = argTypeData->ValueType;
+                var argValType = UnpackFirstConst (argTypeData->ValueType);
                 var argExprData = CheckExpression (ref passData, arg.ValueExpression, argValType);
                 EnsureCompat (ref argExprData, argValType, ref passData, argExprData.Expr.NodeBounds);
 
@@ -1181,7 +1549,7 @@ namespace EchelonScriptCompiler.Frontend {
                     var argTypeData = funcType->ArgumentsList.Elements + argIdx;
                     var argDef = funcDef!.ArgumentsList [argIdx];
 
-                    var argValType = argTypeData->ValueType;
+                    var argValType = UnpackFirstConst (argTypeData->ValueType);
                     var argExprData = CheckExpression (ref passData, argDef.DefaultExpression!, argValType);
                     EnsureCompat (ref argExprData, argValType, ref passData, argExprData.Expr.NodeBounds);
 
@@ -1192,10 +1560,10 @@ namespace EchelonScriptCompiler.Frontend {
                 }
             }
 
-            var constant = funcType->ReturnType->IsConstant ();
+            var retType = UnpackFirstConst (funcType->ReturnType);
             var value = FunctionCallExpression (mangledName, List (argsList.Span));
 
-            return ExpressionData.NewValue (expr, funcType->ReturnType, exprList, value, null, constant, false);
+            return ExpressionData.NewValue (expr, retType, exprList, value, null, false, false);
         }
 
         private static bool CheckExpression_SimpleBinaryExpression_Compat (
@@ -1205,31 +1573,31 @@ namespace EchelonScriptCompiler.Frontend {
         ) {
             var op = expr.ExpressionType;
 
-            var lhsNull = lhs.Type->TypeTag == ES_TypeTag.Null;
-            var rhsNull = rhs.Type->TypeTag == ES_TypeTag.Null;
-            var lhsRef = lhs.Type->IsReferenceType ();
-            var rhsRef = rhs.Type->IsReferenceType ();
-            var lhsInt = lhs.Type->TypeTag == ES_TypeTag.Int;
-            var rhsInt = rhs.Type->TypeTag == ES_TypeTag.Int;
+            var lhsNull = lhs.Type.Type->TypeTag == ES_TypeTag.Null;
+            var rhsNull = rhs.Type.Type->TypeTag == ES_TypeTag.Null;
+            var lhsRef = lhs.Type.Type->IsReferenceType ();
+            var rhsRef = rhs.Type.Type->IsReferenceType ();
+            var lhsInt = lhs.Type.Type->TypeTag == ES_TypeTag.Int;
+            var rhsInt = rhs.Type.Type->TypeTag == ES_TypeTag.Int;
 
             Debug.Assert (!(lhsNull & rhsNull));
-            if (!CompilerFrontend.BinaryOpCompat (passData.Env, lhs.Type, rhs.Type, op, out finalType, out _))
+            if (!CompilerFrontend.BinaryOpCompat (passData.Env, lhs.Type.Type, rhs.Type.Type, op, out finalType, out _))
                 return false;
 
             if (lhsNull && rhsRef) {
                 lhs.Type = rhs.Type;
-                lhs.Value = NullLiteralExpression (TypeNode (rhs.Type));
+                lhs.Value = NullLiteralExpression (TypeNode (ref passData, rhs.Type));
             } else if (rhsNull && lhsRef) {
                 rhs.Type = lhs.Type;
-                rhs.Value = NullLiteralExpression (TypeNode (lhs.Type));
+                rhs.Value = NullLiteralExpression (TypeNode (ref passData, lhs.Type));
             } else if (lhsInt && rhsInt) {
-                var lhsTypeInt = (ES_IntTypeData*) lhs.Type;
-                var rhsTypeInt = (ES_IntTypeData*) rhs.Type;
+                var lhsTypeInt = (ES_IntTypeData*) lhs.Type.Type;
+                var rhsTypeInt = (ES_IntTypeData*) rhs.Type.Type;
 
                 if (op.IsBitShift ()) {
                     if (rhsTypeInt->IntSize < ES_IntSize.Int32) {
-                        rhs.Type = passData.Env.GetIntType (ES_IntSize.Int32, false);
-                        rhs.Value = CastExpression (rhs.Value, TypeNode (rhs.Type));
+                        rhs.Type = rhs.Type.WithType (passData.Env.GetIntType (ES_IntSize.Int32, false));
+                        rhs.Value = CastExpression (rhs.Value, TypeNode (ref passData, rhs.Type));
                     }
 
                     return true;
@@ -1240,10 +1608,10 @@ namespace EchelonScriptCompiler.Frontend {
 
                 if (lhsTypeInt->IntSize > rhsTypeInt->IntSize) {
                     rhs.Type = lhs.Type;
-                    rhs.Value = CastExpression (rhs.Value, TypeNode (lhs.Type));
+                    rhs.Value = CastExpression (rhs.Value, TypeNode (ref passData, lhs.Type));
                 } else {
                     lhs.Type = rhs.Type;
-                    lhs.Value = CastExpression (lhs.Value, TypeNode (rhs.Type));
+                    lhs.Value = CastExpression (lhs.Value, TypeNode (ref passData, rhs.Type));
                 }
             }
 
@@ -1313,21 +1681,22 @@ namespace EchelonScriptCompiler.Frontend {
 
         private static ExpressionData CheckExpression_SimpleBinaryExpression (
             ref PassData passData, ES_AstSimpleBinaryExpression expr,
-            ES_TypeInfo* expectedType
+            TypeData expectedType
         ) {
             var typeUnkn = passData.Env.TypeUnknownValue;
+            var typeUnknMut = passData.GetUnknownType (Constness.Mutable);
 
-            var leftExpr = CheckExpression (ref passData, expr.Left, typeUnkn);
+            var leftExpr = CheckExpression (ref passData, expr.Left, typeUnknMut);
 
-            var expectedRightType = typeUnkn;
-            if (expr.ExpressionType.IsBitShift () && leftExpr.Type->TypeTag == ES_TypeTag.Int)
-                expectedRightType = passData.Env.GetIntType (((ES_IntTypeData*) expectedType)->IntSize, true);
+            var expectedRightType = typeUnknMut;
+            if (expr.ExpressionType.IsBitShift () && leftExpr.Type.Type->TypeTag == ES_TypeTag.Int)
+                expectedRightType = new (Constness.Const, passData.Env.GetIntType (((ES_IntTypeData*) expectedType.Type)->IntSize, true));
             else if (expr.ExpressionType.IsAssignment ())
-                expectedRightType = leftExpr.Type is not null ? leftExpr.Type : typeUnkn;
+                expectedRightType = leftExpr.Type.Type is not null ? leftExpr.Type : typeUnknMut;
 
             var rightExpr = CheckExpression (ref passData, expr.Right, expectedRightType);
 
-            if (leftExpr.Type is null || rightExpr.Type is null) {
+            if (leftExpr.Type.Type is null || rightExpr.Type.Type is null) {
                 leftExpr.Expressions.Dispose ();
                 rightExpr.Expressions.Dispose ();
                 return ExpressionError (ref passData, expr);
@@ -1336,7 +1705,8 @@ namespace EchelonScriptCompiler.Frontend {
             if (!CheckExpression_SimpleBinaryExpression_Compat (ref passData, expr, ref leftExpr, ref rightExpr, out var finalType)) {
                 passData.ErrorList.Add (ES_FrontendErrors.GenCantApplyBinaryOp (
                     expr.OperatorToken.Text.Span.GetPooledString (),
-                    leftExpr.Type->Name.GetNameAsTypeString (), rightExpr.Type->Name.GetNameAsTypeString (),
+                    leftExpr.Type.ToType (ref passData)->Name.GetNameAsTypeString (),
+                    rightExpr.Type.ToType (ref passData)->Name.GetNameAsTypeString (),
                     passData.Source, expr.NodeBounds
                 ));
 
@@ -1344,6 +1714,8 @@ namespace EchelonScriptCompiler.Frontend {
                 rightExpr.Expressions.Dispose ();
                 return ExpressionError (ref passData, expr);
             }
+
+            var retType = UnpackFirstConst (finalType);
 
             var isAssignment = expr.ExpressionType.IsAssignment ();
             if (isAssignment && !leftExpr.Writable) {
@@ -1360,7 +1732,7 @@ namespace EchelonScriptCompiler.Frontend {
 
             if (expr.ExpressionType == SimpleBinaryExprType.Assign) {
                 var assignValue = AssignmentExpression (leftExpr.Value, rightExpr.Value);
-                return ExpressionData.NewValue (expr, finalType, exprList, assignValue, null, false, false);
+                return ExpressionData.NewValue (expr, retType, exprList, assignValue, null, false, false);
             }
 
             var opKind = CheckExpression_SimpleBinaryExpression_Expr (expr.ExpressionType);
@@ -1377,7 +1749,7 @@ namespace EchelonScriptCompiler.Frontend {
             if (isAssignment)
                 value = AssignmentExpression (leftExpr.Value, value);
 
-            return ExpressionData.NewValue (expr, finalType, exprList, value, null, false, false);
+            return ExpressionData.NewValue (expr, retType, exprList, value, null, false, false);
         }
     }
 }

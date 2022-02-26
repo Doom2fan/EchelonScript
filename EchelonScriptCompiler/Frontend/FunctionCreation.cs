@@ -131,7 +131,7 @@ namespace EchelonScriptCompiler.Frontend {
                 argTypes.Add (new ES_FunctionPrototypeArgData (arg.ArgType, GetTypeRef (arg.ValueType)));
 
                 if (arg.DefaultExpression is not null) {
-                    if (arg.ArgType == ES_ArgumentType.Out || arg.ArgType== ES_ArgumentType.Ref) {
+                    if (arg.ArgType == ES_ArgumentType.Out || arg.ArgType == ES_ArgumentType.Ref) {
                         errorList.Add (ES_FrontendErrors.GenArgTypeCantUseDefExpr (
                             arg.Name.Text.Span.GetPooledString (), arg.ArgType.ToString (), arg.Name
                         ));
