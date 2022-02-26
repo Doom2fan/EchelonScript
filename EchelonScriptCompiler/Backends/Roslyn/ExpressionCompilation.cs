@@ -38,6 +38,21 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
         private static ExpressionSyntax CompileCode_StaticVarsMem ()
             => SimpleMemberAccess (GlobalStorageTypeName, StaticVarsMemName);
 
+        private static ES_TypeInfo* StripFirstConst (ES_TypeInfo* type) {
+            switch (type->TypeTag) {
+                case ES_TypeTag.Const:
+                case ES_TypeTag.Immutable: {
+                    var constData = (ES_ConstData*) type;
+                    return constData->InnerType;
+                }
+
+                default:
+                    return type;
+            }
+        }
+
+        private static void StripFirstConst (ref ExpressionData expr) => expr.Type = StripFirstConst (expr.Type);
+
         private static ExpressionSyntax CompileCode_NewObject (ES_TypeInfo* type, ExpressionSyntax? assignValue) {
             bool isReference = type->TypeTag == ES_TypeTag.Reference;
 
@@ -153,6 +168,8 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                     return new ExpressionData { Type = assigneeExpr.Type, Value = value, };
                 }
 
+                #region Literals
+
                 case ESIR_NodeKind.LiteralTrue:
                 case ESIR_NodeKind.LiteralFalse:
                     return new ExpressionData { Type = passData.Env.TypeBool, Value = BoolLiteral (expr.Kind == ESIR_NodeKind.LiteralTrue), };
@@ -211,6 +228,8 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
                     return new ExpressionData { Type = nullType, Value = value, };
                 }
+
+                #endregion
 
                 //case ESIR_NodeKind.StringConstant:
 
@@ -318,6 +337,10 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             var thenExpr = CompileExpression (ref passData, ref funcData, expr.ThenExpression);
             var elseExpr = CompileExpression (ref passData, ref funcData, expr.ElseExpression);
 
+            StripFirstConst (ref condExpr);
+            StripFirstConst (ref thenExpr);
+            StripFirstConst (ref elseExpr);
+
             Debug.Assert (condExpr.Type->TypeTag == ES_TypeTag.Bool);
             Debug.Assert (thenExpr.Type == elseExpr.Type);
 
@@ -364,7 +387,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             ReadOnlySpan<ExpressionData> indices
         ) {
             var arrayType = (ES_ArrayTypeData*) indexedExpr.Type;
-            var elemType = arrayType->ElementType;
+            var elemType = StripFirstConst (arrayType->ElementType);
             var dimCount = arrayType->DimensionsCount;
 
             Debug.Assert (dimCount == indices.Length);

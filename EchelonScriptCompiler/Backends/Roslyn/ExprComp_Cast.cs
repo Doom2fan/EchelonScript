@@ -16,74 +16,154 @@ using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace EchelonScriptCompiler.Backends.RoslynBackend {
     public unsafe sealed partial class RoslynCompilerBackend {
+        private static bool IsTypeEquivalent (ES_TypeInfo* srcType, ES_TypeInfo* dstType) {
+            if (srcType->TypeTag == ES_TypeTag.Const || srcType->TypeTag == ES_TypeTag.Immutable)
+                srcType = ((ES_ConstData*) srcType)->InnerType;
+
+            if (dstType->TypeTag == ES_TypeTag.Const || dstType->TypeTag == ES_TypeTag.Immutable)
+                dstType = ((ES_ConstData*) dstType)->InnerType;
+
+            if (srcType->TypeTag != dstType->TypeTag)
+                return false;
+
+            switch (srcType->TypeTag) {
+                case ES_TypeTag.UNKNOWN:
+                case ES_TypeTag.Null:
+                case ES_TypeTag.Void:
+                case ES_TypeTag.Bool:
+                    return true;
+
+                case ES_TypeTag.Int: {
+                    var srcData = (ES_IntTypeData*) srcType;
+                    var dstData = (ES_IntTypeData*) dstType;
+
+                    return srcData->IntSize == dstData->IntSize && srcData->Unsigned == dstData->Unsigned;
+                }
+
+                case ES_TypeTag.Float: {
+                    var srcData = (ES_FloatTypeData*) srcType;
+                    var dstData = (ES_FloatTypeData*) dstType;
+
+                    return srcData->FloatSize == dstData->FloatSize;
+                }
+
+                case ES_TypeTag.Function:
+                case ES_TypeTag.Struct:
+                case ES_TypeTag.Class:
+                case ES_TypeTag.Interface:
+                    return srcType == dstType;
+
+                case ES_TypeTag.Reference: {
+                    var srcData = (ES_ReferenceData*) srcType;
+                    var dstData = (ES_ReferenceData*) dstType;
+
+                    return IsTypeEquivalent (srcData->PointedType, dstData->PointedType);
+                }
+
+                case ES_TypeTag.Array: {
+                    var srcData = (ES_ArrayTypeData*) srcType;
+                    var dstData = (ES_ArrayTypeData*) dstType;
+
+                    return (
+                        srcData->DimensionsCount == dstData->DimensionsCount &&
+                        IsTypeEquivalent (srcData->ElementType, dstData->ElementType)
+                    );
+                }
+
+                case ES_TypeTag.Enum:
+                    throw new NotImplementedException ("[TODO] Type not implemented yet.");
+
+                case ES_TypeTag.Const:
+                case ES_TypeTag.Immutable:
+                    Debug.Fail ("This should never be reached.");
+                    throw new CompilationException (ES_BackendErrors.FrontendError);
+
+                default:
+                    throw new NotImplementedException ("Type not implemented yet.");
+            }
+        }
+
         private static ExpressionData CompileExpression_Cast (
             ref PassData passData,
             ref FunctionData funcData,
             ESIR_CastExpression expr
         ) {
             var origExpr = CompileExpression (ref passData, ref funcData, expr.Expression);
-            var destType = expr.DestType.Pointer;
+            var destType = StripFirstConst (expr.DestType.Pointer);
+
+            StripFirstConst (ref origExpr);
 
             var origVal = origExpr.Value!;
             Debug.Assert (origVal is not null);
 
             ES_TypeInfo* retType;
             ExpressionSyntax retValue;
-            switch (origExpr.Type->TypeTag) {
-                case ES_TypeTag.Int: {
-                    var intSrc = (ES_IntTypeData*) origExpr.Type;
+            if (IsTypeEquivalent (origExpr.Type, destType)) {
+                retType = destType;
 
-                    if (destType->TypeTag == ES_TypeTag.Int) {
-                        var intDest = (ES_IntTypeData*) destType;
+                var origTypeRoslyn = GetRoslynType (origExpr.Type);
+                var destTypeRoslyn = GetRoslynType (destType);
+                if (!origTypeRoslyn.IsEquivalentTo (destTypeRoslyn))
+                    retValue = CastExpression (destTypeRoslyn, origVal);
+                else
+                    retValue = origVal;
+            } else {
+                switch (origExpr.Type->TypeTag) {
+                    case ES_TypeTag.Int: {
+                        var intSrc = (ES_IntTypeData*) origExpr.Type;
 
-                        if (intDest->IntSize == intSrc->IntSize && intDest->Unsigned == intSrc->Unsigned) {
-                            origExpr.Writable = false;
-                            return origExpr;
-                        }
+                        if (destType->TypeTag == ES_TypeTag.Int) {
+                            var intDest = (ES_IntTypeData*) destType;
 
-                        var roslynDestType = GetIntType (intDest->IntSize, intDest->Unsigned);
-                        retValue = CastExpression (roslynDestType, origVal);
-                    } else if (destType->TypeTag == ES_TypeTag.Float) {
-                        var floatDest = (ES_FloatTypeData*) destType;
+                            if (intDest->IntSize == intSrc->IntSize && intDest->Unsigned == intSrc->Unsigned) {
+                                origExpr.Writable = false;
+                                return origExpr;
+                            }
 
-                        var roslynDestType = GetFloatType (floatDest->FloatSize);
-                        retValue = CastExpression (roslynDestType, origVal);
-                    } else
-                        throw new CompilationException (ES_BackendErrors.FrontendError);
+                            var roslynDestType = GetIntType (intDest->IntSize, intDest->Unsigned);
+                            retValue = CastExpression (roslynDestType, origVal);
+                        } else if (destType->TypeTag == ES_TypeTag.Float) {
+                            var floatDest = (ES_FloatTypeData*) destType;
 
-                    retType = destType;
+                            var roslynDestType = GetFloatType (floatDest->FloatSize);
+                            retValue = CastExpression (roslynDestType, origVal);
+                        } else
+                            throw new CompilationException (ES_BackendErrors.FrontendError);
 
-                    break;
+                        retType = destType;
+
+                        break;
+                    }
+
+                    case ES_TypeTag.Float: {
+                        var floatSrc = (ES_FloatTypeData*) origExpr.Type;
+
+                        if (destType->TypeTag == ES_TypeTag.Float) {
+                            var floatDest = (ES_FloatTypeData*) destType;
+
+                            if (floatSrc->FloatSize == floatDest->FloatSize) {
+                                origExpr.Writable = false;
+                                return origExpr;
+                            }
+
+                            var roslynDestType = GetFloatType (floatDest->FloatSize);
+                            retValue = CastExpression (roslynDestType, origVal);
+                        } else if (destType->TypeTag == ES_TypeTag.Int) {
+                            var intDest = (ES_IntTypeData*) destType;
+
+                            var roslynDestType = GetIntType (intDest->IntSize, intDest->Unsigned);
+                            retValue = CastExpression (roslynDestType, origVal);
+                        } else
+                            throw new CompilationException (ES_BackendErrors.FrontendError);
+
+                        retType = destType;
+
+                        break;
+                    }
+
+                    default:
+                        throw new NotImplementedException ("Cast not implemented.");
                 }
-
-                case ES_TypeTag.Float: {
-                    var floatSrc = (ES_FloatTypeData*) origExpr.Type;
-
-                    if (destType->TypeTag == ES_TypeTag.Float) {
-                        var floatDest = (ES_FloatTypeData*) destType;
-
-                        if (floatSrc->FloatSize == floatDest->FloatSize) {
-                            origExpr.Writable = false;
-                            return origExpr;
-                        }
-
-                        var roslynDestType = GetFloatType (floatDest->FloatSize);
-                        retValue = CastExpression (roslynDestType, origVal);
-                    } else if (destType->TypeTag == ES_TypeTag.Int) {
-                        var intDest = (ES_IntTypeData*) destType;
-
-                        var roslynDestType = GetIntType (intDest->IntSize, intDest->Unsigned);
-                        retValue = CastExpression (roslynDestType, origVal);
-                    } else
-                        throw new CompilationException (ES_BackendErrors.FrontendError);
-
-                    retType = destType;
-
-                    break;
-                }
-
-                default:
-                    throw new NotImplementedException ("Cast not implemented.");
             }
 
             return new ExpressionData { Type = retType, Value = retValue, };

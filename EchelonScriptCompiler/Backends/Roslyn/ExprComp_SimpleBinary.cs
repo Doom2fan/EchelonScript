@@ -24,6 +24,9 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             var lhsExpr = CompileExpression (ref passData, ref funcData, expr.ExprLeft);
             var rhsExpr = CompileExpression (ref passData, ref funcData, expr.ExprRight);
 
+            StripFirstConst (ref lhsExpr);
+            StripFirstConst (ref rhsExpr);
+
             if (lhsExpr.Type->TypeTag == ES_TypeTag.Bool && rhsExpr.Type->TypeTag == ES_TypeTag.Bool)
                 return CompileExpression_BinaryBoolBool (ref passData, expr, ref lhsExpr, ref rhsExpr);
             else if (lhsExpr.Type->TypeTag == ES_TypeTag.Int && rhsExpr.Type->TypeTag == ES_TypeTag.Int)
@@ -79,9 +82,14 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                     throw new CompilationException ("Not a simple binary operation.");
             }
 
+            var type = lhsExpr.Type;
+
+            if (expr.IsComparison ())
+                type = passData.Env.TypeBool;
+
             var value = BinaryExpression (op, lhsExpr.Value!, rhsExpr.Value!);
 
-            return new ExpressionData { Type = lhsExpr.Type, Value = value, };
+            return new ExpressionData { Type = type, Value = value, };
         }
 
         private static ExpressionData CompileExpression_BinaryBoolBool (

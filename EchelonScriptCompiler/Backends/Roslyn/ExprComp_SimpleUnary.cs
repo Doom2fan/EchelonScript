@@ -22,6 +22,8 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
         ) {
             var innerExpr = CompileExpression (ref passData, ref funcData, expr.ExprInner);
 
+            StripFirstConst (ref innerExpr);
+
             if (innerExpr.Type->TypeTag == ES_TypeTag.Bool)
                 return CompileExpression_UnaryBool (ref passData, expr, ref innerExpr);
             else if (innerExpr.Type->TypeTag == ES_TypeTag.Int)

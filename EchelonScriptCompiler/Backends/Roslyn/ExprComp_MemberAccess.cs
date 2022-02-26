@@ -56,6 +56,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             ESIR_MemberAccessExpression expr
         ) {
             var parentExpr = CompileExpression (ref passData, ref funcData, expr.ExprParent);
+            StripFirstConst (ref parentExpr);
 
             Debug.Assert (parentExpr.Type is not null);
 

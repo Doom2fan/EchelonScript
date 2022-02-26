@@ -215,9 +215,16 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 case ES_TypeTag.Enum:
                 case ES_TypeTag.Interface:
                 case ES_TypeTag.Reference:
-                case ES_TypeTag.Const:
-                case ES_TypeTag.Immutable:
                     throw new NotImplementedException ("[TODO] Not implemented yet.");
+
+                case ES_TypeTag.Const:
+                case ES_TypeTag.Immutable: {
+                    var constData = (ES_ConstData*) type;
+                    var constStr = type->TypeTag == ES_TypeTag.Immutable ? "immutable" : "const" ;
+
+                    return $"{constStr}({MangleTypeNameAny (constData->InnerType)})";
+                }
+
 
                 default:
                     throw new NotImplementedException ("Type tag not implemented.");

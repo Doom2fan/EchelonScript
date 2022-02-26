@@ -155,6 +155,12 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                     return ObjectCreationExpression (structName).WithInitializer (initExpr);
                 }
 
+                case ES_TypeTag.Const:
+                case ES_TypeTag.Immutable: {
+                    var constData = (ES_ConstData*) varType;
+                    return GetDefaultValue (constData->InnerType);
+                }
+
                 default:
                     throw new NotImplementedException ("Variable type not implemented.");
             }
