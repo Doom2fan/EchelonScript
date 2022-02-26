@@ -43,6 +43,8 @@ namespace EchelonScriptCompiler.CompilerCommon.IR {
             rightNode = right;
         }
 
+        public bool IsComparison () => Kind.IsBinaryComparison ();
+
         internal override ESIR_Node? GetChild (int slot) {
             switch (slot) {
                 case 0: return leftNode;

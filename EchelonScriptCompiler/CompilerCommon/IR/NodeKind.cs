@@ -151,4 +151,22 @@ namespace EchelonScriptCompiler.CompilerCommon.IR {
 
         #endregion
     }
+
+    public static partial class ESIR_Utils {
+        public static bool IsBinaryComparison (this ESIR_NodeKind kind) {
+            switch (kind) {
+                case ESIR_NodeKind.BinaryExprLesserThan:
+                case ESIR_NodeKind.BinaryExprGreaterThan:
+                case ESIR_NodeKind.BinaryExprLesserThanEqual:
+                case ESIR_NodeKind.BinaryExprGreaterThanEqual:
+
+                case ESIR_NodeKind.BinaryExprEquals:
+                case ESIR_NodeKind.BinaryExprNotEquals:
+                    return true;
+
+                default:
+                    return false;
+            }
+        }
+    }
 }
