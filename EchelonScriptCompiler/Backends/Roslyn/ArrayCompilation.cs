@@ -113,7 +113,8 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             memberTypes.Add (CompileCode_Array_IndexFunc (ref passData, arrayType));
 
             // Add the concat function.
-            memberTypes.Add (CompileCode_Array_ConcatFunc (ref passData, arrayType));
+            if (arrayType->DimensionsCount == 1)
+                memberTypes.Add (CompileCode_Array_ConcatFunc (ref passData, arrayType));
 
             // Create the declaration.
             var arrayDecl = StructDeclaration (
