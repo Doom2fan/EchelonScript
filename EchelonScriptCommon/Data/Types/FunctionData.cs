@@ -56,7 +56,7 @@ namespace EchelonScriptCommon.Data.Types {
         #region ================== Instance properties
 
         public readonly string SourceUnitString {
-            get => StringPool.Shared.GetOrAdd (SourceUnit.Span, Encoding.ASCII);
+            get => StringPool.Shared.GetOrAdd (SourceUnit.Span, ES_Encodings.Identifier);
         }
 
         #endregion

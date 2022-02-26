@@ -11,6 +11,7 @@ using System;
 using System.Diagnostics;
 using System.Text;
 using ChronosLib.Pooled;
+using EchelonScriptCommon;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.GarbageCollection;
 using EchelonScriptCompiler.CompilerCommon;
@@ -265,7 +266,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                     return CompileExpression_MemberAccess (ref passData, ref funcData, memberAccessExpr);
 
                 case ESIR_NodeKind.FunctionCallExpression when expr is ESIR_FunctionCallExpression callExpr: {
-                    var funcNameStr = callExpr.Name.GetPooledString (Encoding.ASCII);
+                    var funcNameStr = callExpr.Name.GetPooledString (ES_Encodings.Identifier);
                     var funcId = IdentifierName (funcNameStr);
 
                     if (!passData.Functions.TryGetValue (callExpr.Name, out var funcDef))

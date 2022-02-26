@@ -11,7 +11,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Text;
 using ChronosLib.Pooled;
 using ChronosLib.Unmanaged;
 using Collections.Pooled;
@@ -224,7 +223,7 @@ namespace EchelonScriptCompiler.Data {
 
         public string NamespaceNameString {
             get {
-                return StringPool.Shared.GetOrAdd (namespaceName.Span, Encoding.ASCII);
+                return StringPool.Shared.GetOrAdd (namespaceName.Span, ES_Encodings.Identifier);
             }
         }
 
@@ -514,7 +513,7 @@ namespace EchelonScriptCompiler.Data {
 
             private ES_TypeInfo* CreateConstType (ES_TypeInfo* baseType, bool immutable) {
                 // Format sample: "@generated::const(NamespaceName__TypeName)" or "@generated::immutable(NamespaceName__TypeName)"
-                var enc = Encoding.ASCII;
+                var enc = ES_Encodings.Identifier;
 
                 baseType = RemoveConstness (baseType, immutable);
 
@@ -522,11 +521,9 @@ namespace EchelonScriptCompiler.Data {
 
                 var prefixName = immutable ? "immutable" : "const";
                 var prefixBytesLen = enc.GetByteCount (prefixName);
-                using var prefixBytes = PooledArray<byte>.GetArray (prefixBytesLen);
-                enc.GetBytes (prefixName, prefixBytes);
 
                 using var idBase = GetGeneratedTypeName (baseType, prefixLen: prefixBytesLen + 1, suffixLen: 1);
-                prefixBytes.Span.CopyTo (idBase.Span [..prefixBytesLen]);
+                enc.GetBytes (prefixName, idBase.Span [..prefixBytesLen]);
                 idBase.Span [prefixBytesLen] = (byte) '(';
                 idBase.Span [^1] = (byte) ')';
 
@@ -561,8 +558,7 @@ namespace EchelonScriptCompiler.Data {
                 var idx = idBase.RealLength - suffixLen;
 
                 idBaseSpan [idx++] = (byte) '[';
-                for (int i = 1; i < dimensionCount; i++)
-                    idBaseSpan [idx++] = (byte) ',';
+                idBaseSpan.Slice (idx++, dimensionCount - 1).Fill ((byte) ',');
                 idBaseSpan [idx++] = (byte) ']';
 
                 var arrId = environment.IdPool.GetIdentifier (idBase);

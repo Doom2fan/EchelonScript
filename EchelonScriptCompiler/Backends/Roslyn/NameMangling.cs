@@ -10,8 +10,8 @@
 using System;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Text;
 using ChronosLib.Pooled;
+using EchelonScriptCommon;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCompiler.CompilerCommon.IR;
 using EchelonScriptCompiler.Frontend;
@@ -40,16 +40,14 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
             // The namespace.
             var namespaceName = typeName->Name.NamespaceName.Span;
-            var namespaceSpan = mangleChars.AddSpan (namespaceName.Length);
-            Encoding.ASCII.GetChars (namespaceName, namespaceSpan);
+            ES_Encodings.Identifier.GetChars (namespaceName, mangleChars.AddSpan (namespaceName.Length));
 
             // The mangled namespace separator.
             mangleChars.Add ('_', 2);
 
             // The function name.
             var structName = typeName->Name.TypeName.Span;
-            var structSpan = mangleChars.AddSpan (structName.Length);
-            Encoding.ASCII.GetChars (structName, structSpan);
+            ES_Encodings.Identifier.GetChars (structName, mangleChars.AddSpan (structName.Length));
 
             return mangleChars.Span.GetPooledString ();
         }
@@ -92,7 +90,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
         internal static string MangleStaticVariable ([DisallowNull] ESIR_StaticVariable staticVar) {
             const string prefix = "StaticVar_";
-            var enc = Encoding.ASCII;
+            var enc = ES_Encodings.Identifier;
             var varName = staticVar.Name;
 
             var prefixLen = enc.GetByteCount (prefix);
@@ -117,16 +115,14 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
             // The namespace.
             var namespaceName = structData->TypeInfo.Name.NamespaceName.Span;
-            var namespaceSpan = mangleChars.AddSpan (namespaceName.Length);
-            Encoding.ASCII.GetChars (namespaceName, namespaceSpan);
+            ES_Encodings.Identifier.GetChars (namespaceName, mangleChars.AddSpan (namespaceName.Length));
 
             // The mangled namespace separator.
             mangleChars.Add (':', 2);
 
             // The function name.
             var structName = structData->TypeInfo.Name.TypeName.Span;
-            var structSpan = mangleChars.AddSpan (structName.Length);
-            Encoding.ASCII.GetChars (structName, structSpan);
+            ES_Encodings.Identifier.GetChars (structName, mangleChars.AddSpan (structName.Length));
 
             return mangleChars.Span.GetPooledString ();
         }
@@ -168,8 +164,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
 
             // The namespace.
             var namespaceName = arrayData->TypeInfo.Name.NamespaceName.Span;
-            var namespaceSpan = mangleChars.AddSpan (namespaceName.Length);
-            Encoding.ASCII.GetChars (namespaceName, namespaceSpan);
+            ES_Encodings.Identifier.GetChars (namespaceName, mangleChars.AddSpan (namespaceName.Length));
 
             // The mangled namespace separator.
             mangleChars.Add (':', 2);

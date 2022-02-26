@@ -8,7 +8,6 @@
  */
 
 using System;
-using System.Text;
 using CommunityToolkit.HighPerformance.Buffers;
 using EchelonScriptCommon.Utilities;
 
@@ -40,10 +39,10 @@ namespace EchelonScriptCommon.Data.Types {
         public readonly ArrayPointer<byte> TypeName;
 
         public string NamespaceNameString {
-            get => StringPool.Shared.GetOrAdd (NamespaceName.Span, Encoding.ASCII);
+            get => StringPool.Shared.GetOrAdd (NamespaceName.Span, ES_Encodings.Identifier);
         }
         public string TypeNameString {
-            get => StringPool.Shared.GetOrAdd (TypeName.Span, Encoding.ASCII);
+            get => StringPool.Shared.GetOrAdd (TypeName.Span, ES_Encodings.Identifier);
         }
 
         public ES_FullyQualifiedName (ArrayPointer<byte> namespaceName, ArrayPointer<byte> typeName) {
@@ -58,7 +57,7 @@ namespace EchelonScriptCommon.Data.Types {
             bytes.Slice (NamespaceName.Length, 2).Fill ((byte) ':');
             TypeName.Span.CopyTo (bytes.Slice (NamespaceName.Length + 2));
 
-            return StringPool.Shared.GetOrAdd (bytes, Encoding.ASCII);
+            return StringPool.Shared.GetOrAdd (bytes, ES_Encodings.Identifier);
         }
     }
 }

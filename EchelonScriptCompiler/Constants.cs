@@ -7,8 +7,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-using System;
-
 namespace EchelonScriptCompiler {
     public static class ES_Constants {
         public const string GlobalStaticConstructorName = "$_GlobalStaticCons";

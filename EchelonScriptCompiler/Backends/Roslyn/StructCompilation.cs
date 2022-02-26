@@ -11,6 +11,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Text;
 using ChronosLib.Pooled;
+using EchelonScriptCommon;
 using EchelonScriptCompiler.CompilerCommon.IR;
 using EchelonScriptCompiler.Utilities;
 using Microsoft.CodeAnalysis;
@@ -29,7 +30,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 switch (member.Kind) {
                     case ESIR_NodeKind.Field when member is ESIR_Field fieldDef: {
                         var roslynType = GetRoslynType (fieldDef.Type.Pointer);
-                        var variableName = fieldDef.Name.GetPooledString (Encoding.ASCII);
+                        var variableName = fieldDef.Name.GetPooledString (ES_Encodings.Identifier);
 
                         var variablesList = SingletonSeparatedList (VariableDeclarator (Identifier (variableName)));
                         memberTypes.Add (

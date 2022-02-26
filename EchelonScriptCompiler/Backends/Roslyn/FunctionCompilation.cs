@@ -141,7 +141,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                         var varValue = GetDefaultValue (memberVarType);
                         initExprNodes.Add (AssignmentExpression (
                             SyntaxKind.SimpleAssignmentExpression,
-                            IdentifierName (memberPtr->Name.GetPooledString (Encoding.ASCII)),
+                            IdentifierName (memberPtr->Name.GetPooledString (ES_Encodings.Identifier)),
                             varValue
                         ));
                         initExprNodes.Add (Token (SyntaxKind.CommaToken));
@@ -199,7 +199,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
         private static string GetLabelNameLoopContinue (ReadOnlySpan<char> labelName) => GetPrefixedName (labelName, "_LoopContinue");
 
         private static void CompileFunction (ref PassData passData, ESIR_Function func) {
-            var roslynFuncName = func.Name.GetPooledString (Encoding.ASCII);
+            var roslynFuncName = func.Name.GetPooledString (ES_Encodings.Identifier);
             using var argsList = new StructPooledList<ParameterSyntax> (CL_ClearMode.Auto);
 
             passData.LabelStack.Push ();
@@ -248,15 +248,15 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                     var fileNameExpr = LiteralExpression (SyntaxKind.NullLiteralExpression);
 
                     if (traceData.ParentType.Elements != null)
-                        parentTypeExpr = StringLiteral (traceData.ParentType.GetPooledString (Encoding.ASCII));
+                        parentTypeExpr = StringLiteral (traceData.ParentType.GetPooledString (ES_Encodings.Identifier));
                     if (traceData.FileName is not null)
                         fileNameExpr = StringLiteral (traceData.FileName);
 
                     attrsList.Add (Attribute (
                         IdentifierName (nameof (ES_MethodTraceDataAttribute)),
                         SimpleAttributeArgumentList (
-                            AttributeArgument (StringLiteral (traceData.Namespace.GetPooledString (Encoding.ASCII))),
-                            AttributeArgument (StringLiteral (traceData.Name.GetPooledString (Encoding.ASCII))),
+                            AttributeArgument (StringLiteral (traceData.Namespace.GetPooledString (ES_Encodings.Identifier))),
+                            AttributeArgument (StringLiteral (traceData.Name.GetPooledString (ES_Encodings.Identifier))),
 
                             AttributeArgument (
                                 NameEquals (IdentifierName (nameof (ES_MethodTraceDataAttribute.ParentType))), null,
@@ -508,7 +508,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             const string alreadyInUseError = "Name already in use in label stack?";
 
             var labelName = labelStmt.Label;
-            var labelNameStr = labelName.GetPooledString (Encoding.ASCII);
+            var labelNameStr = labelName.GetPooledString (ES_Encodings.Identifier);
 
             if (labelStmt.Statement is ESIR_LoopStatement labeledLoop) {
                 var labelSymbol = new LabelSymbol (

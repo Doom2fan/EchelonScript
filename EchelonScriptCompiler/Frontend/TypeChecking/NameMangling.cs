@@ -10,6 +10,7 @@
 using System;
 using System.Text;
 using ChronosLib.Pooled;
+using EchelonScriptCommon;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.Utilities;
 
@@ -122,7 +123,7 @@ namespace EchelonScriptCompiler.Frontend {
 
             fqnMangle.Span.CopyTo (bytes);
             bytes.Span.Slice (fqnMangleLen, 2).Fill ((byte) '$');
-            Encoding.ASCII.GetBytes (defConsName, bytes.Span [(fqnMangleLen + 2)..]);
+            ES_Encodings.Identifier.GetBytes (defConsName, bytes.Span [(fqnMangleLen + 2)..]);
 
             return passData.Env.IdPool.GetIdentifier (bytes);
         }

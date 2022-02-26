@@ -15,19 +15,24 @@ namespace EchelonScriptCommon.Data.Types {
     public enum ES_TypeTag : int {
         UNKNOWN   = 0,
         Null,
+
         Void,
         Bool,
         Int,
         Float,
-        Function,
+        Enum,
+
         Struct,
         Class,
-        Enum,
         Interface,
+
+        Function,
+
         Reference,
+        Array,
+
         Const,
         Immutable,
-        Array,
     }
 
     public enum ES_TypeFlag : int {
@@ -96,7 +101,7 @@ namespace EchelonScriptCommon.Data.Types {
         /// <summary>The type's source unit's name as a string.</summary>
         public string SourceUnitString {
             get {
-                return StringPool.Shared.GetOrAdd (SourceUnit.Span, Encoding.ASCII);
+                return StringPool.Shared.GetOrAdd (SourceUnit.Span, ES_Encodings.Identifier);
             }
         }
 

@@ -16,6 +16,7 @@ using System.Text;
 using ChronosLib.Pooled;
 using Collections.Pooled;
 using CommunityToolkit.HighPerformance;
+using EchelonScriptCommon;
 using EchelonScriptCommon.Utilities;
 using static TerraFX.Interop.Mimalloc;
 
@@ -323,7 +324,7 @@ namespace EchelonScriptCompiler.Data {
                 return ArrayPointer<byte>.Null;
 
             Span<byte> nameBytes = stackalloc byte [chars.Length];
-            Encoding.ASCII.GetBytes (chars, nameBytes);
+            ES_Encodings.Identifier.GetBytes (chars, nameBytes);
 
             return GetIdentifier (nameBytes);
         }

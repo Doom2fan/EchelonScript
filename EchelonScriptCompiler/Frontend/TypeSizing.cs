@@ -10,8 +10,8 @@
 using System;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Text;
 using ChronosLib.Pooled;
+using EchelonScriptCommon;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.Utilities;
 using EchelonScriptCompiler.CompilerCommon;
@@ -167,7 +167,7 @@ namespace EchelonScriptCompiler.Frontend {
                     Debug.Assert (fieldAstNode is not null);
 
                     errorList.Add (ES_FrontendErrors.GenFieldCausesCycle (
-                        member->Name.GetPooledString (Encoding.ASCII), type->Name.GetNameAsTypeString (), fieldAstNode.Name
+                        member->Name.GetPooledString (ES_Encodings.Identifier), type->Name.GetNameAsTypeString (), fieldAstNode.Name
                     ));
 
                     hasCycles = true;

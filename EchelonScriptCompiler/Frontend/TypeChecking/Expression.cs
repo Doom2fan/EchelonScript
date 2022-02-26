@@ -10,8 +10,8 @@
 using System;
 using System.Buffers;
 using System.Diagnostics;
-using System.Text;
 using ChronosLib.Pooled;
+using EchelonScriptCommon;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.Utilities;
 using EchelonScriptCompiler.CompilerCommon;
@@ -1489,8 +1489,8 @@ namespace EchelonScriptCompiler.Frontend {
 
                 var arg = func->Arguments.Span [callArgCount];
                 passData.ErrorList.Add (ES_FrontendErrors.GenMissingFuncArg (
-                    arg.Name.GetPooledString (Encoding.ASCII),
-                    func->Name.TypeName.GetPooledString (Encoding.ASCII),
+                    arg.Name.GetPooledString (ES_Encodings.Identifier),
+                    func->Name.TypeName.GetPooledString (ES_Encodings.Identifier),
                     passData.Source, errBounds
                 ));
                 ignoreDefArgs = true;
@@ -1507,7 +1507,7 @@ namespace EchelonScriptCompiler.Frontend {
                 if (argIdx >= funcArgCount) {
                     if (argIdx == funcArgCount) {
                         passData.ErrorList.Add (ES_FrontendErrors.GenTooManyFuncArgs (
-                            func->Name.TypeName.GetPooledString (Encoding.ASCII), passData.Source,
+                            func->Name.TypeName.GetPooledString (ES_Encodings.Identifier), passData.Source,
                             arg.ValueExpression.NodeBounds
                         ));
                         ignoreDefArgs = true;
@@ -1524,7 +1524,7 @@ namespace EchelonScriptCompiler.Frontend {
 
                 if (arg.ArgType != argTypeData->ArgType && argTypeData->ArgType != ES_ArgumentType.In) {
                     passData.ErrorList.Add (ES_FrontendErrors.GenWrongArgType (
-                        argData->Name.GetPooledString (Encoding.ASCII),
+                        argData->Name.GetPooledString (ES_Encodings.Identifier),
                         arg.ArgType.ToString (), passData.Source, arg.ValueExpression.NodeBounds
                     ));
                 }

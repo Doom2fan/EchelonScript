@@ -102,7 +102,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
                 var value = MemberAccessExpression (
                     SyntaxKind.SimpleMemberAccessExpression,
                     structExpr,
-                    IdentifierName (expr.Name.GetPooledString (Encoding.ASCII))
+                    IdentifierName (expr.Name.GetPooledString (ES_Encodings.Identifier))
                 );
                 return new ExpressionData { Type = field.Type.Pointer, Value = value };
             }
@@ -121,7 +121,7 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend {
             var typeArr = (ES_ArrayTypeData*) parentExpr.Type;
             var typeIndex = passData.Env.GetArrayIndexType ();
 
-            var memberChars = expr.Name.GetPooledString (Encoding.ASCII).AsSpan ();
+            var memberChars = expr.Name.GetPooledString (ES_Encodings.Identifier).AsSpan ();
             var arrExpr = CompileCode_NullCheck (parentExpr.Value!);
 
             ES_TypeInfo* memberType;

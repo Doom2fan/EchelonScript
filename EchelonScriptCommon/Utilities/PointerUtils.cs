@@ -61,8 +61,18 @@ namespace EchelonScriptCommon.Utilities {
                 return false;
         }
 
+        public override bool Equals (object? obj) {
+            if (obj is ArrayPointer<T> other)
+                return Equals (other);
+
+            return false;
+        }
+
         public override int GetHashCode ()
             => HashCode.Combine (((IntPtr) Elements).GetHashCode (), Length.GetHashCode ());
+
+        public static bool operator == (ArrayPointer<T> lhs, ArrayPointer<T> rhs) => lhs.Equals (rhs);
+        public static bool operator != (ArrayPointer<T> lhs, ArrayPointer<T> rhs) => !lhs.Equals (rhs);
     }
 
     public static class ES_Utils {
