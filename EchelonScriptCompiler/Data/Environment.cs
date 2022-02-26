@@ -253,9 +253,6 @@ namespace EchelonScriptCompiler.Data {
 
             private EchelonScriptEnvironment environment;
 
-            private CL_PooledList<(Pointer<ES_TypeInfo>, nint)>? staticVars;
-            private int staticVarsMemTotal;
-
             #endregion
 
             #region ================== Instance properties
@@ -291,6 +288,8 @@ namespace EchelonScriptCompiler.Data {
                 set => environment.backendData = value;
             }
 
+            public ArrayPointer<nint> ReferenceTypeRefList { get; private init; }
+
             #endregion
 
             #region ================== Constructors
@@ -301,8 +300,8 @@ namespace EchelonScriptCompiler.Data {
                 NamespaceBuilders = new PooledDictionary<ArrayPointer<byte>, ES_NamespaceData.Builder> ();
                 PointerAstMap = new Dictionary<IntPtr, ES_AstNode> ();
 
-                staticVars = new CL_PooledList<(Pointer<ES_TypeInfo>, nint)> ();
-                staticVarsMemTotal = 0;
+                ReferenceTypeRefList = MemoryManager.GetArrayAligned<nint> (1, sizeof (nint));
+                ReferenceTypeRefList.Span [0] = 0;
             }
 
             #endregion
@@ -399,25 +398,97 @@ namespace EchelonScriptCompiler.Data {
 
             #region Derived type creation
 
-            public ES_TypeInfo* CreateReferenceType (ES_TypeInfo* baseType) {
-                // Format sample: "@generated::NamespaceName__TypeName&"
+            internal ES_TypeInfo* RemoveConstness (ES_TypeInfo* type) => RemoveConstness (type, true);
+
+            private ES_TypeInfo* RemoveConstness (ES_TypeInfo* type, bool immutable) {
+                switch (type->TypeTag) {
+                    case ES_TypeTag.UNKNOWN:
+                    case ES_TypeTag.Null:
+                    case ES_TypeTag.Void:
+                    case ES_TypeTag.Bool:
+                    case ES_TypeTag.Int:
+                    case ES_TypeTag.Float:
+                    case ES_TypeTag.Function:
+                    case ES_TypeTag.Struct:
+                    case ES_TypeTag.Class:
+                    case ES_TypeTag.Enum:
+                    case ES_TypeTag.Interface:
+                        return type;
+
+                    case ES_TypeTag.Reference: {
+                        var refData = (ES_ReferenceData*) type;
+
+                        var cleanPointedType = RemoveConstness (refData->PointedType, immutable);
+
+                        if (refData->PointedType == cleanPointedType)
+                            return type;
+
+                        return CreateReferenceType (cleanPointedType);
+                    }
+
+                    case ES_TypeTag.Array: {
+                        var arrayType = (ES_ArrayTypeData*) type;
+
+                        var cleanElemType = RemoveConstness (arrayType->ElementType, immutable);
+
+                        if (arrayType->ElementType == cleanElemType)
+                            return type;
+
+                        return CreateArrayType (cleanElemType, arrayType->DimensionsCount);
+                    }
+
+                    case ES_TypeTag.Immutable: {
+                        if (!immutable)
+                            return type;
+
+                        goto case ES_TypeTag.Const;
+                    }
+                    case ES_TypeTag.Const: {
+                        var constData = (ES_ConstData*) type;
+
+                        return RemoveConstness (constData->InnerType, immutable);
+                    }
+
+                    default:
+                        throw new NotImplementedException ("Type not implemented.");
+                }
+            }
+
+            private PooledArray<byte> GetGeneratedTypeName (ES_TypeInfo* baseType, int prefixLen = 0, int suffixLen = 0) {
+                // Format sample: "NamespaceName__TypeName"
                 var baseFQN = baseType->Name;
 
-                using var idBase = UnmanagedArray<byte>.GetArray (baseFQN.NamespaceName.Length + baseFQN.TypeName.Length + 3);
-                var idBaseSpan = idBase.Span;
+                var noNamespace = (
+                    baseFQN.NamespaceName.Equals (environment.GeneratedTypesNamespace) ||
+                    baseFQN.NamespaceName.Equals (environment.GlobalTypesNamespace)
+                );
 
-                int idx = 0;
+                var idLen = prefixLen + baseFQN.NamespaceName.Length + 2 + baseFQN.TypeName.Length + suffixLen;
+                if (noNamespace)
+                    idLen = prefixLen + baseFQN.TypeName.Length + suffixLen;
 
-                baseFQN.NamespaceName.Span.CopyTo (idBaseSpan);
-                idx += baseFQN.NamespaceName.Length;
+                var idBase = PooledArray<byte>.GetArray (idLen);
+                var idBaseSpan = idBase.Span [prefixLen..^suffixLen];
 
-                idBaseSpan.Slice (idx, 2).Fill ((byte) '_');
-                idx += 2;
+                var idx = 0;
+
+                if (!noNamespace) {
+                    baseFQN.NamespaceName.Span.CopyTo (idBaseSpan);
+                    idx += baseFQN.NamespaceName.Length;
+
+                    idBaseSpan.Slice (idx, 2).Fill ((byte) '_');
+                    idx += 2;
+                }
 
                 baseFQN.TypeName.Span.CopyTo (idBaseSpan.Slice (idx));
-                idx += baseFQN.TypeName.Length;
 
-                idBaseSpan [idx++] = (byte) '&';
+                return idBase;
+            }
+
+            public ES_TypeInfo* CreateReferenceType (ES_TypeInfo* baseType) {
+                // Format sample: "@generated::NamespaceName__TypeName&"
+                using var idBase = GetGeneratedTypeName (baseType, suffixLen: 1);
+                idBase.Span [^1] = (byte) '&';
 
                 var refId = environment.IdPool.GetIdentifier (idBase);
                 var refFQN = new ES_FullyQualifiedName (environment.GeneratedTypesNamespace, refId);
@@ -441,31 +512,53 @@ namespace EchelonScriptCompiler.Data {
                 throw new NotImplementedException ("[TODO] Nullables not implemented yet.");
             }
 
-            public ES_TypeInfo* CreateConstType (ES_TypeInfo* baseType) {
-                throw new NotImplementedException ("[TODO] Const not implemented yet.");
+            private ES_TypeInfo* CreateConstType (ES_TypeInfo* baseType, bool immutable) {
+                // Format sample: "@generated::const(NamespaceName__TypeName)" or "@generated::immutable(NamespaceName__TypeName)"
+                var enc = Encoding.ASCII;
+
+                baseType = RemoveConstness (baseType, immutable);
+
+                Debug.Assert (baseType->TypeTag != ES_TypeTag.Const && baseType->TypeTag != ES_TypeTag.Immutable);
+
+                var prefixName = immutable ? "immutable" : "const";
+                var prefixBytesLen = enc.GetByteCount (prefixName);
+                using var prefixBytes = PooledArray<byte>.GetArray (prefixBytesLen);
+                enc.GetBytes (prefixName, prefixBytes);
+
+                using var idBase = GetGeneratedTypeName (baseType, prefixLen: prefixBytesLen + 1, suffixLen: 1);
+                prefixBytes.Span.CopyTo (idBase.Span [..prefixBytesLen]);
+                idBase.Span [prefixBytesLen] = (byte) '(';
+                idBase.Span [^1] = (byte) ')';
+
+                var constId = environment.IdPool.GetIdentifier (idBase);
+                var constFQN = new ES_FullyQualifiedName (environment.GeneratedTypesNamespace, constId);
+
+                var constType = environment.GetFullyQualifiedType (constFQN);
+
+                if (constType is not null) {
+                    Debug.Assert (constType->TypeTag == (immutable ? ES_TypeTag.Immutable : ES_TypeTag.Const));
+                    return constType;
+                }
+
+                constType = (ES_TypeInfo*) environment.memManager.GetMemory<ES_ConstData> ();
+                *((ES_ConstData*) constType) = new ES_ConstData (constFQN, baseType, immutable);
+
+                GetOrCreateNamespace (environment.GeneratedTypesNamespace).NamespaceData.Types.Add (constType);
+
+                return constType;
             }
 
-            public ES_TypeInfo* CreateImmutableType (ES_TypeInfo* baseType) {
-                throw new NotImplementedException ("[TODO] Immutable not implemented yet.");
-            }
+            public ES_TypeInfo* CreateConstType (ES_TypeInfo* baseType) => CreateConstType (baseType, false);
+
+            public ES_TypeInfo* CreateImmutableType (ES_TypeInfo* baseType) => CreateConstType (baseType, true);
 
             public ES_TypeInfo* CreateArrayType (ES_TypeInfo* elementType, int dimensionCount) {
                 // Format sample: "@generated::NamespaceName__TypeName[,,]"
-                var elemFQN = elementType->Name;
-
-                using var idBase = UnmanagedArray<byte>.GetArray (elemFQN.NamespaceName.Length + elemFQN.TypeName.Length + 4 + (dimensionCount - 1));
+                var suffixLen = 2 + (dimensionCount - 1);
+                using var idBase = GetGeneratedTypeName (elementType, suffixLen: suffixLen);
                 var idBaseSpan = idBase.Span;
 
-                int idx = 0;
-
-                elemFQN.NamespaceName.Span.CopyTo (idBaseSpan);
-                idx += elemFQN.NamespaceName.Length;
-
-                idBaseSpan.Slice (idx, 2).Fill ((byte) '_');
-                idx += 2;
-
-                elemFQN.TypeName.Span.CopyTo (idBaseSpan.Slice (idx));
-                idx += elemFQN.TypeName.Length;
+                var idx = idBase.RealLength - suffixLen;
 
                 idBaseSpan [idx++] = (byte) '[';
                 for (int i = 1; i < dimensionCount; i++)
@@ -529,47 +622,6 @@ namespace EchelonScriptCompiler.Data {
 
             #endregion
 
-            #region Static vars
-
-            public nint AllocateStaticVar (ES_TypeInfo* varType) {
-                var alignmentVal = sizeof (nint);
-
-                var startIndex = (staticVarsMemTotal + alignmentVal - 1) / alignmentVal * alignmentVal;
-                staticVarsMemTotal = startIndex + varType->RuntimeSize;
-
-                staticVars!.Add (((Pointer<ES_TypeInfo>) varType, startIndex));
-
-                return startIndex;
-            }
-
-            public void AllocateStaticVarsMem (out void* staticVarsMem, out PooledArray<Pointer<ES_ObjectAddress>> references) {
-                if (staticVars is null)
-                    throw new CompilationException ("Static vars were already allocated.");
-
-                var mem = ArrayPointer<byte>.Null;
-                if (staticVarsMemTotal > 0) {
-                    mem = MemoryManager.GetArrayAligned<byte> (staticVarsMemTotal, sizeof (nint));
-                    mem.Span.Clear ();
-                }
-                staticVarsMem = mem.Elements;
-
-                using var refsList = new StructPooledList<Pointer<ES_ObjectAddress>> (CL_ClearMode.Auto);
-
-                foreach (var staticVar in staticVars) {
-                    var baseOffs = staticVar.Item2;
-                    var typeRefs = staticVar.Item1.Address->RefsList.Span;
-                    var refsSpan = refsList.AddSpan (typeRefs.Length);
-
-                    var refNum = 0;
-                    foreach (var refOffs in typeRefs)
-                        refsSpan [refNum++] = (ES_ObjectAddress*) (mem.Elements + baseOffs + refOffs);
-                }
-
-                references = refsList.MoveToArray ();
-            }
-
-            #endregion
-
             protected void CheckDisposed () {
                 if (disposedValue)
                     throw new ObjectDisposedException (nameof (EchelonScriptEnvironment));
@@ -595,9 +647,6 @@ namespace EchelonScriptCompiler.Data {
 
                 NamespaceBuilders?.Dispose ();
                 NamespaceBuilders = null!;
-
-                staticVars?.Dispose ();
-                staticVars = null;
 
                 PointerAstMap.Clear ();
                 PointerAstMap = null!;
