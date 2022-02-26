@@ -113,4 +113,27 @@ namespace EchelonScriptCommon.Data.Types {
 
         #endregion
     }
+    [StructLayout (LayoutKind.Sequential, Pack = 1)]
+    [ES_ExportAggregate (new [] { "EchelonScript", "Reflection" }, "ConstTypeData", ES_ExportAttributeBase.AggregateType.Struct)]
+    public unsafe struct ES_ConstData {
+        #region ================== Instance fields
+
+        public ES_TypeInfo TypeInfo;
+        public ES_TypeInfo* InnerType;
+
+        #endregion
+
+        #region ================== Constructors
+
+        public ES_ConstData (
+            ES_FullyQualifiedName fullyQualifiedName, ES_TypeInfo* innerType, bool immutable
+        ) {
+            var tag = immutable ? ES_TypeTag.Immutable : ES_TypeTag.Const;
+            TypeInfo = new ES_TypeInfo (tag, ES_AccessModifier.Public, ES_TypeFlag.None, ArrayPointer<byte>.Null, fullyQualifiedName);
+
+            InnerType = innerType;
+        }
+
+        #endregion
+    }
 }
