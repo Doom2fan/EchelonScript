@@ -1,0 +1,9 @@
+namespace CycleTest {
+    public struct A {
+        public B Foo;
+    }
+
+    public struct B {
+        public A Foo;
+    }
+}

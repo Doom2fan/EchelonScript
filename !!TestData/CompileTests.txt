@@ -1,0 +1,501 @@
+namespace IntMathsTest {
+    int32 testI32 (int32 a, int32 b) => a + b;
+}
+
+namespace IntDivByZeroTest {
+    int32 testI32 (int32 a, int32 b) => a / 0;
+}
+
+namespace UShortDivByZeroTest {
+    int32 testI32 (int32 a, int32 b) => cast (int32) (cast (uint16) a / 0u);
+}
+
+namespace IntAutoCastTest {
+    int32 testI32 (int32 a, int32 b) {
+        var c = 2s8;
+        return a += c;
+    }
+}
+
+namespace LocalVarTest {
+    int32 testI32 (int32 a, int32 b) {
+        var int32 tmp = a + b;
+        return tmp;
+    }
+}
+
+namespace ConstTest {
+    int32 testI32 (int32 a, int32 b) {
+        var immutable (const (int32) []) zz1;
+        var const (immutable (int32) []) zz2;
+        var immutable (int32 []) zz3;
+        var const (int32 []) zz4;
+
+        var abc = new const (int32) [5];
+        var abc2 = new immutable (int32) [5];
+        a += abc [0];
+        a += abc2 [0];
+        a = (a + abc [0]) + (a + abc2 [0]) + (a + abc [0] + abc2 [0]);
+        a += (abc [0] + abc2 [0]);
+
+        return 0;
+    }
+}
+
+namespace IntIncrementTest {
+    int32 testI32 (int32 a, int32 b) {
+        var tmp = ++a;
+        var tmp2 = a++;
+        return tmp + tmp2;
+    }
+}
+
+namespace FloatIncrementTest {
+    float32 testF32 (float32 a, float32 b) {
+        var tmp = ++a;
+        var tmp2 = a++;
+        return tmp + tmp2;
+    }
+}
+
+namespace ComparisonTest {
+    int32 testI32 (int32 a, int32 b) {
+        if ((a < b) | (a == b))
+            return 1;
+        else
+            return 0;
+    }
+}
+
+namespace FloatCastTest {
+    float32 testF32 (float32 a, float32 b) => cast (float32) 5.0d;
+}
+
+namespace IntegerLiteralTest {
+    int32 testI32 (int32 a, int32 b) => 1;
+}
+
+namespace TernaryTest1 {
+    int32 AA (bool a) => a ? 1 : 0;
+
+    int32 BB (bool a, bool b) => a ? (b ? 2 : 1) : 0;
+}
+
+namespace TernaryTest2 {
+    int32 AA (bool a, int32 x, int32 y) => a ? y : x;
+
+    int32 BB (bool a, bool b, int32 x, int32 y, int32 z) => a ? (b ? z : y) : x;
+}
+
+namespace SomeTernaryTest { // Constant folding?
+    int32 testI32 (int32 a, int32 b) => 1;
+
+    float32 testF32 (float32 a, float32 b) => 0f/0f == 0f/0f ? 1f : 0f;
+}
+
+namespace LoopTest {
+    int32 testI32 (int32 a, int32 b) {
+        var int32 num = a & 255;
+        var int32 count = b & 15;
+
+        var int32 accum = num;
+        for (var int32 i = 0; i < count; i++)
+            accum *= num;
+
+        return accum;
+    }
+}
+
+namespace LoopContinueTest {
+    int32 testI32 (int32 a, int32 b) {
+        var accum = 0;
+        for (var i = 0; i < 15; i++) {
+            accum += 1;
+
+            if (i == 8)
+                continue;
+
+            accum += 1;
+        }
+
+        return accum;
+    }
+}
+
+namespace LoopBreakTest {
+    int32 testI32 (int32 a, int32 b) {
+        var accum = 0;
+        for (var i = 0; i < 40; i++) {
+            accum += 1;
+
+            if (accum > 30)
+                break;
+        }
+
+        return accum;
+    }
+}
+
+namespace FunctionCallTest {
+    int32 Add (int32 a, int32 b) => a + b;
+
+    int32 testI32 (int32 a, int32 b) => Add (a, b) - (a + b);
+}
+
+namespace LogicalORTest {
+    bool A () => true;
+
+    bool B () => false;
+
+    int32 testI32 (int32 a, int32 b) {
+        if (A () || B ())
+            return 1;
+        else
+            return 0;
+    }
+}
+
+namespace OptionalArgsTest {
+    int32 testI32 (int32 a, int32 b) => Asd ();
+
+    int32 Asd (int32 a = 1337) => a;
+}
+
+namespace ArrayNewTest {
+    int32 testI32 (int32 a, int32 b) {
+        var arr = new int32 [32];
+        return 0;
+    }
+}
+
+namespace ArrayPermanenceTest {
+    public struct Asd {
+        public static int32 [] Arr;
+    }
+
+    int32 testI32 (int32 a, int32 b) {
+        Asd.Arr = new int32 [32];
+        return 0;
+    }
+}
+
+namespace ArrayConcatTest {
+    int32 testI32 (int32 a, int32 b) {
+        var arr = new int32 [3];
+        var arr2 = new int32 [3];
+
+        for (var i = 0; i < arr.Length; i++)
+            arr [i] = arr2 [i] = i;
+
+        var arr3 = arr .. arr2;
+
+        var accum = 0;
+        for (var i = 0; i < arr3.Length; i++)
+            accum = arr3 [i];
+
+        return 0;
+    }
+}
+
+namespace Array1DLengthTest {
+    int32 testI32 (int32 a, int32 b) {
+        var arr = new int32 [5];
+        return arr.Length;
+    }
+}
+
+namespace Array2DTotalLengthTest {
+    int32 testI32 (int32 a, int32 b) {
+        var arr = new int32 [8, 4];
+        return arr.TotalLength;
+    }
+}
+
+namespace Array2DDimLengthTest {
+    int32 testI32 (int32 a, int32 b) {
+        var arr = new int32 [8, 4];
+        return arr.LengthD0 * arr.LengthD1;
+    }
+}
+
+namespace Array2DRankTest {
+    int32 testI32 (int32 a, int32 b) {
+        var arr = new int32 [8, 4];
+        return cast (int32) (arr.Rank);
+    }
+}
+
+namespace ArrayTest {
+    int32 testI32 (int32 a, int32 b) {
+        var arrLen = 32;
+        var arr = new int32 [arrLen];
+
+        var initTest = 0;
+        for (var int32 i = 0; i < arrLen; i++)
+            initTest += arr [i];
+
+        a = 0;
+        for (var int32 i = 0; i < arrLen; i++)
+            arr [i] = i;
+        for (var int32 i = 0; i < arrLen; i++)
+            a += arr [i];
+
+        b = 0;
+        for (var int32 i = arrLen - 1; i >= 0; i--)
+            arr [i] = i;
+        for (var int32 i = 0; i < arrLen; i++)
+            b += arr [i];
+
+        //initTest = 0;
+        return (a - b) + initTest;
+    }
+}
+
+namespace MultidimensionalArrayTest {
+    int32 testI32 (int32 abcd1, int32 abcd2) {
+        var arrWidth = 32;
+        var arrHeight = 32;
+
+        var arr = new int32 [arrWidth, arrHeight];
+
+        for (var i = 0; i < arrWidth; i++) {
+            for (var j = 0; j < arrHeight; j++)
+                arr [i, j] = i * j;
+        }
+        var a = calculateThing (arr, arrWidth, arrHeight);
+
+        for (var i = arrWidth - 1; i >= 0; i--) {
+            for (var j = 0; j < arrHeight; j++)
+                arr [i, j] = i * j;
+        }
+        var b = calculateThing (arr, arrWidth, arrHeight);
+
+        for (var i = 0; i < arrWidth; i++) {
+            for (var j = arrHeight - 1; j >= 0; j--)
+                arr [i, j] = i * j;
+        }
+        var c = calculateThing (arr, arrWidth, arrHeight);
+
+        for (var i = arrWidth - 1; i >= 0; i--) {
+            for (var j = arrHeight - 1; j >= 0; j--)
+                arr [i, j] = i * j;
+        }
+        var d = calculateThing (arr, arrWidth, arrHeight);
+
+        return (a - b) + (c - d);
+    }
+
+    int32 calculateThing (const (int32) [,] arr, in int32 width, in int32 height) {
+        var ret = 0;
+
+        for (var i = 0; i < width; i++) {
+            for (var j = 0; j < height; j++)
+                ret += arr [i, j];
+        }
+
+        return ret;
+    }
+}
+
+namespace ArrayOutOfBoundsTest {
+    int32 testI32 (int32 a, int32 b) => (new int32 [1]) [1];
+
+    float32 testF32 (float32 a, float32 b) => (new float32 [1]) [-1];
+}
+
+namespace StructMemberVarTest {
+    public struct A {
+        public int32 a;
+        public int32 b;
+    }
+
+    int32 testI32 (int32 a, int32 b) {
+        var A sd;
+
+        sd.a = a;
+        sd.b = b;
+
+        return (sd.a + sd.b) - (a + b);
+    }
+}
+
+namespace StructStaticVarTest {
+    public struct A {
+        public static int32 Value = 15;
+    }
+
+    int32 testI32 (int32 a, int32 b) => A.Value++;
+}
+
+namespace NullStructDeferenceTest {
+    public struct A {
+        public int32 Value;
+    }
+
+    int32 testI32 (int32 a, int32 b) {
+        var A& v = null;
+
+        return v.Value;
+    }
+}
+
+namespace NewStructAndDeferenceTest {
+    public struct A {
+        public int32 Value;
+    }
+
+    int32 testI32 (int32 a, int32 b) {
+        var A& structVar = new A ();
+
+        //structVar = new A ();
+
+        structVar.Value = a;
+
+        return structVar.Value;
+    }
+}
+
+namespace NewIntAndDeferenceTest {
+    int32 testI32 (int32 a, int32 b) {
+        var intRef = new int32 ();
+
+        *intRef++;
+
+        return *intRef;
+    }
+}
+
+namespace NestedReferenceTest {
+    int32 testI32 (int32 a, int32 b) {
+        var intRef = new int32&& ();
+        *intRef = new int32& ();
+        **intRef = new int32 ();
+
+        ***intRef = 85;
+
+        return ***intRef;
+    }
+}
+
+namespace GCStompTest {
+    void DoThing (int32 val) {
+        for (var i = 0u32; i < 5000u; i++) {
+            var intRef3 = new int32 ();
+
+            *intRef3 = val;
+
+            for (var j = 0u32; j < 500u; j++)
+                *intRef3++;
+        }
+    }
+
+    int32 testI32 (int32 a, int32 b) {
+        var intRef1 = new int32 ();
+        var int32& intRef2;
+
+        *intRef1 = a;
+
+        DoThing (b);
+
+        intRef2 = new int32 ();
+        *intRef2 = b;
+
+        DoThing (b*a);
+
+        return (*intRef1 - *intRef2) - (a - b);
+    }
+}
+
+namespace GCStompTest2 {
+    public struct A {
+        static A& Asd;
+
+        public A& Lol;
+        public int32 Value;
+    }
+
+    A& DoThing (int32 val) {
+        var ret = new A ();
+        var prev = ret;
+
+        for (var i = 0u32; i < 5000u; i++) {
+            var newA = new A ();
+
+            newA.Value = (val = val ^ prev.Value);
+
+            for (var j = 0u32; j < 500u; j++)
+                newA.Value++;
+
+            prev.Lol = newA;
+            prev = newA;
+        }
+
+        return ret;
+    }
+
+    int32 testI32 (int32 a, int32 b) {
+        var intRef1 = new int32 ();
+        var int32& intRef2;
+
+        *intRef1 = a;
+
+        var thingRef = DoThing (b);
+        A.Asd = thingRef;
+
+        intRef2 = new int32 ();
+        *intRef2 = b;
+
+        DoThing (thingRef.Value);
+
+        return (*intRef1 - *intRef2) - (a - b);
+    }
+}
+
+namespace RefParameterTest {
+    void RefFunc (ref int32 a) => a = 4;
+
+    int32 testI32 (int32 a, int32 b) {
+        RefFunc (ref a);
+        return a;
+    }
+}
+
+namespace ReferencePermanenceTest {
+    public struct A {
+        public static A& StaticRef;
+
+        public int32 Value;
+    }
+
+    int32 testI32 (int32 a, int32 b) {
+        if (A.StaticRef == null)
+            A.StaticRef = new A ();
+
+        return A.StaticRef.Value++;
+    }
+}
+
+namespace ReferencePermanenceTest2 {
+    public struct A {
+        public static A& StaticRef;
+        public static int32 RunCount;
+
+        public A& Next;
+    }
+
+    int32 testI32 (int32 a, int32 b) {
+        var resetCount = 5;
+        var runCount = A.RunCount++;
+
+        if (runCount % resetCount != 0) {
+            for (var i = 0; i < 150; i++) {
+                var next = A.StaticRef;
+                A.StaticRef = new A ();
+                A.StaticRef.Next = next;
+            }
+        } else
+            A.StaticRef = null;
+
+        return 10000 + ((A.StaticRef != null) ? 1 : 0) * 1000 + runCount % resetCount;
+    }
+}

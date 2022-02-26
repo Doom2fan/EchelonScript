@@ -1,0 +1,23 @@
+namespace CastSyntaxErrorTest {
+    int32 testI32 (int32 a, int32 b) => cast () cast (float64) 1;
+}
+
+namespace ConstructorParserTests {
+    struct Foo {
+        int64 lol;
+
+        static this () { }
+
+        public this (int32 a) { }
+
+        public this (int64 b) => lol = b;
+
+        static this (int32 a) { }
+
+        public static this () { }
+
+        public {
+            static this () { }
+        }
+    }
+}
