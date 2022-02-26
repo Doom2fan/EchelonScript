@@ -165,9 +165,9 @@ namespace EchelonScriptCompiler.CompilerCommon.IR {
 
             funcStack = new (15);
 
-            staticVars = new (CL_ClearMode.Auto);
-            functions = new (CL_ClearMode.Auto);
-            structs = new (CL_ClearMode.Auto);
+            staticVars = new StructPooledList<ESIR_StaticVariable> (CL_ClearMode.Auto);
+            functions = new StructPooledList<ESIR_Function> (CL_ClearMode.Auto);
+            structs = new StructPooledList<ESIR_Struct> (CL_ClearMode.Auto);
         }
 
         #region ================== Instance methods
