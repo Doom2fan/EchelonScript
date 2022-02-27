@@ -1,6 +1,6 @@
 ﻿/*
  * EchelonScript
- * Copyright (C) 2020-2021 Chronos "phantombeta" Ouroboros
+ * Copyright (C) 2020- Chronos "phantombeta" Ouroboros
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -11,38 +11,38 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using EchelonScriptCommon.Utilities;
 
-namespace EchelonScriptCommon.Data.Types {
-    [StructLayout (LayoutKind.Sequential, Pack = 1)]
-    public unsafe struct ES_ArrayTypeData {
-        #region ================== Instance fields
+namespace EchelonScriptCommon.Data.Types;
 
-        public ES_TypeInfo TypeInfo;
+[StructLayout (LayoutKind.Sequential, Pack = 1)]
+public unsafe struct ES_ArrayTypeData {
+    #region ================== Instance fields
 
-        private ES_TypeInfo* elementType;
-        private int dimCount;
+    public ES_TypeInfo TypeInfo;
 
-        #endregion
+    private ES_TypeInfo* elementType;
+    private int dimCount;
 
-        #region ================== Constructors
+    #endregion
 
-        public ES_ArrayTypeData (ES_FullyQualifiedName fullyQualifiedName, [NotNull] ES_TypeInfo* elemType, int dims) {
-            TypeInfo = new ES_TypeInfo (ES_TypeTag.Array, ES_AccessModifier.Public, ES_TypeFlag.None, ArrayPointer<byte>.Null, fullyQualifiedName);
-            TypeInfo.RuntimeSize = sizeof (void*) + sizeof (int);
+    #region ================== Constructors
 
-            elementType = elemType;
-            dimCount = dims;
-        }
+    public ES_ArrayTypeData (ES_FullyQualifiedName fullyQualifiedName, [NotNull] ES_TypeInfo* elemType, int dims) {
+        TypeInfo = new (ES_TypeTag.Array, ES_AccessModifier.Public, ES_TypeFlag.None, ArrayPointer<byte>.Null, fullyQualifiedName);
+        TypeInfo.RuntimeSize = sizeof (void*) + sizeof (int);
 
-        #endregion
-
-        #region ================== Instance properties
-
-        /// <summary>The element type of this array.</summary>
-        public ES_TypeInfo* ElementType { get => elementType; }
-
-        /// <summary>The number of dimensions in this array.</summary>
-        public int DimensionsCount { get => dimCount; }
-
-        #endregion
+        elementType = elemType;
+        dimCount = dims;
     }
+
+    #endregion
+
+    #region ================== Instance properties
+
+    /// <summary>The element type of this array.</summary>
+    public ES_TypeInfo* ElementType => elementType;
+
+    /// <summary>The number of dimensions in this array.</summary>
+    public int DimensionsCount => dimCount;
+
+    #endregion
 }

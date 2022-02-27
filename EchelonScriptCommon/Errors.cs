@@ -1,6 +1,6 @@
 ﻿/*
  * EchelonScript
- * Copyright (C) 2020-2021 Chronos "phantombeta" Ouroboros
+ * Copyright (C) 2020- Chronos "phantombeta" Ouroboros
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -13,137 +13,137 @@ using System.Reflection;
 using System.Text;
 using ChronosLib.Pooled;
 
-namespace EchelonScriptCommon {
-    [AttributeUsage (AttributeTargets.Method, AllowMultiple = false)]
-    public class ES_ExcludeFromStackTraceAttribute : Attribute {
-        public ES_ExcludeFromStackTraceAttribute () { }
+namespace EchelonScriptCommon;
+
+[AttributeUsage (AttributeTargets.Method, AllowMultiple = false)]
+public class ES_ExcludeFromStackTraceAttribute : Attribute {
+    public ES_ExcludeFromStackTraceAttribute () { }
+}
+
+[AttributeUsage (AttributeTargets.Method, AllowMultiple = false)]
+public class ES_MethodTraceDataAttribute : Attribute {
+    public string Namespace { get; private init; }
+    public string Name { get; private init; }
+    public string? ParentType { get; init; }
+
+    public string? FileName { get; init; }
+
+    public ES_MethodTraceDataAttribute (string namespaceName, string name) {
+        Namespace = namespaceName;
+        Name = name;
+
+        ParentType = null;
+    }
+}
+
+public abstract class EchelonScriptException : Exception {
+    public override string? StackTrace {
+        get {
+            GetESStackTrace (true);
+            return string.Join ("\n", stackTrace_IncludeNative!);
+        }
     }
 
-    [AttributeUsage (AttributeTargets.Method, AllowMultiple = false)]
-    public class ES_MethodTraceDataAttribute : Attribute {
-        public string Namespace { get; private init; }
-        public string Name { get; private init; }
-        public string? ParentType { get; init; }
+    private string []? stackTrace_NoNative;
+    private string []? stackTrace_IncludeNative;
 
-        public string? FileName { get; init; }
-
-        public ES_MethodTraceDataAttribute (string namespaceName, string name) {
-            Namespace = namespaceName;
-            Name = name;
-
-            ParentType = null;
-        }
+    public EchelonScriptException (string message)
+        : base (message) {
     }
 
-    public abstract class EchelonScriptException : Exception {
-        public override string? StackTrace {
-            get {
-                GetESStackTrace (true);
-                return string.Join ("\n", stackTrace_IncludeNative!);
-            }
-        }
+    public EchelonScriptException (string message, Exception innerException)
+        : base (message, innerException) {
+    }
 
-        private string []? stackTrace_NoNative;
-        private string []? stackTrace_IncludeNative;
+    public ReadOnlySpan<string> GetESStackTrace (bool includeNative) {
+        ref var stackTrace = ref stackTrace_NoNative;
 
-        public EchelonScriptException (string message)
-            : base (message) {
-        }
+        if (includeNative)
+            stackTrace = ref stackTrace_IncludeNative;
 
-        public EchelonScriptException (string message, Exception innerException)
-            : base (message, innerException) {
-        }
+        if (stackTrace is not null)
+            return stackTrace;
 
-        public ReadOnlySpan<string> GetESStackTrace (bool includeNative) {
-            ref var stackTrace = ref stackTrace_NoNative;
+        var trace = new StackTrace (this, includeNative);
+        var frames = trace.GetFrames ();
 
-            if (includeNative)
-                stackTrace = ref stackTrace_IncludeNative;
+        using var lines = new StructPooledList<string> (CL_ClearMode.Auto);
+        var sb = new StringBuilder ();
+        foreach (var frame in frames) {
+            if (!frame.HasMethod ())
+                continue;
 
-            if (stackTrace is not null)
-                return stackTrace;
+            var frameMethod = frame.GetMethod ()!;
 
-            var trace = new StackTrace (this, includeNative);
-            var frames = trace.GetFrames ();
+            if (frameMethod.GetCustomAttribute<ES_ExcludeFromStackTraceAttribute> () != null)
+                continue;
 
-            using var lines = new StructPooledList<string> (CL_ClearMode.Auto);
-            var sb = new StringBuilder ();
-            foreach (var frame in frames) {
-                if (!frame.HasMethod ())
-                    continue;
+            var traceData = frameMethod.GetCustomAttribute<ES_MethodTraceDataAttribute> ();
 
-                var frameMethod = frame.GetMethod ()!;
+            sb.Clear ();
 
-                if (frameMethod.GetCustomAttribute<ES_ExcludeFromStackTraceAttribute> () != null)
-                    continue;
+            if (traceData is not null) {
+                sb.Append ("At ");
+                sb.Append (traceData.Namespace);
+                sb.Append ("::");
 
-                var traceData = frameMethod.GetCustomAttribute<ES_MethodTraceDataAttribute> ();
-
-                sb.Clear ();
-
-                if (traceData is not null) {
-                    sb.Append ("At ");
-                    sb.Append (traceData.Namespace);
-                    sb.Append ("::");
-
-                    if (traceData.ParentType is not null) {
-                        sb.Append (traceData.ParentType);
-                        sb.Append ('.');
-                    }
-
-                    sb.Append (traceData.Name);
-
-                    if (traceData.FileName is not null) {
-                        sb.Append (", in file ");
-                        sb.Append (traceData.FileName);
-                    }
-
+                if (traceData.ParentType is not null) {
+                    sb.Append (traceData.ParentType);
                     sb.Append ('.');
-                } else if (includeNative) {
-                    sb.Append ("At ");
-
-                    if (frameMethod.DeclaringType is not null) {
-                        sb.Append (frameMethod.DeclaringType.Name);
-                        sb.Append ('.');
-                    }
-
-                    sb.Append (frameMethod.Name);
-
-                    var fileName = frame.GetFileName ();
-                    if (fileName is not null) {
-                        sb.Append (", in file ");
-                        sb.Append (fileName);
-                    }
-
-                    var lineNum = frame.GetFileLineNumber ();
-                    if (lineNum > 0) {
-                        sb.Append (", line ");
-                        sb.Append (lineNum);
-                    }
                 }
 
-                if (sb.Length > 0)
-                    lines.Add (sb.ToString ());
+                sb.Append (traceData.Name);
+
+                if (traceData.FileName is not null) {
+                    sb.Append (", in file ");
+                    sb.Append (traceData.FileName);
+                }
+
+                sb.Append ('.');
+            } else if (includeNative) {
+                sb.Append ("At ");
+
+                if (frameMethod.DeclaringType is not null) {
+                    sb.Append (frameMethod.DeclaringType.Name);
+                    sb.Append ('.');
+                }
+
+                sb.Append (frameMethod.Name);
+
+                var fileName = frame.GetFileName ();
+                if (fileName is not null) {
+                    sb.Append (", in file ");
+                    sb.Append (fileName);
+                }
+
+                var lineNum = frame.GetFileLineNumber ();
+                if (lineNum > 0) {
+                    sb.Append (", line ");
+                    sb.Append (lineNum);
+                }
             }
 
-            stackTrace = lines.ToArray ();
-
-            return stackTrace;
+            if (sb.Length > 0)
+                lines.Add (sb.ToString ());
         }
-    }
 
-    public class EchelonScriptNullAccessException : EchelonScriptException {
-        public EchelonScriptNullAccessException ()
-            : base ("Tried to access a null reference.") { }
-    }
+        stackTrace = lines.ToArray ();
 
-    public class EchelonScriptIntegerDivisionByZeroException : EchelonScriptException {
-        public EchelonScriptIntegerDivisionByZeroException ()
-            : base ("Integer division by zero.") { }
+        return stackTrace;
     }
+}
 
-    public class EchelonScriptOutOfBoundsException : EchelonScriptException {
-        public EchelonScriptOutOfBoundsException (string message)
-            : base (message) { }
-    }
+public class EchelonScriptNullAccessException : EchelonScriptException {
+    public EchelonScriptNullAccessException ()
+        : base ("Tried to access a null reference.") { }
+}
+
+public class EchelonScriptIntegerDivisionByZeroException : EchelonScriptException {
+    public EchelonScriptIntegerDivisionByZeroException ()
+        : base ("Integer division by zero.") { }
+}
+
+public class EchelonScriptOutOfBoundsException : EchelonScriptException {
+    public EchelonScriptOutOfBoundsException (string message)
+        : base (message) { }
 }

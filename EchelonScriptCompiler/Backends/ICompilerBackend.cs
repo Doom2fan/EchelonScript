@@ -1,6 +1,6 @@
 ﻿/*
  * EchelonScript
- * Copyright (C) 2020-2021 Chronos "phantombeta" Ouroboros
+ * Copyright (C) 2020- Chronos "phantombeta" Ouroboros
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -14,38 +14,38 @@ using EchelonScriptCommon.Data.Types;
 using EchelonScriptCompiler.CompilerCommon.IR;
 using EchelonScriptCompiler.Data;
 
-namespace EchelonScriptCompiler.Backends {
-    public unsafe interface IBackendData : IDisposable {
-        #region ================== Instance properties
+namespace EchelonScriptCompiler.Backends;
 
-        public bool IsDisposed { get; }
+public unsafe interface IBackendData : IDisposable {
+    #region ================== Instance properties
 
-        #endregion
+    public bool IsDisposed { get; }
 
-        #region ================== Instance methods
+    #endregion
 
-        T? GetFunctionDelegate<T> ([DisallowNull] ES_FunctionData* func) where T : Delegate;
+    #region ================== Instance methods
 
-        #endregion
-    }
+    T? GetFunctionDelegate<T> ([DisallowNull] ES_FunctionData* func) where T : Delegate;
 
-    public unsafe interface ICompilerBackend : IDisposable {
-        #region ================== Instance properties
+    #endregion
+}
 
-        public bool IsDisposed { get; }
+public unsafe interface ICompilerBackend : IDisposable {
+    #region ================== Instance properties
 
-        #endregion
+    public bool IsDisposed { get; }
 
-        #region ================== Instance methods
+    #endregion
 
-        void Initialize (
-            List<EchelonScriptErrorMessage> errList,
-            List<EchelonScriptErrorMessage> warnList,
-            List<EchelonScriptErrorMessage> infoMsgList
-        );
+    #region ================== Instance methods
 
-        bool CompileEnvironment (EchelonScriptEnvironment environment, EchelonScriptEnvironment.Builder builder, ESIR_Tree irTree);
+    void Initialize (
+        List<EchelonScriptErrorMessage> errList,
+        List<EchelonScriptErrorMessage> warnList,
+        List<EchelonScriptErrorMessage> infoMsgList
+    );
 
-        #endregion
-    }
+    bool CompileEnvironment (EchelonScriptEnvironment environment, EchelonScriptEnvironment.Builder builder, ESIR_Tree irTree);
+
+    #endregion
 }

@@ -1,6 +1,6 @@
 ﻿/*
  * EchelonScript
- * Copyright (C) 2020-2021 Chronos "phantombeta" Ouroboros
+ * Copyright (C) 2020- Chronos "phantombeta" Ouroboros
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -9,100 +9,103 @@
 
 using System;
 
-namespace EchelonScriptCompiler.CompilerCommon {
-    public enum EchelonScriptTokenType {
-        Invalid = -1,
+namespace EchelonScriptCompiler.CompilerCommon;
 
-        EOF = 0,
-        DocComment,
+public enum EchelonScriptTokenType {
+    Invalid = -1,
 
-        Dot,
-        DotDot,
-        NamespaceOp,
+    EOF = 0,
+    DocComment,
 
-        AndAnd,
-        OrOr,
+    Dot,
+    DotDot,
+    NamespaceOp,
 
-        Bang,
-        Plus,
-        Minus,
-        Asterisk,
-        Divide,
-        Modulo,
-        PowerOp,
-        PlusPlus,
-        MinusMinus,
+    AndAnd,
+    OrOr,
 
-        And,
-        BitOr,
-        Xor,
-        Tilde,
-        ShiftLeft,
-        ShiftRight,
-        ShiftRightU,
+    Bang,
+    Plus,
+    Minus,
+    Asterisk,
+    Divide,
+    Modulo,
+    PowerOp,
+    PlusPlus,
+    MinusMinus,
 
-        LesserThan,
-        GreaterThan,
-        LesserThanEq,
-        GreaterThanEq,
+    And,
+    BitOr,
+    Xor,
+    Tilde,
+    ShiftLeft,
+    ShiftRight,
+    ShiftRightU,
 
-        Equals,
-        PlusEq,
-        MinusEq,
-        MultiplyEq,
-        DivideEq,
-        ModuloEq,
-        PowerOpEq,
-        ConcatEq,
+    LesserThan,
+    GreaterThan,
+    LesserThanEq,
+    GreaterThanEq,
 
-        AndEq,
-        BitOrEq,
-        XorEq,
-        ShiftLeftEq,
-        ShiftRightEq,
-        ShiftRightUEq,
+    Equals,
+    PlusEq,
+    MinusEq,
+    MultiplyEq,
+    DivideEq,
+    ModuloEq,
+    PowerOpEq,
+    ConcatEq,
 
-        EqualsEquals,
-        NotEquals,
+    AndEq,
+    BitOrEq,
+    XorEq,
+    ShiftLeftEq,
+    ShiftRightEq,
+    ShiftRightUEq,
 
-        ParenOpen,
-        ParenClose,
-        BracketOpen,
-        BracketClose,
+    EqualsEquals,
+    NotEquals,
 
-        BraceOpen,
-        BraceClose,
+    ParenOpen,
+    ParenClose,
+    BracketOpen,
+    BracketClose,
 
-        Question,
-        Colon,
-        Comma,
-        Semicolon,
-        LambdaArrow,
+    BraceOpen,
+    BraceClose,
 
-        Identifier,
+    Question,
+    Colon,
+    Comma,
+    Semicolon,
+    LambdaArrow,
 
-        RegularStringLiteral,
-        VerbatimStringLiteral,
+    Identifier,
 
-        CharacterLiteral,
+    RegularStringLiteral,
+    VerbatimStringLiteral,
 
-        DecIntegerLiteral,
-        HexIntegerLiteral,
-        BinIntegerLiteral,
-        FloatLiteral,
-    }
+    CharacterLiteral,
 
-    public struct EchelonScriptToken {
-        public EchelonScriptTokenType Type;
-        public int TextStartPos;
-        public int TextLine;
-        public int TextColumn;
-        public int TextEndPos => TextStartPos + Text.Length;
+    DecIntegerLiteral,
+    HexIntegerLiteral,
+    BinIntegerLiteral,
+    FloatLiteral,
+}
 
-        public ReadOnlyMemory<char> FileName;
+public struct EchelonScriptToken {
+    public EchelonScriptTokenType Type;
+    public int TextStartPos;
+    public int TextLine;
+    public int TextColumn;
+    public int TextEndPos => TextStartPos + Text.Length;
 
-        public ReadOnlyMemory<char> Text;
-        public string DecodedStringUTF16;
-        public int [] DecodedStringUTF32;
-    }
+    public ReadOnlyMemory<char> FileName;
+
+    public ReadOnlyMemory<char> Text;
+    public string DecodedStringUTF16;
+    public int [] DecodedStringUTF32;
+
+    public bool CheckIdentifier (ReadOnlySpan<char> text)
+        => Type == EchelonScriptTokenType.Identifier && Text.Span.Equals (text, StringComparison.Ordinal);
 }

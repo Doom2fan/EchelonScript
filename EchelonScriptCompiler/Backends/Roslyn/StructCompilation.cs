@@ -1,6 +1,6 @@
 ﻿/*
  * EchelonScript
- * Copyright (C) 2020-2021 Chronos "phantombeta" Ouroboros
+ * Copyright (C) 2020- Chronos "phantombeta" Ouroboros
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -17,64 +17,64 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
-namespace EchelonScriptCompiler.Backends.RoslynBackend {
-    public unsafe sealed partial class RoslynCompilerBackend {
-        private static void CompileStruct (ref PassData passData, ESIR_Struct structDef) {
-            using var memberTypes = new StructPooledList<SyntaxNode> (CL_ClearMode.Auto);
+namespace EchelonScriptCompiler.Backends.RoslynBackend;
 
-            var mangledStructName = MangleTypeName (structDef.Type);
+public unsafe sealed partial class RoslynCompilerBackend {
+    private static void CompileStruct (ref PassData passData, ESIR_Struct structDef) {
+        using var memberTypes = new StructPooledList<SyntaxNode> (CL_ClearMode.Auto);
 
-            // Create the struct's members.
-            foreach (var member in structDef.Members.Elements) {
-                switch (member.Kind) {
-                    case ESIR_NodeKind.Field when member is ESIR_Field fieldDef: {
-                        var roslynType = GetRoslynType (fieldDef.Type.Pointer);
-                        var variableName = fieldDef.Name.GetPooledString (ES_Encodings.Identifier);
+        var mangledStructName = MangleTypeName (structDef.Type);
 
-                        var variablesList = SingletonSeparatedList (VariableDeclarator (Identifier (variableName)));
-                        memberTypes.Add (
-                            FieldDeclaration (
-                                VariableDeclaration (
-                                roslynType
-                                ).WithVariables (variablesList)
-                            ).WithModifiers (TokenList (
-                                Token (SyntaxKind.PublicKeyword)
-                            )).WithAttributeLists (SingletonList (SingletonAttributeList (
-                                Attribute_FieldOffset (fieldDef.Offset)
-                            )))
-                        );
+        // Create the struct's members.
+        foreach (var member in structDef.Members.Elements) {
+            switch (member.Kind) {
+                case ESIR_NodeKind.Field when member is ESIR_Field fieldDef: {
+                    var roslynType = GetRoslynType (fieldDef.Type.Pointer);
+                    var variableName = fieldDef.Name.GetPooledString (ES_Encodings.Identifier);
 
-                        break;
-                    }
+                    var variablesList = SingletonSeparatedList (VariableDeclarator (Identifier (variableName)));
+                    memberTypes.Add (
+                        FieldDeclaration (
+                            VariableDeclaration (
+                            roslynType
+                            ).WithVariables (variablesList)
+                        ).WithModifiers (TokenList (
+                            Token (SyntaxKind.PublicKeyword)
+                        )).WithAttributeLists (SingletonList (SingletonAttributeList (
+                            Attribute_FieldOffset (fieldDef.Offset)
+                        )))
+                    );
 
-                    case ESIR_NodeKind.StaticField:
-                        // Ignore.
-                        break;
-
-                    default:
-                        throw new NotImplementedException ("Member type not implemented.");
+                    break;
                 }
-            }
 
-            // Generate the struct declaration.
-            passData.Types.Add (
-                StructDeclaration (
-                    mangledStructName
-                ).WithMembers (
-                    ListSpan (memberTypes.Span)
-                ).WithModifiers (TokenList (
-                    Token (SyntaxKind.PublicKeyword),
-                    Token (SyntaxKind.UnsafeKeyword)
-                )).WithAttributeLists (SingletonList (
-                    SingletonAttributeList (
-                        Attribute_StructLayout (
-                            nameof (LayoutKind.Explicit),
-                            null,
-                            LiteralExpression (SyntaxKind.NumericLiteralExpression, Literal (structDef.Type->RuntimeSize))
-                        )
-                    )
-                ))
-            );
+                case ESIR_NodeKind.StaticField:
+                    // Ignore.
+                    break;
+
+                default:
+                    throw new NotImplementedException ("Member type not implemented.");
+            }
         }
+
+        // Generate the struct declaration.
+        passData.Types.Add (
+            StructDeclaration (
+                mangledStructName
+            ).WithMembers (
+                ListSpan (memberTypes.Span)
+            ).WithModifiers (TokenList (
+                Token (SyntaxKind.PublicKeyword),
+                Token (SyntaxKind.UnsafeKeyword)
+            )).WithAttributeLists (SingletonList (
+                SingletonAttributeList (
+                    Attribute_StructLayout (
+                        nameof (LayoutKind.Explicit),
+                        null,
+                        LiteralExpression (SyntaxKind.NumericLiteralExpression, Literal (structDef.Type->RuntimeSize))
+                    )
+                )
+            ))
+        );
     }
 }

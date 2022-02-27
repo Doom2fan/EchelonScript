@@ -1,27 +1,27 @@
 ﻿using System.Runtime.InteropServices;
 using System.Windows;
 
-namespace TestSuiteWPF {
-    /// <summary>
-    /// Interaction logic for App.xaml
-    /// </summary>
-    public partial class App : Application {
-        [DllImport ("kernel32.dll")]
-        public static extern bool AllocConsole ();
+namespace TestSuiteWPF;
 
-        [DllImport ("kernel32.dll")]
-        public static extern bool FreeConsole ();
+/// <summary>
+/// Interaction logic for App.xaml
+/// </summary>
+public partial class App : Application {
+    [DllImport ("kernel32.dll")]
+    internal static extern bool AllocConsole ();
 
-        protected override void OnStartup (StartupEventArgs e) {
-            base.OnStartup (e);
+    [DllImport ("kernel32.dll")]
+    internal static extern bool FreeConsole ();
 
-            AllocConsole ();
-        }
+    protected override void OnStartup (StartupEventArgs e) {
+        base.OnStartup (e);
 
-        protected override void OnExit (ExitEventArgs e) {
-            base.OnExit (e);
+        AllocConsole ();
+    }
 
-            FreeConsole ();
-        }
+    protected override void OnExit (ExitEventArgs e) {
+        base.OnExit (e);
+
+        FreeConsole ();
     }
 }

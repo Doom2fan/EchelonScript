@@ -1,172 +1,170 @@
 ﻿/*
  * EchelonScript
- * Copyright (C) 2020-2021 Chronos "phantombeta" Ouroboros
+ * Copyright (C) 2020- Chronos "phantombeta" Ouroboros
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-namespace EchelonScriptCompiler.CompilerCommon.IR {
-    public enum ESIR_NodeKind {
-        None,
+namespace EchelonScriptCompiler.CompilerCommon.IR;
 
-        ValueInt,
-        ValueUInt,
-        ValueFloat32,
-        ValueFloat64,
-        ValueIdentifier,
-        ValueString,
-        ValuePointer,
+public enum ESIR_NodeKind {
+    None,
 
-        List,
+    ValueInt,
+    ValueUInt,
+    ValueFloat32,
+    ValueFloat64,
+    ValueIdentifier,
+    ValueString,
+    ValuePointer,
 
-        TypeNode,
+    List,
 
-        StaticVariable,
-        Struct,
-        Class,
-        Function,
+    TypeNode,
 
-        ArgumentDefinition,
-        ArgumentValue,
+    StaticVariable,
+    Struct,
+    Class,
+    Function,
 
-        Field,
-        StaticField,
+    ArgumentDefinition,
+    ArgumentValue,
 
-        #region Expressions
+    Field,
+    StaticField,
 
-        ErrorExpression,
+    #region Expressions
 
-        AssignExpression,
+    ErrorExpression,
 
-        #region Binary
+    AssignExpression,
 
-        BinaryExprConcat,
+    #region Binary
 
-        BinaryExprPower,
+    BinaryExprConcat,
 
-        BinaryExprMultiply,
-        BinaryExprDivide,
-        BinaryExprModulo,
+    BinaryExprPower,
 
-        BinaryExprAdd,
-        BinaryExprSubtract,
+    BinaryExprMultiply,
+    BinaryExprDivide,
+    BinaryExprModulo,
 
-        BinaryExprShiftLeft,
-        BinaryExprShiftRight,
-        BinaryExprShiftRightUnsigned,
+    BinaryExprAdd,
+    BinaryExprSubtract,
 
-        BinaryExprLesserThan,
-        BinaryExprGreaterThan,
-        BinaryExprLesserThanEqual,
-        BinaryExprGreaterThanEqual,
+    BinaryExprShiftLeft,
+    BinaryExprShiftRight,
+    BinaryExprShiftRightUnsigned,
 
-        BinaryExprEquals,
-        BinaryExprNotEquals,
+    BinaryExprLesserThan,
+    BinaryExprGreaterThan,
+    BinaryExprLesserThanEqual,
+    BinaryExprGreaterThanEqual,
 
-        BinaryExprBitAnd,
-        BinaryExprBitOr,
-        BinaryExprBitXor,
+    BinaryExprEquals,
+    BinaryExprNotEquals,
 
-        BinaryExprLogicalAnd,
-        BinaryExprLogicalOr,
+    BinaryExprBitAnd,
+    BinaryExprBitOr,
+    BinaryExprBitXor,
 
-        #endregion
+    BinaryExprLogicalAnd,
+    BinaryExprLogicalOr,
 
-        #region Unary
+    #endregion
 
-        UnaryNegative,
-        UnaryLogicalNot,
-        UnaryBitNot,
-        UnaryDereference,
+    #region Unary
 
-        UnaryPreIncrement,
-        UnaryPreDecrement,
-        UnaryPostIncrement,
-        UnaryPostDecrement,
+    UnaryNegative,
+    UnaryLogicalNot,
+    UnaryBitNot,
+    UnaryDereference,
 
-        #endregion
+    UnaryPreIncrement,
+    UnaryPreDecrement,
+    UnaryPostIncrement,
+    UnaryPostDecrement,
 
-        #region Literals
+    #endregion
 
-        LiteralTrue,
-        LiteralFalse,
+    #region Literals
 
-        LiteralInt,
-        LiteralFloat,
-        LiteralChar,
-        LiteralNull,
+    LiteralTrue,
+    LiteralFalse,
 
-        #endregion
+    LiteralInt,
+    LiteralFloat,
+    LiteralChar,
+    LiteralNull,
 
-        StringConstant,
-        StaticVariableExpression,
-        ArgumentExpression,
-        LocalValueExpression,
-        DefaultValueExpression,
+    #endregion
 
-        MemberAccessExpression,
+    StringConstant,
+    StaticVariableExpression,
+    ArgumentExpression,
+    LocalValueExpression,
+    DefaultValueExpression,
 
-        FunctionCallExpression,
-        VirtualCallExpression,
-        IndexingExpression,
-        NewObjectExpression,
-        NewArrayExpression,
+    MemberAccessExpression,
 
-        CastExpression,
+    FunctionCallExpression,
+    VirtualCallExpression,
+    IndexingExpression,
+    NewObjectExpression,
+    NewArrayExpression,
 
-        ConditionalExpression,
+    CastExpression,
 
-        ExpressionList,
+    ConditionalExpression,
 
-        #endregion
+    ExpressionList,
 
-        #region Statements
+    #endregion
 
-        BlockStatement,
-        LabeledStatement,
+    #region Statements
 
-        ConditionalStatement,
-        SwitchStatement,
+    BlockStatement,
+    LabeledStatement,
 
-        BreakStatement,
-        ContinueStatement,
+    ConditionalStatement,
+    SwitchStatement,
 
-        GotoLabelStatement,
-        GotoCaseStatement,
+    BreakStatement,
+    ContinueStatement,
 
-        ReturnStatement,
+    GotoLabelStatement,
+    GotoCaseStatement,
 
-        LoopStatement,
+    ReturnStatement,
 
-        ExpressionStatement,
+    LoopStatement,
 
-        #endregion
+    ExpressionStatement,
 
-        #region Attributes
+    #endregion
 
-        TraceDataAttribute,
-        FunctionDataAttribute,
+    #region Attributes
 
-        #endregion
-    }
+    TraceDataAttribute,
+    FunctionDataAttribute,
 
-    public static partial class ESIR_Utils {
-        public static bool IsBinaryComparison (this ESIR_NodeKind kind) {
-            switch (kind) {
-                case ESIR_NodeKind.BinaryExprLesserThan:
-                case ESIR_NodeKind.BinaryExprGreaterThan:
-                case ESIR_NodeKind.BinaryExprLesserThanEqual:
-                case ESIR_NodeKind.BinaryExprGreaterThanEqual:
+    #endregion
+}
 
-                case ESIR_NodeKind.BinaryExprEquals:
-                case ESIR_NodeKind.BinaryExprNotEquals:
-                    return true;
+public static partial class ESIR_Utils {
+    public static bool IsBinaryComparison (this ESIR_NodeKind kind) {
+        return kind switch {
+            ESIR_NodeKind.BinaryExprLesserThan => true,
+            ESIR_NodeKind.BinaryExprGreaterThan => true,
+            ESIR_NodeKind.BinaryExprLesserThanEqual => true,
+            ESIR_NodeKind.BinaryExprGreaterThanEqual => true,
 
-                default:
-                    return false;
-            }
-        }
+            ESIR_NodeKind.BinaryExprEquals => true,
+            ESIR_NodeKind.BinaryExprNotEquals => true,
+
+            _ => false,
+        };
     }
 }

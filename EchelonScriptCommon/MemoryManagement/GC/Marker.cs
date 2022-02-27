@@ -1,6 +1,6 @@
 ﻿/*
  * EchelonScript
- * Copyright (C) 2020-2021 Chronos "phantombeta" Ouroboros
+ * Copyright (C) 2020- Chronos "phantombeta" Ouroboros
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -15,92 +15,115 @@ using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.GarbageCollection.Immix;
 using EchelonScriptCommon.Utilities;
 
-namespace EchelonScriptCommon.GarbageCollection {
-    unsafe partial class ES_GarbageCollector {
+namespace EchelonScriptCommon.GarbageCollection;
+
+unsafe partial class ES_GarbageCollector {
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    private void DoMarking (int gen, Span<Pointer<ES_ObjectAddress>> roots) {
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
-        private void DoMarking (int gen, Span<Pointer<ES_ObjectAddress>> roots) {
-            [MethodImpl (MethodImplOptions.AggressiveInlining)]
-            static bool IsMarked (ES_ObjectFlags flags, bool flipMark)
-                => flags.HasFlag (ES_ObjectFlags.Marked) ^ flipMark;
+        static bool IsMarked (ES_ObjectFlags flags, bool flipMark) => flags.HasFlag (ES_ObjectFlags.Marked) ^ flipMark;
 
-            [MethodImpl (MethodImplOptions.AggressiveInlining)]
-            static bool MarkObject (ES_ObjectAddress obj, bool flipMark) {
-                var curFlags = obj.Header->Flags;
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
+        static bool MarkObject (ES_ObjectAddress obj, bool flipMark) {
+            var curFlags = obj.Header->Flags;
 
-                var isMarked = !IsMarked (curFlags, flipMark);
+            var isMarked = !IsMarked (curFlags, flipMark);
 
-                obj.Header->Flags = flipMark
-                    ? (curFlags & ~ES_ObjectFlags.Marked)
-                    : (curFlags | ES_ObjectFlags.Marked);
+            obj.Header->Flags = flipMark
+                ? (curFlags & ~ES_ObjectFlags.Marked)
+                : (curFlags | ES_ObjectFlags.Marked);
 
-                return isMarked;
+            return isMarked;
+        }
+
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
+        static bool HandleForwarding (ref ES_ObjectAddress obj) {
+            var objFlags = obj.Header->Flags;
+
+            if (objFlags.HasFlag (ES_ObjectFlags.Forwarded)) {
+                obj.Address = *(void**) obj.Address;
+                return true;
+            } else if (objFlags.HasFlag (ES_ObjectFlags.DoRemove) && !objFlags.HasFlag (ES_ObjectFlags.Pinned)) {
+                obj.Address = null;
+                return true;
             }
 
-            [MethodImpl (MethodImplOptions.AggressiveInlining)]
-            static bool HandleForwarding (ref ES_ObjectAddress obj) {
-                var objFlags = obj.Header->Flags;
+            return false;
+        }
 
-                if (objFlags.HasFlag (ES_ObjectFlags.Forwarded)) {
-                    obj.Address = *(void**) obj.Address;
-                    return true;
-                } else if (objFlags.HasFlag (ES_ObjectFlags.DoRemove) && !objFlags.HasFlag (ES_ObjectFlags.Pinned)) {
-                    obj.Address = null;
-                    return true;
+        var flipMark = markFlipped;
+        using var greySet = new StructPooledList<ES_ObjectAddress> (CL_ClearMode.Auto);
+
+        foreach (var root in roots) {
+            ref var objAddress = ref *root.Address;
+            Debug.Assert (objAddress.Address != null);
+
+            if (!MarkObject (objAddress, flipMark) || HandleForwarding (ref objAddress))
+                continue;
+
+            greySet.Add (objAddress);
+        }
+
+        while (greySet.Count > 0) {
+            using var greyObjs = greySet.MoveToArray ();
+            greySet.Reinit ();
+
+            foreach (var obj in greyObjs.Span) {
+                var objHeader = obj.Header;
+
+                var isMedium = obj.Header->Flags.HasFlag (ES_ObjectFlags.MediumObject);
+                var isLarge = obj.Header->Flags.HasFlag (ES_ObjectFlags.LargeObject);
+                var isArray = obj.Header->Flags.HasFlag (ES_ObjectFlags.IsArray);
+
+                if (!isLarge) {
+                    var immixBlock = obj.ImmixBlock;
+                    var immixLinemap = immixBlock.Header->LineMapSpan;
+                    var linesStart = obj.ImmixStartLine;
+
+                    if (isMedium) {
+                        int allocSize;
+                        if (!isArray)
+                            allocSize = sizeof (ES_ObjectHeader) + obj.Header->TypeData->RuntimeSize;
+                        else {
+                            var arrayHeader = (ES_ArrayHeader*) obj.Address;
+                            var arrayType = (ES_ArrayTypeData*) objHeader->TypeData;
+
+                            allocSize = ES_ArrayHeader.GetArraySize (obj);
+                        }
+
+                        var linesCount = (allocSize + (ImmixConstants.LineSize - 1)) / ImmixConstants.LineSize;
+
+                        immixLinemap.Slice (linesStart, linesCount).Fill (0xFF);
+                    } else if (!isLarge)
+                        immixLinemap [linesStart] = 0xFF;
                 }
 
-                return false;
-            }
+                if (!isArray) {
+                    foreach (var refOffs in obj.Header->TypeData->RefsList.Span) {
+                        var refAddr = new ES_ObjectAddress (*(void**) ((byte*) obj.Address + refOffs));
+                        ref var objAddress = ref refAddr;
 
-            var flipMark = markFlipped;
-            using var greySet = new StructPooledList<ES_ObjectAddress> (CL_ClearMode.Auto);
+                        if (objAddress.Address == null)
+                            continue;
 
-            foreach (var root in roots) {
-                ref var objAddress = ref *root.Address;
-                Debug.Assert (objAddress.Address != null);
+                        if (!MarkObject (objAddress, flipMark) || HandleForwarding (ref objAddress))
+                            continue;
 
-                if (!MarkObject (objAddress, flipMark) || HandleForwarding (ref objAddress))
-                    continue;
-
-                greySet.Add (objAddress);
-            }
-
-            while (greySet.Count > 0) {
-                using var greyObjs = greySet.MoveToArray ();
-                greySet.Reinit ();
-
-                foreach (var obj in greyObjs.Span) {
-                    var objHeader = obj.Header;
-
-                    var isMedium = obj.Header->Flags.HasFlag (ES_ObjectFlags.MediumObject);
-                    var isLarge = obj.Header->Flags.HasFlag (ES_ObjectFlags.LargeObject);
-                    var isArray = obj.Header->Flags.HasFlag (ES_ObjectFlags.IsArray);
-
-                    if (!isLarge) {
-                        var immixBlock = obj.ImmixBlock;
-                        var immixLinemap = immixBlock.Header->LineMapSpan;
-                        var linesStart = obj.ImmixStartLine;
-
-                        if (isMedium) {
-                            int allocSize;
-                            if (!isArray)
-                                allocSize = sizeof (ES_ObjectHeader) + obj.Header->TypeData->RuntimeSize;
-                            else {
-                                var arrayHeader = (ES_ArrayHeader*) obj.Address;
-                                var arrayType = (ES_ArrayTypeData*) objHeader->TypeData;
-
-                                allocSize = ES_ArrayHeader.GetArraySize (obj);
-                            }
-
-                            var linesCount = (allocSize + (ImmixConstants.LineSize - 1)) / ImmixConstants.LineSize;
-
-                            immixLinemap.Slice (linesStart, linesCount).Fill (0xFF);
-                        } else if (!isLarge)
-                            immixLinemap [linesStart] = 0xFF;
+                        greySet.Add (objAddress);
                     }
+                } else {
+                    var arrayType = (ES_ArrayTypeData*) objHeader->TypeData;
+                    var arrayHeader = (ES_ArrayHeader*) obj.Address;
+                    var arrayData = (byte*) ES_ArrayHeader.GetArrayDataPointer (arrayHeader);
 
-                    if (!isArray) {
-                        foreach (var refOffs in obj.Header->TypeData->RefsList.Span) {
-                            var refAddr = new ES_ObjectAddress (*(void**) ((byte*) obj.Address + refOffs));
+                    var elemLength = arrayType->ElementType->RuntimeSize;
+                    var elemRefs = arrayType->ElementType->RefsList.Span;
+
+                    for (var i = 0; i < arrayHeader->Length; i++) {
+                        var elemStartAddr = arrayData + i * elemLength;
+
+                        foreach (var refOffs in elemRefs) {
+                            var refAddr = new ES_ObjectAddress (elemStartAddr + refOffs);
                             ref var objAddress = ref refAddr;
 
                             if (objAddress.Address == null)
@@ -111,35 +134,11 @@ namespace EchelonScriptCommon.GarbageCollection {
 
                             greySet.Add (objAddress);
                         }
-                    } else {
-                        var arrayType = (ES_ArrayTypeData*) objHeader->TypeData;
-                        var arrayHeader = (ES_ArrayHeader*) obj.Address;
-                        var arrayData = (byte*) ES_ArrayHeader.GetArrayDataPointer (arrayHeader);
-
-                        var elemLength = arrayType->ElementType->RuntimeSize;
-                        var elemRefs = arrayType->ElementType->RefsList.Span;
-
-                        for (int i = 0; i < arrayHeader->Length; i++) {
-                            var elemStartAddr = arrayData + i * elemLength;
-
-                            foreach (var refOffs in elemRefs) {
-                                var refAddr = new ES_ObjectAddress (elemStartAddr + refOffs);
-                                ref var objAddress = ref refAddr;
-
-                                if (objAddress.Address == null)
-                                    continue;
-
-                                if (!MarkObject (objAddress, flipMark) || HandleForwarding (ref objAddress))
-                                    continue;
-
-                                greySet.Add (objAddress);
-                            }
-                        }
                     }
                 }
             }
-
-            markFlipped = !flipMark;
         }
+
+        markFlipped = !flipMark;
     }
 }
