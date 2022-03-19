@@ -16,6 +16,7 @@ using ChronosLib.Unmanaged;
 using Collections.Pooled;
 using CommunityToolkit.HighPerformance.Buffers;
 using EchelonScriptCommon;
+using EchelonScriptCommon.Data;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.Utilities;
 using EchelonScriptCompiler.Backends;
@@ -36,12 +37,12 @@ public unsafe class ES_NamespaceData {
         #region ================== Instance properties
 
         public ES_NamespaceData NamespaceData { get; }
-        public ArrayPointer<byte> NamespaceName => NamespaceData.namespaceName;
+        public ES_Identifier NamespaceName => NamespaceData.namespaceName;
 
-        public PooledDictionary<ArrayPointer<byte>, ES_ClassData.Builder> ClassBuilders { get; protected set; }
-        public PooledDictionary<ArrayPointer<byte>, ES_StructData.Builder> StructBuilders { get; protected set; }
-        public PooledDictionary<ArrayPointer<byte>, ES_EnumData.Builder> EnumBuilders { get; protected set; }
-        public Dictionary<ArrayPointer<byte>, Pointer<ES_FunctionData>> Functions => NamespaceData.functions;
+        public PooledDictionary<ES_Identifier, ES_ClassData.Builder> ClassBuilders { get; protected set; }
+        public PooledDictionary<ES_Identifier, ES_StructData.Builder> StructBuilders { get; protected set; }
+        public PooledDictionary<ES_Identifier, ES_EnumData.Builder> EnumBuilders { get; protected set; }
+        public Dictionary<ES_Identifier, Pointer<ES_FunctionData>> Functions => NamespaceData.functions;
 
         #endregion
 
@@ -56,16 +57,16 @@ public unsafe class ES_NamespaceData {
 
             NamespaceData = nm;
 
-            ClassBuilders = new PooledDictionary<ArrayPointer<byte>, ES_ClassData.Builder> ();
-            StructBuilders = new PooledDictionary<ArrayPointer<byte>, ES_StructData.Builder> ();
-            EnumBuilders = new PooledDictionary<ArrayPointer<byte>, ES_EnumData.Builder> ();
+            ClassBuilders = new ();
+            StructBuilders = new ();
+            EnumBuilders = new ();
         }
 
         #endregion
 
         #region ================== Instance methods
 
-        public ES_TypeTag? CheckTypeExists (ArrayPointer<byte> name, ES_TypeTag? ignoredType) {
+        public ES_TypeTag? CheckTypeExists (ES_Identifier name, ES_TypeTag? ignoredType) {
             if (ignoredType != ES_TypeTag.Class && ClassBuilders.TryGetValue (name, out var _))
                 return ES_TypeTag.Class;
 
@@ -82,7 +83,7 @@ public unsafe class ES_NamespaceData {
         }
 
         public ES_ClassData.Builder GetOrCreateClass (ES_AccessModifier accessMod,
-            ArrayPointer<byte> name, ArrayPointer<byte> sourceUnit
+            ES_Identifier name, ES_Identifier sourceUnit
         ) {
             CheckDisposed ();
 
@@ -107,7 +108,7 @@ public unsafe class ES_NamespaceData {
         }
 
         public ES_StructData.Builder GetOrCreateStruct (ES_AccessModifier accessMod,
-            ArrayPointer<byte> name, ArrayPointer<byte> sourceUnit
+            ES_Identifier name, ES_Identifier sourceUnit
         ) {
             CheckDisposed ();
 
@@ -127,7 +128,7 @@ public unsafe class ES_NamespaceData {
         }
 
         public ES_EnumData.Builder GetOrCreateEnum (ES_AccessModifier accessMod,
-            ArrayPointer<byte> name, ArrayPointer<byte> sourceUnit
+            ES_Identifier name, ES_Identifier sourceUnit
         ) {
             CheckDisposed ();
 
@@ -146,7 +147,7 @@ public unsafe class ES_NamespaceData {
             return builder;
         }
 
-        public ES_ClassData.Builder? GetClass (ArrayPointer<byte> name) {
+        public ES_ClassData.Builder? GetClass (ES_Identifier name) {
             CheckDisposed ();
 
             if (ClassBuilders.TryGetValue (name, out var builder))
@@ -155,7 +156,7 @@ public unsafe class ES_NamespaceData {
             return null;
         }
 
-        public ES_StructData.Builder? GetStruct (ArrayPointer<byte> name) {
+        public ES_StructData.Builder? GetStruct (ES_Identifier name) {
             CheckDisposed ();
 
             if (StructBuilders.TryGetValue (name, out var builder))
@@ -164,7 +165,7 @@ public unsafe class ES_NamespaceData {
             return null;
         }
 
-        public ES_EnumData.Builder? GetEnum (ArrayPointer<byte> name) {
+        public ES_EnumData.Builder? GetEnum (ES_Identifier name) {
             CheckDisposed ();
 
             if (EnumBuilders.TryGetValue (name, out var builder))
@@ -211,8 +212,8 @@ public unsafe class ES_NamespaceData {
     #region ================== Instance fields
 
     protected EchelonScriptEnvironment environment;
-    protected ArrayPointer<byte> namespaceName;
-    protected Dictionary<ArrayPointer<byte>, Pointer<ES_FunctionData>> functions;
+    protected ES_Identifier namespaceName;
+    protected Dictionary<ES_Identifier, Pointer<ES_FunctionData>> functions;
 
     protected List<Pointer<ES_TypeInfo>> types;
 
@@ -220,11 +221,9 @@ public unsafe class ES_NamespaceData {
 
     #region ================== Instance properties
 
-    public ArrayPointer<byte> NamespaceName => namespaceName;
+    public ES_Identifier NamespaceName => namespaceName;
 
-    public string NamespaceNameString => StringPool.Shared.GetOrAdd (namespaceName.Span, ES_Encodings.Identifier);
-
-    public IReadOnlyDictionary<ArrayPointer<byte>, Pointer<ES_FunctionData>> Functions => functions;
+    public IReadOnlyDictionary<ES_Identifier, Pointer<ES_FunctionData>> Functions => functions;
 
     public List<Pointer<ES_TypeInfo>> Types => types;
 
@@ -232,12 +231,12 @@ public unsafe class ES_NamespaceData {
 
     #region ================== Constructors
 
-    public ES_NamespaceData (EchelonScriptEnvironment env, ArrayPointer<byte> name) {
+    public ES_NamespaceData (EchelonScriptEnvironment env, ES_Identifier name) {
         environment = env;
         namespaceName = name;
 
         types = new List<Pointer<ES_TypeInfo>> ();
-        functions = new Dictionary<ArrayPointer<byte>, Pointer<ES_FunctionData>> ();
+        functions = new Dictionary<ES_Identifier, Pointer<ES_FunctionData>> ();
     }
 
     #endregion
@@ -253,7 +252,7 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
 
         #region ================== Instance properties
 
-        public PooledDictionary<ArrayPointer<byte>, ES_NamespaceData.Builder> NamespaceBuilders { get; protected set; }
+        public PooledDictionary<ES_Identifier, ES_NamespaceData.Builder> NamespaceBuilders { get; protected set; }
 
         public Dictionary<IntPtr, ES_AstNode> PointerAstMap { get; protected set; }
 
@@ -293,8 +292,8 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
         internal Builder (EchelonScriptEnvironment env) {
             environment = env;
 
-            NamespaceBuilders = new PooledDictionary<ArrayPointer<byte>, ES_NamespaceData.Builder> ();
-            PointerAstMap = new Dictionary<IntPtr, ES_AstNode> ();
+            NamespaceBuilders = new ();
+            PointerAstMap = new ();
 
             ReferenceTypeRefList = MemoryManager.GetArrayAligned<nint> (1, sizeof (nint));
             ReferenceTypeRefList.Span [0] = 0;
@@ -304,7 +303,7 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
 
         #region ================== Instance methods
 
-        public ES_NamespaceData.Builder GetOrCreateNamespace (ArrayPointer<byte> namePtr) {
+        public ES_NamespaceData.Builder GetOrCreateNamespace (ES_Identifier namePtr) {
             CheckDisposed ();
 
             if (NamespaceBuilders.TryGetValue (namePtr, out var builder))
@@ -337,7 +336,7 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
                 *funcType = new ES_FunctionPrototypeData (
                     ES_AccessModifier.Public,
                     returnType, argsList,
-                    fqn, ArrayPointer<byte>.Null
+                    fqn, ES_Identifier.Empty
                 );
 
                 var namespaceData = GetOrCreateNamespace (environment.GeneratedTypesNamespace).NamespaceData;
@@ -450,7 +449,7 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
             }
         }
 
-        private PooledArray<byte> GetGeneratedTypeName (ES_TypeInfo* baseType, int prefixLen = 0, int suffixLen = 0) {
+        private void GetGeneratedTypeName (ref StructPooledList<char> charsList, ES_TypeInfo* baseType) {
             // Format sample: "NamespaceName__TypeName"
             var baseFQN = baseType->Name;
 
@@ -459,34 +458,34 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
                 baseFQN.NamespaceName.Equals (environment.GlobalTypesNamespace)
             );
 
-            var idLen = prefixLen + baseFQN.NamespaceName.Length + 2 + baseFQN.TypeName.Length + suffixLen;
-            if (noNamespace)
-                idLen = prefixLen + baseFQN.TypeName.Length + suffixLen;
-
-            var idBase = PooledArray<byte>.GetArray (idLen);
-            var idBaseSpan = idBase.Span [prefixLen..^suffixLen];
-
-            var idx = 0;
-
             if (!noNamespace) {
-                baseFQN.NamespaceName.Span.CopyTo (idBaseSpan);
-                idx += baseFQN.NamespaceName.Length;
-
-                idBaseSpan.Slice (idx, 2).Fill ((byte) '_');
-                idx += 2;
+                charsList.AddRange (baseFQN.NamespaceName.GetCharsSpan ());
+                charsList.AddRange ("__");
             }
 
-            baseFQN.TypeName.Span.CopyTo (idBaseSpan [idx..]);
+            charsList.AddRange (baseFQN.TypeName.GetCharsSpan ());
+        }
 
-            return idBase;
+        private StructPooledList<char> GetGeneratedTypeName (ES_TypeInfo* baseType) => GetGeneratedTypeName (baseType, "", "");
+
+        private StructPooledList<char> GetGeneratedTypeName (ES_TypeInfo* baseType, ReadOnlySpan<char> prefix, ReadOnlySpan<char> suffix) {
+            var charsList = new StructPooledList<char> (CL_ClearMode.Auto);
+            try {
+                charsList.AddRange (prefix);
+                GetGeneratedTypeName (ref charsList, baseType);
+                charsList.AddRange (suffix);
+
+                return charsList.Move ();
+            } finally {
+                charsList.Dispose ();
+            }
         }
 
         public ES_TypeInfo* CreateReferenceType (ES_TypeInfo* baseType) {
             // Format sample: "@generated::NamespaceName__TypeName&"
-            using var idBase = GetGeneratedTypeName (baseType, suffixLen: 1);
-            idBase.Span [^1] = (byte) '&';
+            using var charsList = GetGeneratedTypeName (baseType, "&", "");
 
-            var refId = environment.IdPool.GetIdentifier (idBase);
+            var refId = environment.IdPool.GetIdentifier (charsList.Span);
             var refFQN = new ES_FullyQualifiedName (environment.GeneratedTypesNamespace, refId);
 
             var refType = environment.GetFullyQualifiedType (refFQN);
@@ -516,15 +515,10 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
 
             Debug.Assert (baseType->TypeTag != ES_TypeTag.Const && baseType->TypeTag != ES_TypeTag.Immutable);
 
-            var prefixName = immutable ? "immutable" : "const";
-            var prefixBytesLen = enc.GetByteCount (prefixName);
+            var prefixName = immutable ? "immutable(" : "const(";
+            using var charsList = GetGeneratedTypeName (baseType, prefixName, ")");
 
-            using var idBase = GetGeneratedTypeName (baseType, prefixLen: prefixBytesLen + 1, suffixLen: 1);
-            enc.GetBytes (prefixName, idBase.Span [..prefixBytesLen]);
-            idBase.Span [prefixBytesLen] = (byte) '(';
-            idBase.Span [^1] = (byte) ')';
-
-            var constId = environment.IdPool.GetIdentifier (idBase);
+            var constId = environment.IdPool.GetIdentifier (charsList.Span);
             var constFQN = new ES_FullyQualifiedName (environment.GeneratedTypesNamespace, constId);
 
             var constType = environment.GetFullyQualifiedType (constFQN);
@@ -548,18 +542,13 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
 
         public ES_TypeInfo* CreateArrayType (ES_TypeInfo* elementType, int dimensionCount) {
             // Format sample: "@generated::NamespaceName__TypeName[,,]"
-            var suffixLen = 2 + (dimensionCount - 1);
-            using var idBase = GetGeneratedTypeName (elementType, suffixLen: suffixLen);
-            var idBaseSpan = idBase.Span;
+            using var charsList = GetGeneratedTypeName (elementType);
 
-            var idx = idBase.RealLength - suffixLen;
+            charsList.Add ('[');
+            charsList.Add (',', dimensionCount - 1);
+            charsList.Add (']');
 
-            idBaseSpan [idx++] = (byte) '[';
-            idBaseSpan.Slice (idx, dimensionCount - 1).Fill ((byte) ',');
-            idx += dimensionCount - 1;
-            idBaseSpan [idx++] = (byte) ']';
-
-            var arrId = environment.IdPool.GetIdentifier (idBase);
+            var arrId = environment.IdPool.GetIdentifier (charsList.Span);
             var arrFQN = new ES_FullyQualifiedName (environment.GeneratedTypesNamespace, arrId);
 
             var arrType = environment.GetFullyQualifiedType (arrFQN);
@@ -578,7 +567,7 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
             using var memberVars = new StructPooledList<ES_MemberData_Variable> (CL_ClearMode.Auto);
             memberVars.Add (new ES_MemberData_Variable (
                 environment.IdPool.GetIdentifier (dimensionCount < 2 ? "Length" : "TotalLength"),
-                ArrayPointer<byte>.Null,
+                ES_Identifier.Empty,
                 ES_AccessModifier.Public,
                 0,
                 0,
@@ -587,7 +576,7 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
 
             memberVars.Add (new ES_MemberData_Variable (
                 environment.IdPool.GetIdentifier ("Rank"),
-                ArrayPointer<byte>.Null,
+                ES_Identifier.Empty,
                 ES_AccessModifier.Public,
                 0,
                 0,
@@ -597,7 +586,7 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
             for (var i = 0; i < dimensionCount; i++) {
                 memberVars.Add (new ES_MemberData_Variable (
                     environment.IdPool.GetIdentifier ($"LengthD{i}"),
-                    ArrayPointer<byte>.Null,
+                    ES_Identifier.Empty,
                     ES_AccessModifier.Public,
                     0,
                     0,
@@ -659,7 +648,7 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
     #region ================== Instance fields
 
     protected IMemoryManager memManager;
-    protected Dictionary<ArrayPointer<byte>, ES_NamespaceData> namespacesDict;
+    protected Dictionary<ES_Identifier, ES_NamespaceData> namespacesDict;
 
     protected IBackendData? backendData;
 
@@ -674,12 +663,12 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
 
     #region ================== Instance properties
 
-    public UnmanagedIdentifierPool IdPool { get; protected set; }
+    public ES_IdentifierPool IdPool { get; protected set; }
 
-    public IReadOnlyDictionary<ArrayPointer<byte>, ES_NamespaceData> Namespaces => namespacesDict;
+    public IReadOnlyDictionary<ES_Identifier, ES_NamespaceData> Namespaces => namespacesDict;
 
-    public ArrayPointer<byte> GlobalTypesNamespace { get; private set; }
-    public ArrayPointer<byte> GeneratedTypesNamespace { get; private set; }
+    public ES_Identifier GlobalTypesNamespace { get; private set; }
+    public ES_Identifier GeneratedTypesNamespace { get; private set; }
 
     public ES_TypeInfo* TypeUnknownValue => typeUnknownValue;
     public ES_TypeInfo* TypeVoid => typeVoid;
@@ -692,11 +681,11 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
 
     #region ================== Constructors
 
-    protected EchelonScriptEnvironment () {
-        namespacesDict = new Dictionary<ArrayPointer<byte>, ES_NamespaceData> ();
-        IdPool = new UnmanagedIdentifierPool ();
-
+    protected EchelonScriptEnvironment (ES_IdentifierPool idPool) {
         memManager = new BasicMemoryManager ();
+
+        namespacesDict = new ();
+        IdPool = idPool;
 
         backendData = null;
 
@@ -706,16 +695,16 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
         var unknTypeId = IdPool.GetIdentifier ("#UNKNOWN_TYPE");
         var unknType = memManager.GetMemory<ES_TypeInfo> ();
         *unknType = new ES_TypeInfo (
-            ES_TypeTag.UNKNOWN, ES_AccessModifier.Public, ES_TypeFlag.None, ArrayPointer<byte>.Null,
-            new ES_FullyQualifiedName (ArrayPointer<byte>.Null, unknTypeId)
+            ES_TypeTag.UNKNOWN, ES_AccessModifier.Public, ES_TypeFlag.None, ES_Identifier.Empty,
+            new ES_FullyQualifiedName (IdPool.IdEmpty, unknTypeId)
         );
         typeUnknownValue = unknType;
 
         var nullTypeId = IdPool.GetIdentifier ("#NULL");
         var nullType = memManager.GetMemory<ES_TypeInfo> ();
         *nullType = new ES_TypeInfo (
-            ES_TypeTag.Null, ES_AccessModifier.Public, ES_TypeFlag.None, ArrayPointer<byte>.Null,
-            new ES_FullyQualifiedName (ArrayPointer<byte>.Null, nullTypeId)
+            ES_TypeTag.Null, ES_AccessModifier.Public, ES_TypeFlag.None, ES_Identifier.Empty,
+            new ES_FullyQualifiedName (IdPool.IdEmpty, nullTypeId)
         );
         typeNull = nullType;
     }
@@ -724,8 +713,8 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
 
     #region ================== Static methods
 
-    public static EchelonScriptEnvironment CreateEnvironment (out Builder builder) {
-        var ret = new EchelonScriptEnvironment ();
+    public static EchelonScriptEnvironment CreateEnvironment (ES_IdentifierPool idPool, out Builder builder) {
+        var ret = new EchelonScriptEnvironment (idPool);
 
         builder = new Builder (ret);
 
@@ -736,7 +725,7 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
 
     #region ================== Instance methods
 
-    protected ArrayPointer<byte> GetFunctionTypeName (ES_TypeInfo* returnType, ReadOnlySpan<ES_FunctionPrototypeArgData> args) {
+    protected ES_Identifier GetFunctionTypeName (ES_TypeInfo* returnType, ReadOnlySpan<ES_FunctionPrototypeArgData> args) {
         Debug.Assert (returnType != null);
 
         using var charList = new StructPooledList<char> (CL_ClearMode.Auto);
@@ -745,12 +734,10 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
 
         // Add the return type.
         charList.AddRange ("ret@");
-        foreach (var c in returnType->Name.NamespaceName.Span)
-            charList.Add ((char) c);
+        charList.AddRange (returnType->Name.NamespaceName.GetCharsSpan ());
 
         charList.AddRange ("::");
-        foreach (var c in returnType->Name.TypeName.Span)
-            charList.Add ((char) c);
+        charList.AddRange (returnType->Name.TypeName.GetCharsSpan ());
 
         charList.AddRange (", ");
 
@@ -772,11 +759,9 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
                 case ES_ArgumentType.Ref: charList.AddRange ("ref@"); break;
             }
 
-            foreach (var c in arg.ValueType->Name.NamespaceName.Span)
-                charList.Add ((char) c);
+            charList.AddRange (arg.ValueType->Name.NamespaceName.GetCharsSpan ());
             charList.AddRange ("::");
-            foreach (var c in arg.ValueType->Name.TypeName.Span)
-                charList.Add ((char) c);
+            charList.AddRange (arg.ValueType->Name.TypeName.GetCharsSpan ());
         }
 
         charList.AddRange (">");
@@ -794,21 +779,19 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
 
     public ES_TypeInfo* GetArrayIndexType () => GetIntType (ES_IntSize.Int32, false);
 
-    public ES_TypeInfo* GetFullyQualifiedType (ArrayPointer<byte> namespaceName, ArrayPointer<byte> typeName)
+    public ES_TypeInfo* GetFullyQualifiedType (ES_Identifier namespaceName, ES_Identifier typeName)
         => GetFullyQualifiedType (new ES_FullyQualifiedName (namespaceName, typeName));
 
     public ES_TypeInfo* GetFullyQualifiedType (ES_FullyQualifiedName fullyQualifiedName) {
-        var namespaceName = IdPool.GetIdentifier (fullyQualifiedName.NamespaceName.Span);
-        if (!Namespaces.TryGetValue (namespaceName, out var namespaceData))
+        if (!Namespaces.TryGetValue (fullyQualifiedName.NamespaceName, out var namespaceData))
             return null;
 
         var typesList = namespaceData.Types;
 
-        var typeName = IdPool.GetIdentifier (fullyQualifiedName.TypeName.Span);
         foreach (var typePtr in typesList) {
             var type = typePtr.Address;
 
-            if (type->Name.TypeName.Equals (typeName))
+            if (type->Name.TypeName.Equals (fullyQualifiedName.TypeName))
                 return type;
         }
 
@@ -844,7 +827,7 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
         return StringPool.Shared.GetOrAdd (chars.Span);
     }
 
-    public T? GetFunctionDelegate<T> (ArrayPointer<byte> namespaceName, ArrayPointer<byte> functionName)
+    public T? GetFunctionDelegate<T> (ES_Identifier namespaceName, ES_Identifier functionName)
         where T : Delegate {
         if (backendData is null)
             return null;
@@ -884,7 +867,6 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
 
         backendData?.Dispose ();
         namespacesDict.Clear ();
-        IdPool?.Dispose ();
         memManager?.Dispose ();
 
         disposedValue = true;

@@ -10,11 +10,11 @@
 using System;
 using System.Diagnostics;
 using ChronosLib.Pooled;
+using EchelonScriptCommon.Data;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.Utilities;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data;
-using EchelonScriptCompiler.Utilities;
 
 namespace EchelonScriptCompiler.Frontend;
 
@@ -24,7 +24,7 @@ public unsafe partial class CompilerFrontend {
 
         foreach (ref var astUnit in transUnit.AstUnits.Span) {
             foreach (var nm in astUnit.Ast.Namespaces) {
-                ArrayPointer<byte> namespaceName;
+                ES_Identifier namespaceName;
                 using (var nameArr = nm.NamespaceName.ToPooledChars ())
                     namespaceName = idPool.GetIdentifier (nameArr);
 
@@ -45,7 +45,7 @@ public unsafe partial class CompilerFrontend {
 
                             if (namespaceBuilder.CheckTypeExists (typeName, null) != null) {
                                 errorList.Add (ES_FrontendErrors.GenTypeAlreadyDefined (
-                                    namespaceBuilder.NamespaceData.NamespaceNameString,
+                                    namespaceBuilder.NamespaceData.NamespaceName.GetCharsSpan ().GetPooledString (),
                                     enumDef.Name.Text.Span.GetPooledString (),
                                     enumDef.Name
                                 ));
@@ -79,7 +79,7 @@ public unsafe partial class CompilerFrontend {
 
         if (namespaceBuilder.CheckTypeExists (typeName, null) != null) {
             errorList.Add (ES_FrontendErrors.GenTypeAlreadyDefined (
-                namespaceBuilder.NamespaceData.NamespaceNameString,
+                namespaceBuilder.NamespaceData.NamespaceName.GetCharsSpan ().GetPooledString (),
                 typeDef.Name.Text.Span.GetPooledString (),
                 typeDef.Name
             ));
@@ -164,7 +164,7 @@ public unsafe partial class CompilerFrontend {
         var namePtr = Environment!.IdPool.GetIdentifier (ES_PrimitiveTypes.GetIntName (size, unsigned));
         var fqn = new ES_FullyQualifiedName (Environment.GlobalTypesNamespace, namePtr);
 
-        *intDataPtr = new ES_IntTypeData (ES_AccessModifier.Public, ArrayPointer<byte>.Null, fqn, size, unsigned);
+        *intDataPtr = new ES_IntTypeData (ES_AccessModifier.Public, ES_Identifier.Empty, fqn, size, unsigned);
 
         return new Pointer<ES_TypeInfo> (&intDataPtr->TypeInfo);
     }
@@ -174,7 +174,7 @@ public unsafe partial class CompilerFrontend {
         var namePtr = Environment!.IdPool.GetIdentifier (ES_PrimitiveTypes.GetFloatName (size));
         var fqn = new ES_FullyQualifiedName (Environment.GlobalTypesNamespace, namePtr);
 
-        *floatDataPtr = new ES_FloatTypeData (ES_AccessModifier.Public, ArrayPointer<byte>.Null, fqn, size);
+        *floatDataPtr = new ES_FloatTypeData (ES_AccessModifier.Public, ES_Identifier.Empty, fqn, size);
 
         return new Pointer<ES_TypeInfo> (&floatDataPtr->TypeInfo);
     }
@@ -184,7 +184,7 @@ public unsafe partial class CompilerFrontend {
         var namePtr = Environment!.IdPool.GetIdentifier (name);
         var fqn = new ES_FullyQualifiedName (Environment.GlobalTypesNamespace, namePtr);
 
-        *voidDataPtr = new ES_TypeInfo (tag, ES_AccessModifier.Public, ES_TypeFlag.NoRefs | ES_TypeFlag.NoNew, ArrayPointer<byte>.Null, fqn);
+        *voidDataPtr = new ES_TypeInfo (tag, ES_AccessModifier.Public, ES_TypeFlag.NoRefs | ES_TypeFlag.NoNew, ES_Identifier.Empty, fqn);
         voidDataPtr->RuntimeSize = runtimeSize;
 
         return new Pointer<ES_TypeInfo> (voidDataPtr);

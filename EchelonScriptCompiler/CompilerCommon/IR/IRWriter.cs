@@ -11,6 +11,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using ChronosLib.Pooled;
+using EchelonScriptCommon.Data;
 using EchelonScriptCommon.Utilities;
 using static EchelonScriptCompiler.CompilerCommon.IR.ESIR_Factory;
 
@@ -118,7 +119,7 @@ public unsafe sealed class ESIR_Writer : IDisposable {
     }
 
     private struct StoredPartialFunction {
-        public ArrayPointer<byte> Name { get; init; }
+        public ES_Identifier Name { get; init; }
 
         public ESIR_TypeNode ReturnType { get; init; }
         public PooledArray<ESIR_ArgumentDefinition> Arguments { get; init; }
@@ -147,7 +148,7 @@ public unsafe sealed class ESIR_Writer : IDisposable {
     private StructPooledList<ESIR_Struct> structs;
 
     private bool funcStarted;
-    private ArrayPointer<byte> funcName;
+    private ES_Identifier funcName;
 
     private ESIR_TypeNode? funcRetType;
     private StructPooledList<ESIR_ArgumentDefinition> funcArgs;
@@ -242,7 +243,7 @@ public unsafe sealed class ESIR_Writer : IDisposable {
         Debug.Assert (funcStarted);
 
         funcStarted = false;
-        funcName = ArrayPointer<byte>.Null;
+        funcName = ES_Identifier.Empty;
 
         funcRetType = null;
         funcArgs.Dispose ();
@@ -292,7 +293,7 @@ public unsafe sealed class ESIR_Writer : IDisposable {
         funcScopeRegs = func.ScopeRegisters.MoveToStructPooledList (CL_ClearMode.Auto);
     }
 
-    public void StartFunction (ArrayPointer<byte> name, ESIR_TypeNode retType) {
+    public void StartFunction (ES_Identifier name, ESIR_TypeNode retType) {
         CheckDisposed ();
         CheckFunctionNotStarted ("IRWriter error: Cannot start a function; Already in a function.");
 

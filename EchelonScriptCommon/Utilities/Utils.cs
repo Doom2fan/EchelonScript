@@ -11,11 +11,10 @@ using System;
 using System.Text;
 using ChronosLib.Pooled;
 using CommunityToolkit.HighPerformance.Buffers;
-using EchelonScriptCommon.Utilities;
 
-namespace EchelonScriptCompiler.Utilities;
+namespace EchelonScriptCommon.Utilities;
 
-public static class ES_Utils {
+public static partial class ES_Utils {
     public unsafe static string GetPooledString (this Span<byte> bytes, Encoding encoding)
         => StringPool.Shared.GetOrAdd (bytes, encoding);
 
@@ -28,6 +27,12 @@ public static class ES_Utils {
     public static string GetPooledString (this ArrayPointer<char> chars) => StringPool.Shared.GetOrAdd (chars.Span);
 
     public static string GetPooledString (this PooledArray<char> chars) => StringPool.Shared.GetOrAdd (chars.Span);
+
+    public static void GetChars (this ReadOnlySpan<byte> bytes, ref StructPooledList<char> chars, Encoding enc) {
+        var charsSpan = chars.AddSpan (enc.GetCharCount (bytes));
+        var charsWritten = enc.GetChars (bytes, charsSpan);
+        chars.RemoveEnd (charsSpan.Length - charsWritten);
+    }
 
     public static PooledArray<T> Merge<T> (this PooledArray<T> left, PooledArray<T> right) => left.Merge (right.Span);
 
@@ -48,4 +53,5 @@ public static class ES_Utils {
 
         return newArr;
     }
+
 }

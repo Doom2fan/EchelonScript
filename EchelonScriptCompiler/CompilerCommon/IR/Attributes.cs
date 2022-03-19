@@ -9,6 +9,7 @@
 
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using EchelonScriptCommon.Data;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.Utilities;
 
@@ -25,9 +26,9 @@ public unsafe class ESIR_TraceDataAttribute : ESIR_Attribute {
     private readonly ESIR_ValueNode? parentTypeNode;
     private readonly ESIR_ValueNode? fileNameNode;
 
-    public ArrayPointer<byte> Namespace => namespaceNode.GetIdentifier ()!.Value;
-    public ArrayPointer<byte> Name => nameNode.GetIdentifier ()!.Value;
-    public ArrayPointer<byte> ParentType => parentTypeNode?.GetIdentifier () ?? ArrayPointer<byte>.Null;
+    public ES_Identifier Namespace => namespaceNode.GetIdentifier ()!.Value;
+    public ES_Identifier Name => nameNode.GetIdentifier ()!.Value;
+    public ES_Identifier? ParentType => parentTypeNode?.GetIdentifier ();
     public string? FileName => fileNameNode?.GetString (out _, null);
 
     internal ESIR_TraceDataAttribute (
@@ -87,9 +88,9 @@ public unsafe class ESIR_FunctionDataAttribute : ESIR_Attribute {
 }
 
 public unsafe static partial class ESIR_Factory {
-    public static ESIR_TraceDataAttribute TraceDataAttribute (ArrayPointer<byte> ns, ArrayPointer<byte> name, string? fileName)
+    public static ESIR_TraceDataAttribute TraceDataAttribute (ES_Identifier ns, ES_Identifier name, string? fileName)
         => TraceDataAttribute (ValueNode (ns), ValueNode (name), null, fileName is not null ? ValueNode (fileName) : null);
-    public static ESIR_TraceDataAttribute TraceDataAttribute (ArrayPointer<byte> ns, ArrayPointer<byte> name, ArrayPointer<byte> parentType, string? fileName)
+    public static ESIR_TraceDataAttribute TraceDataAttribute (ES_Identifier ns, ES_Identifier name, ES_Identifier parentType, string? fileName)
         => TraceDataAttribute (ValueNode (ns), ValueNode (name), ValueNode (parentType), fileName is not null ? ValueNode (fileName) : null);
     private static ESIR_TraceDataAttribute TraceDataAttribute (ESIR_ValueNode ns, ESIR_ValueNode name, ESIR_ValueNode? parentType, ESIR_ValueNode? fileName)
         => new (ns, name, parentType, fileName);

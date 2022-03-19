@@ -7,6 +7,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+using ChronosLib.Pooled;
 using CommunityToolkit.HighPerformance.Buffers;
 using EchelonScriptCommon.Utilities;
 
@@ -62,7 +63,7 @@ public unsafe struct ES_TypeInfo {
     public readonly ES_FullyQualifiedName Name;
 
     /// <summary>The source translation unit of the type.</summary>
-    public readonly ArrayPointer<byte> SourceUnit;
+    public readonly ES_Identifier SourceUnit;
 
     /// <summary>A list of all the references in the type.</summary>
     public ArrayPointer<nint> RefsList;
@@ -76,7 +77,7 @@ public unsafe struct ES_TypeInfo {
 
     public ES_TypeInfo (
         ES_TypeTag typeTag, ES_AccessModifier accessMod, ES_TypeFlag flags,
-        ArrayPointer<byte> sourceUnit,
+        ES_Identifier sourceUnit,
         ES_FullyQualifiedName fullyQualifiedName
     ) {
         TypeTag = typeTag;
@@ -99,7 +100,7 @@ public unsafe struct ES_TypeInfo {
     #region String utilities
 
     /// <summary>The type's source unit's name as a string.</summary>
-    public string SourceUnitString => StringPool.Shared.GetOrAdd (SourceUnit.Span, ES_Encodings.Identifier);
+    public string SourceUnitString => SourceUnit.GetCharsSpan ().GetPooledString ();
 
     #endregion
 

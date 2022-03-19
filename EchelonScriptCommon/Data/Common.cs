@@ -8,6 +8,7 @@
  */
 
 using System;
+using ChronosLib.Pooled;
 using CommunityToolkit.HighPerformance.Buffers;
 using EchelonScriptCommon.Utilities;
 
@@ -36,24 +37,25 @@ public enum ES_VirtualnessModifier {
 }
 
 public readonly struct ES_FullyQualifiedName {
-    public readonly ArrayPointer<byte> NamespaceName;
-    public readonly ArrayPointer<byte> TypeName;
+    public readonly ES_Identifier NamespaceName;
+    public readonly ES_Identifier TypeName;
 
-    public string NamespaceNameString => StringPool.Shared.GetOrAdd (NamespaceName.Span, ES_Encodings.Identifier);
-    public string TypeNameString => StringPool.Shared.GetOrAdd (TypeName.Span, ES_Encodings.Identifier);
-
-    public ES_FullyQualifiedName (ArrayPointer<byte> namespaceName, ArrayPointer<byte> typeName) {
+    public ES_FullyQualifiedName (ES_Identifier namespaceName, ES_Identifier typeName) {
         NamespaceName = namespaceName;
         TypeName = typeName;
     }
 
     public string GetNameAsTypeString () {
-        Span<byte> bytes = stackalloc byte [NamespaceName.Length + TypeName.Length + 2];
+        var chars = new StructPooledList<char> (CL_ClearMode.Auto);
 
-        NamespaceName.Span.CopyTo (bytes);
-        bytes.Slice (NamespaceName.Length, 2).Fill ((byte) ':');
-        TypeName.Span.CopyTo (bytes [(NamespaceName.Length + 2)..]);
+        try {
+            NamespaceName.GetBytesSpan ().GetChars (ref chars, ES_Encodings.Identifier);
+            chars.AddRange ("::");
+            TypeName.GetBytesSpan ().GetChars (ref chars, ES_Encodings.Identifier);
 
-        return StringPool.Shared.GetOrAdd (bytes, ES_Encodings.Identifier);
+            return chars.Span.GetPooledString ();
+        } finally {
+            chars.Dispose ();
+        }
     }
 }

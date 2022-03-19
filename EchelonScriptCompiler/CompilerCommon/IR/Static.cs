@@ -8,6 +8,7 @@
  */
 
 using System.Diagnostics;
+using EchelonScriptCommon.Data;
 using EchelonScriptCommon.Utilities;
 
 namespace EchelonScriptCompiler.CompilerCommon.IR;
@@ -20,7 +21,7 @@ public class ESIR_StaticVariable : ESIR_Node {
     private readonly ESIR_ValueNode nameNode;
 
     public ESIR_TypeNode Type => typeNode;
-    public ArrayPointer<byte> Name => nameNode.GetIdentifier ()!.Value;
+    public ES_Identifier Name => nameNode.GetIdentifier ()!.Value;
 
     internal ESIR_StaticVariable (ESIR_TypeNode type, ESIR_ValueNode name) {
         typeNode = type;
@@ -50,7 +51,7 @@ public class ESIR_Function : ESIR_Node {
     private readonly ESIR_List<ESIR_TypeNode> localValuesNode;
     private readonly ESIR_List<ESIR_Statement> statementsNode;
 
-    public ArrayPointer<byte> Name => nameNode.GetIdentifier ()!.Value;
+    public ES_Identifier Name => nameNode.GetIdentifier ()!.Value;
     public ESIR_List<ESIR_Attribute> Attributes => attributesNode;
     public ESIR_TypeNode ReturnType => returnTypeNode;
     public ESIR_List<ESIR_ArgumentDefinition> Arguments => argumentsNode;
@@ -90,12 +91,12 @@ public class ESIR_Function : ESIR_Node {
 }
 
 public static partial class ESIR_Factory {
-    public static ESIR_StaticVariable StaticVariable (ESIR_TypeNode type, ArrayPointer<byte> id)
+    public static ESIR_StaticVariable StaticVariable (ESIR_TypeNode type, ES_Identifier id)
         => StaticVariable (type, ValueNode (id));
     private static ESIR_StaticVariable StaticVariable (ESIR_TypeNode type, ESIR_ValueNode id) => new (type, id);
 
     public static ESIR_Function Function (
-        ArrayPointer<byte> name,
+        ES_Identifier name,
         ESIR_List<ESIR_Attribute> attributes,
         ESIR_TypeNode type,
         ESIR_List<ESIR_ArgumentDefinition> args,

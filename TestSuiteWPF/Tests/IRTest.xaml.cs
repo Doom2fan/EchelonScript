@@ -15,14 +15,13 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using ChronosLib.Pooled;
-using CommunityToolkit.HighPerformance.Buffers;
 using EchelonScriptCommon;
+using EchelonScriptCommon.Data;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.Utilities;
 using EchelonScriptCompiler;
 using EchelonScriptCompiler.CompilerCommon.IR;
 using EchelonScriptCompiler.Data;
-using EchelonScriptCompiler.Utilities;
 using ICSharpCode.AvalonEdit.Document;
 
 namespace TestSuiteWPF.Tests;
@@ -68,6 +67,7 @@ public partial class IRTest : UserControl {
 
     System.Globalization.CultureInfo cultureInfo;
 
+    ES_IdentifierPool idPool;
     EchelonScript_Compiler compiler;
 
     #endregion
@@ -87,6 +87,7 @@ public partial class IRTest : UserControl {
         cultureInfo.NumberFormat.NumberDecimalSeparator = ".";
         cultureInfo.NumberFormat.NumberGroupSeparator = "'";
 
+        idPool = new ();
         compiler = EchelonScript_Compiler.Create ();
     }
 
@@ -144,7 +145,7 @@ public partial class IRTest : UserControl {
 
             _ => "[UNRECOGNIZED]",
         };
-        var typeNode = AddNodeToTree ($"{typeType} {typeData->Name.TypeNameString}", parentItem);
+        var typeNode = AddNodeToTree ($"{typeType} {typeData->Name.TypeName.GetCharsSpan ()}", parentItem);
 
         AddNodeToTree ($"Runtime size: {typeData->RuntimeSize}", typeNode);
         AddNodeToTree ($"Fully qualified name: {typeData->Name.GetNameAsTypeString ()}", typeNode);
@@ -171,7 +172,7 @@ public partial class IRTest : UserControl {
     }
 
     private unsafe void AddFunctionToTree (ES_FunctionData* functionData, TreeViewItem parentItem) {
-        var typeNode = AddNodeToTree ($"Function {functionData->Name.TypeNameString}", parentItem);
+        var typeNode = AddNodeToTree ($"Function {functionData->Name.TypeName.GetCharsSpan ()}", parentItem);
 
         AddNodeToTree ($"Fully qualified name: {functionData->Name.GetNameAsTypeString ()}", typeNode);
         AddNodeToTree ($"Source unit: {functionData->SourceUnitString}", typeNode);
@@ -187,7 +188,7 @@ public partial class IRTest : UserControl {
 
             var argType = string.Empty;
             var argTypeName = "[NULL]";
-            var argName = StringPool.Shared.GetOrAdd (argData.Name.Span, Encoding.ASCII);
+            var argName = argData.Name.GetCharsSpan ().GetPooledString ();
             var argDef = string.Empty;
 
             if (argProto.ArgType != ES_ArgumentType.Normal)
@@ -232,7 +233,7 @@ public partial class IRTest : UserControl {
             case ES_TypeTag.Bool:
             case ES_TypeTag.Int:
             case ES_TypeTag.Float:
-                return type->Name.TypeNameString;
+                return type->Name.TypeName.GetCharsSpan ().GetPooledString ();
 
             //case ES_TypeTag.Function: return "Function [NOT IMPLEMENTED]";
 
@@ -245,7 +246,7 @@ public partial class IRTest : UserControl {
             default: return $"{type->TypeTag} [NOT IMPLEMENTED]";
         }
     }
-    private static unsafe string GetString (ArrayPointer<byte> bytes) => bytes.GetPooledString (Encoding.ASCII);
+    private static unsafe string GetString (ES_Identifier id) => id.GetCharsSpan ().GetPooledString ();
 
     private unsafe string GetArgString (int i, ESIR_ArgumentDefinition arg) {
         if (arg.ArgType == ES_ArgumentType.Normal)
@@ -1028,7 +1029,7 @@ public partial class IRTest : UserControl {
         };
 
         compiler.Reset ();
-        compiler.Setup (out var envOut);
+        compiler.Setup (idPool, out var envOut);
         using var env = envOut;
         compiler.AddTranslationUnit ("MainUnit", codeUnits.Span);
 

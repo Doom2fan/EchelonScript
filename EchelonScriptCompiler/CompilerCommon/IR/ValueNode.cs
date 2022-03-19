@@ -11,6 +11,7 @@ using System;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text;
+using EchelonScriptCommon.Data;
 using EchelonScriptCommon.Utilities;
 
 namespace EchelonScriptCompiler.CompilerCommon.IR;
@@ -32,7 +33,7 @@ internal unsafe struct ESIR_NodeValue {
     public ESIR_ValueType Type { get; private init; }
 
     internal ulong ValueInt { get; init; }
-    internal ArrayPointer<byte> ValueId { get; init; }
+    internal ES_Identifier ValueId { get; init; }
     internal string? ValueString { get; init; }
     internal void* ValuePointer { get; init; }
 
@@ -42,7 +43,7 @@ internal unsafe struct ESIR_NodeValue {
         Type = ESIR_ValueType.Int;
 
         ValueInt = (ulong) value;
-        ValueId = ArrayPointer<byte>.Null;
+        ValueId = ES_Identifier.Empty;
         ValueString = null;
         ValuePointer = null;
     }
@@ -51,7 +52,7 @@ internal unsafe struct ESIR_NodeValue {
         Type = ESIR_ValueType.Int;
 
         ValueInt = value;
-        ValueId = ArrayPointer<byte>.Null;
+        ValueId = ES_Identifier.Empty;
         ValueString = null;
         ValuePointer = null;
     }
@@ -60,7 +61,7 @@ internal unsafe struct ESIR_NodeValue {
         Type = ESIR_ValueType.Float32;
 
         ValueInt = Unsafe.As<float, uint> (ref value);
-        ValueId = ArrayPointer<byte>.Null;
+        ValueId = ES_Identifier.Empty;
         ValueString = null;
         ValuePointer = null;
     }
@@ -69,12 +70,12 @@ internal unsafe struct ESIR_NodeValue {
         Type = ESIR_ValueType.Float64;
 
         ValueInt = Unsafe.As<double, ulong> (ref value);
-        ValueId = ArrayPointer<byte>.Null;
+        ValueId = ES_Identifier.Empty;
         ValueString = null;
         ValuePointer = null;
     }
 
-    public ESIR_NodeValue (ArrayPointer<byte> id) {
+    public ESIR_NodeValue (ES_Identifier id) {
         Type = ESIR_ValueType.Identifier;
 
         ValueId = id;
@@ -88,7 +89,7 @@ internal unsafe struct ESIR_NodeValue {
 
         ValueString = value;
         ValueInt = 0;
-        ValueId = ArrayPointer<byte>.Null;
+        ValueId = ES_Identifier.Empty;
         ValuePointer = null;
     }
 
@@ -96,7 +97,7 @@ internal unsafe struct ESIR_NodeValue {
         Type = ESIR_ValueType.Char;
 
         ValueInt = (ulong) value.Value;
-        ValueId = ArrayPointer<byte>.Null;
+        ValueId = ES_Identifier.Empty;
         ValueString = null;
         ValuePointer = null;
     }
@@ -106,7 +107,7 @@ internal unsafe struct ESIR_NodeValue {
 
         ValuePointer = value;
         ValueInt = 0;
-        ValueId = ArrayPointer<byte>.Null;
+        ValueId = ES_Identifier.Empty;
         ValueString = null;
     }
 
@@ -237,9 +238,9 @@ public unsafe class ESIR_ValueNode : ESIR_Node {
         return true;
     }
 
-    public bool TryGetIdentifier (out ArrayPointer<byte> value) {
+    public bool TryGetIdentifier (out ES_Identifier value) {
         if (nodeKind != ESIR_NodeKind.ValueIdentifier) {
-            value = ArrayPointer<byte>.Null;
+            value = ES_Identifier.Empty;
             return false;
         }
 
@@ -287,7 +288,7 @@ public unsafe class ESIR_ValueNode : ESIR_Node {
         return Unsafe.As<ulong, double> (ref valLong);
     }
 
-    public ArrayPointer<byte>? GetIdentifier () => Kind == ESIR_NodeKind.ValueIdentifier ? nodeValue.ValueId : null;
+    public ES_Identifier? GetIdentifier () => Kind == ESIR_NodeKind.ValueIdentifier ? nodeValue.ValueId : null;
 
     public string? GetString (out bool isValid, string? errorVal = null) {
         if (nodeKind != ESIR_NodeKind.ValueString) {
@@ -354,6 +355,6 @@ public unsafe static partial class ESIR_Factory {
     public static ESIR_ValueNode ValueNode (double value) => ValueNode (ESIR_NodeKind.ValueFloat64, new (value));
     public static ESIR_ValueNode ValueNode (string value) => ValueNode (ESIR_NodeKind.ValueString, new (value));
     public static ESIR_ValueNode ValueNode (void* value) => ValueNode (ESIR_NodeKind.ValuePointer, new (value));
-    public static ESIR_ValueNode ValueNode (ArrayPointer<byte> value)
+    public static ESIR_ValueNode ValueNode (ES_Identifier value)
         => ValueNode (ESIR_NodeKind.ValueIdentifier, new (value));
 }

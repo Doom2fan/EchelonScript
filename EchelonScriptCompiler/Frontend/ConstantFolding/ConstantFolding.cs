@@ -10,8 +10,8 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using EchelonScriptCommon.Data;
 using EchelonScriptCommon.Data.Types;
-using EchelonScriptCommon.Utilities;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data;
 
@@ -26,7 +26,7 @@ internal unsafe static partial class Compiler_ConstantFolding {
         public List<EchelonScriptErrorMessage> WarnList { get; init; }
         public List<EchelonScriptErrorMessage> InfoList { get; init; }
 
-        public ArrayPointer<byte> TransUnitName { get; init; }
+        public ES_Identifier TransUnitName { get; init; }
         public SourceData Source { get; set; }
 
         public SymbolStack<FrontendSymbol> Symbols { get; set; }
@@ -107,7 +107,7 @@ internal unsafe static partial class Compiler_ConstantFolding {
 
         foreach (ref var astUnit in transUnit.AstUnits.Span) {
             foreach (var nm in astUnit.Ast.Namespaces) {
-                ArrayPointer<byte> namespaceName;
+                ES_Identifier namespaceName;
                 using (var nameArr = nm.NamespaceName.ToPooledChars ())
                     namespaceName = idPool.GetIdentifier (nameArr);
 

@@ -15,7 +15,6 @@ using EchelonScriptCommon;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.Utilities;
 using EchelonScriptCompiler.CompilerCommon;
-using EchelonScriptCompiler.Utilities;
 
 namespace EchelonScriptCompiler.Frontend;
 
@@ -168,7 +167,7 @@ public unsafe partial class CompilerFrontend {
                 Debug.Assert (fieldAstNode is not null);
 
                 errorList.Add (ES_FrontendErrors.GenFieldCausesCycle (
-                    member->Name.GetPooledString (ES_Encodings.Identifier),
+                    member->Name.GetCharsSpan ().GetPooledString (),
                     type->Name.GetNameAsTypeString (),
                     fieldAstNode.Name
                 ));

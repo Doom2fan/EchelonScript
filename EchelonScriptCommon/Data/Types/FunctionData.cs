@@ -10,6 +10,7 @@
 using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using ChronosLib.Pooled;
 using CommunityToolkit.HighPerformance.Buffers;
 using EchelonScriptCommon.Utilities;
 
@@ -44,7 +45,7 @@ public readonly unsafe struct ES_FunctionData {
     public readonly ES_FullyQualifiedName Name;
 
     public readonly ES_AccessModifier AccessModifier;
-    public readonly ArrayPointer<byte> SourceUnit;
+    public readonly ES_Identifier SourceUnit;
 
     public readonly ES_FunctionPrototypeData* FunctionType;
     public readonly ArrayPointer<ES_FunctionArgData> Arguments;
@@ -54,14 +55,14 @@ public readonly unsafe struct ES_FunctionData {
 
     #region ================== Instance properties
 
-    public readonly string SourceUnitString => StringPool.Shared.GetOrAdd (SourceUnit.Span, ES_Encodings.Identifier);
+    public readonly string SourceUnitString => SourceUnit.GetCharsSpan ().GetPooledString ();
 
     #endregion
 
     #region ================== Constructors
 
     public ES_FunctionData (
-        ES_FullyQualifiedName fqn, ES_AccessModifier accessMod, ArrayPointer<byte> sourceUnit,
+        ES_FullyQualifiedName fqn, ES_AccessModifier accessMod, ES_Identifier sourceUnit,
         ES_FunctionPrototypeData* functionType, ArrayPointer<ES_FunctionArgData> args, int optArgCount
     ) {
         Debug.Assert (functionType is not null);
@@ -85,14 +86,14 @@ public readonly unsafe struct ES_FunctionData {
 public unsafe struct ES_FunctionArgData {
     #region ================== Instance fields
 
-    public readonly ArrayPointer<byte> Name;
+    public readonly ES_Identifier Name;
     public void* DefaultValue;
 
     #endregion
 
     #region ================== Constructors
 
-    public ES_FunctionArgData (ArrayPointer<byte> name, void* defaultVal) {
+    public ES_FunctionArgData (ES_Identifier name, void* defaultVal) {
         Name = name;
         DefaultValue = defaultVal;
     }
@@ -135,7 +136,7 @@ public unsafe struct ES_FunctionPrototypeData {
 
     public ES_FunctionPrototypeData (ES_AccessModifier accessMod,
         ES_TypeInfo* retType, ArrayPointer<ES_FunctionPrototypeArgData> argsList,
-        ES_FullyQualifiedName fullyQualifiedName, ArrayPointer<byte> sourceUnit
+        ES_FullyQualifiedName fullyQualifiedName, ES_Identifier sourceUnit
     ) {
         TypeInfo = new (ES_TypeTag.Function, accessMod, ES_TypeFlag.NoNew, sourceUnit, fullyQualifiedName);
         TypeInfo.RuntimeSize = IntPtr.Size;

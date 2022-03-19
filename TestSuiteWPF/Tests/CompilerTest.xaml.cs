@@ -18,6 +18,7 @@ using System.Windows.Media;
 using ChronosLib.Pooled;
 using CommunityToolkit.HighPerformance.Buffers;
 using EchelonScriptCommon;
+using EchelonScriptCommon.Data;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCompiler;
 using EchelonScriptCompiler.Backends.RoslynBackend;
@@ -68,6 +69,7 @@ public partial class CompilerTest : UserControl {
 
     System.Globalization.CultureInfo cultureInfo;
 
+    ES_IdentifierPool idPool;
     EchelonScriptEnvironment env;
     Random rand = new ();
 
@@ -80,6 +82,7 @@ public partial class CompilerTest : UserControl {
 
         textMarkerService = new TextMarkerService (codeText);
 
+        idPool = new ();
         errList = new ObservableCollection<CompilerMessage> ();
 
         errorsList.ItemsSource = errList;
@@ -156,7 +159,7 @@ public partial class CompilerTest : UserControl {
             ES_TypeTag.Immutable => "Immutable",
             _ => "[UNRECOGNIZED]",
         };
-        var typeNode = AddNodeToTree ($"{typeType} {typeData->Name.TypeNameString}", parentItem);
+        var typeNode = AddNodeToTree ($"{typeType} {typeData->Name.TypeName.GetCharsSpan ()}", parentItem);
 
         AddNodeToTree ($"Runtime size: {typeData->RuntimeSize}", typeNode);
         AddNodeToTree ($"Fully qualified name: {typeData->Name.GetNameAsTypeString ()}", typeNode);
@@ -183,7 +186,7 @@ public partial class CompilerTest : UserControl {
     }
 
     private unsafe void AddFunctionToTree (ES_FunctionData* functionData, TreeViewItem parentItem) {
-        var typeNode = AddNodeToTree ($"Function {functionData->Name.TypeNameString}", parentItem);
+        var typeNode = AddNodeToTree ($"Function {functionData->Name.TypeName.GetCharsSpan ()}", parentItem);
 
         AddNodeToTree ($"Fully qualified name: {functionData->Name.GetNameAsTypeString ()}", typeNode);
         AddNodeToTree ($"Source unit: {functionData->SourceUnitString}", typeNode);
@@ -199,7 +202,7 @@ public partial class CompilerTest : UserControl {
 
             var argType = string.Empty;
             var argTypeName = "[NULL]";
-            var argName = StringPool.Shared.GetOrAdd (argData.Name.Span, Encoding.ASCII);
+            var argName = argData.Name.GetCharsSpan ();
             var argDef = string.Empty;
 
             if (argProto.ArgType != ES_ArgumentType.Normal)
@@ -232,7 +235,7 @@ public partial class CompilerTest : UserControl {
 
         env?.Dispose ();
         compiler.Reset ();
-        compiler.Setup (out env);
+        compiler.Setup (idPool, out env);
         compiler.AddTranslationUnit ("MainUnit", codeUnits.Span);
         compiler.Compile ();
 
@@ -281,7 +284,7 @@ public partial class CompilerTest : UserControl {
 
         foreach (var namespaceKVP in env.Namespaces) {
             var namespaceData = namespaceKVP.Value;
-            var namespaceNode = AddNodeToTree (namespaceData.NamespaceNameString, rootItem);
+            var namespaceNode = AddNodeToTree (namespaceData.NamespaceName.GetCharsSpan ().GetPooledString (), rootItem);
             namespaceNode.IsExpanded = true;
 
             foreach (var typeDataPtr in namespaceData.Types)

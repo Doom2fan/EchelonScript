@@ -13,5 +13,5 @@ namespace EchelonScriptCommon;
 
 public static class ES_Encodings {
     public static Encoding Text => Encoding.UTF8;
-    public static Encoding Identifier => Encoding.ASCII;
+    public static Encoding Identifier => Encoding.UTF8;
 }

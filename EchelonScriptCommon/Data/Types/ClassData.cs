@@ -38,7 +38,7 @@ public unsafe struct ES_ClassData {
         #region ================== Constructors
 
         internal Builder ([DisallowNull] ES_ClassData* data, ES_AccessModifier accessMod,
-            ES_FullyQualifiedName fullyQualifiedName, ArrayPointer<byte> sourceUnit
+            ES_FullyQualifiedName fullyQualifiedName, ES_Identifier sourceUnit
         ) {
             ClassData = data;
             data->TypeInfo = new ES_TypeInfo (ES_TypeTag.Class, accessMod, ES_TypeFlag.NoNew, sourceUnit, fullyQualifiedName);

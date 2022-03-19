@@ -15,7 +15,6 @@ using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.GarbageCollection;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.CompilerCommon.IR;
-using EchelonScriptCompiler.Utilities;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -260,11 +259,11 @@ public unsafe sealed partial class RoslynCompilerBackend {
                 return CompileExpression_MemberAccess (ref passData, ref funcData, memberAccessExpr);
 
             case ESIR_NodeKind.FunctionCallExpression when expr is ESIR_FunctionCallExpression callExpr: {
-                var funcNameStr = callExpr.Name.GetPooledString (ES_Encodings.Identifier);
-                var funcId = IdentifierName (funcNameStr);
+                var funcNameChars = callExpr.Name.GetCharsSpan ();
+                var funcId = IdentifierName (funcNameChars.GetPooledString ());
 
                 if (!passData.Functions.TryGetValue (callExpr.Name, out var funcDef))
-                    throw new CompilationException ($"Unknown function {funcNameStr}");
+                    throw new CompilationException ($"Unknown function {funcNameChars}");
 
                 var argValues = callExpr.Arguments.Elements;
                 var argDefs = funcDef.Arguments.Elements;

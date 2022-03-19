@@ -32,7 +32,7 @@ public unsafe struct ES_EnumData {
         #region ================== Constructors
 
         internal Builder ([DisallowNull] ES_EnumData* data, ES_AccessModifier accessMod,
-            ES_FullyQualifiedName fullyQualifiedName, ArrayPointer<byte> sourceUnit
+            ES_FullyQualifiedName fullyQualifiedName, ES_Identifier sourceUnit
         ) {
             EnumData = data;
             data->TypeInfo = new ES_TypeInfo (ES_TypeTag.Enum, accessMod, ES_TypeFlag.NoRefs, sourceUnit, fullyQualifiedName);

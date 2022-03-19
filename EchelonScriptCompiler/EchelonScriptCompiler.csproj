@@ -29,4 +29,8 @@
     <ProjectReference Include="..\EchelonScriptCommon\EchelonScriptCommon.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Utilities\" />
+  </ItemGroup>
+
 </Project>

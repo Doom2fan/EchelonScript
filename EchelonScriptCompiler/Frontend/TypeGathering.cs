@@ -10,11 +10,11 @@
 using System;
 using System.Diagnostics;
 using ChronosLib.Pooled;
+using EchelonScriptCommon.Data;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.Utilities;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data;
-using EchelonScriptCompiler.Utilities;
 
 namespace EchelonScriptCompiler.Frontend;
 
@@ -72,7 +72,7 @@ public unsafe partial class CompilerFrontend {
     }
 
     private ES_TypeInfo* ResolveTypeDeclaration (
-        ArrayPointer<byte> transUnitName, SymbolStack<FrontendSymbol> symbols, SourceData src,
+        ES_Identifier transUnitName, SymbolStack<FrontendSymbol> symbols, SourceData src,
         ES_AstTypeDeclaration typeDecl
     ) {
         Debug.Assert (EnvironmentBuilder is not null);
@@ -152,7 +152,7 @@ public unsafe partial class CompilerFrontend {
     }
 
     private ES_AstTypeDeclaration_TypeReference GenerateASTTypeRef (
-        ArrayPointer<byte> transUnitName, SymbolStack<FrontendSymbol> symbols, SourceData src,
+        ES_Identifier transUnitName, SymbolStack<FrontendSymbol> symbols, SourceData src,
         ES_AstTypeDeclaration typeDecl
     ) {
         Debug.Assert (typeDecl is not null);
@@ -202,7 +202,7 @@ public unsafe partial class CompilerFrontend {
             foreach (var type in namespaceData.Types) {
                 if (!symbols.AddSymbol (type.Address->Name.TypeName, FrontendSymbol.NewVariable (type))) {
                     var err = ES_FrontendErrors.GenDuplicateSymbolDef (
-                        type.Address->Name.TypeNameString,
+                        type.Address->Name.TypeName.GetCharsSpan ().GetPooledString (),
                         src, import.NamespaceName.NodeBounds
                     );
                     errorList.Add (err);
@@ -211,7 +211,7 @@ public unsafe partial class CompilerFrontend {
             foreach (var funcKVP in namespaceData.Functions) {
                 if (!symbols.AddSymbol (funcKVP.Key, FrontendSymbol.NewFunction (funcKVP.Value))) {
                     var err = ES_FrontendErrors.GenDuplicateSymbolDef (
-                        funcKVP.Value.Address->Name.TypeNameString,
+                        funcKVP.Value.Address->Name.TypeName.GetCharsSpan ().GetPooledString (),
                         src, import.NamespaceName.NodeBounds
                     );
                     errorList.Add (err);
@@ -257,7 +257,7 @@ public unsafe partial class CompilerFrontend {
         }
     }
 
-    private void AST_HandleAlias (ArrayPointer<byte> transUnitName, SymbolStack<FrontendSymbol> symbols, SourceData src, ES_AstTypeAlias alias) {
+    private void AST_HandleAlias (ES_Identifier transUnitName, SymbolStack<FrontendSymbol> symbols, SourceData src, ES_AstTypeAlias alias) {
         var aliasName = alias.AliasName.Text.Span;
         var aliasId = Environment!.IdPool.GetIdentifier (aliasName);
 
@@ -326,7 +326,7 @@ public unsafe partial class CompilerFrontend {
     private void GatherTypes (ref TranslationUnitData transUnit) {
         foreach (ref var astUnit in transUnit.AstUnits.Span) {
             foreach (var nm in astUnit.Ast.Namespaces) {
-                ArrayPointer<byte> namespaceName;
+                ES_Identifier namespaceName;
                 using (var nameArr = nm.NamespaceName.ToPooledChars ())
                     namespaceName = Environment!.IdPool.GetIdentifier (nameArr);
 
@@ -438,7 +438,7 @@ public unsafe partial class CompilerFrontend {
     }
 
     private unsafe void ResolveAggregate (ref TranslationUnitData transUnit, ref AstUnitData astUnit, ES_TypeMembers.Builder membersBuilder, ES_AstAggregateDefinition typeDef, bool isClass) {
-        static bool IsNameUsed (ArrayPointer<byte> id, ReadOnlySpan<ES_MemberData_Variable> vars, ReadOnlySpan<ES_MemberData_Function> funcs) {
+        static bool IsNameUsed (ES_Identifier id, ReadOnlySpan<ES_MemberData_Variable> vars, ReadOnlySpan<ES_MemberData_Function> funcs) {
             foreach (var memberVar in vars) {
                 if (memberVar.Info.Name.Equals (id))
                     return true;
@@ -452,7 +452,7 @@ public unsafe partial class CompilerFrontend {
             return false;
         }
 
-        static ES_MemberData* FindMember (ArrayPointer<byte> id, ReadOnlySpan<Pointer<ES_MemberData>> members) {
+        static ES_MemberData* FindMember (ES_Identifier id, ReadOnlySpan<Pointer<ES_MemberData>> members) {
             foreach (var member in members) {
                 if (member.Address->Name.Equals (id))
                     return member.Address;

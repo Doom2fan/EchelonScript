@@ -18,7 +18,6 @@ using EchelonScriptCommon.Data.Types;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Frontend.Parser;
-using EchelonScriptCompiler.Utilities;
 using ICSharpCode.AvalonEdit.Document;
 
 namespace TestSuiteWPF.Tests;

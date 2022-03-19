@@ -27,7 +27,7 @@ public unsafe struct ES_ArrayTypeData {
     #region ================== Constructors
 
     public ES_ArrayTypeData (ES_FullyQualifiedName fullyQualifiedName, [NotNull] ES_TypeInfo* elemType, int dims) {
-        TypeInfo = new (ES_TypeTag.Array, ES_AccessModifier.Public, ES_TypeFlag.None, ArrayPointer<byte>.Null, fullyQualifiedName);
+        TypeInfo = new (ES_TypeTag.Array, ES_AccessModifier.Public, ES_TypeFlag.None, ES_Identifier.Empty, fullyQualifiedName);
         TypeInfo.RuntimeSize = sizeof (void*) + sizeof (int);
 
         elementType = elemType;

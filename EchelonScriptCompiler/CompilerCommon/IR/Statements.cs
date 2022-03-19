@@ -9,6 +9,7 @@
 
 using System;
 using System.Diagnostics;
+using EchelonScriptCommon.Data;
 using EchelonScriptCommon.Utilities;
 
 namespace EchelonScriptCompiler.CompilerCommon.IR;
@@ -43,7 +44,7 @@ public class ESIR_LabeledStatement : ESIR_Statement {
     private readonly ESIR_ValueNode labelNode;
     private readonly ESIR_Statement statementNode;
 
-    public ArrayPointer<byte> Label => labelNode.GetIdentifier ()!.Value;
+    public ES_Identifier Label => labelNode.GetIdentifier ()!.Value;
     public ESIR_Statement Statement => statementNode;
 
     internal ESIR_LabeledStatement (ESIR_ValueNode label, ESIR_Statement statement) {
@@ -100,7 +101,7 @@ public class ESIR_BreakStatement : ESIR_Statement {
 
     private readonly ESIR_ValueNode? labelNode;
 
-    public ArrayPointer<byte>? Label => labelNode?.GetIdentifier ();
+    public ES_Identifier? Label => labelNode?.GetIdentifier ();
 
     internal ESIR_BreakStatement (ESIR_ValueNode? label) => labelNode = label;
 
@@ -121,7 +122,7 @@ public class ESIR_ContinueStatement : ESIR_Statement {
 
     private readonly ESIR_ValueNode? labelNode;
 
-    public ArrayPointer<byte>? Label => labelNode?.GetIdentifier ();
+    public ES_Identifier? Label => labelNode?.GetIdentifier ();
 
     internal ESIR_ContinueStatement (ESIR_ValueNode? label) => labelNode = label;
 
@@ -142,7 +143,7 @@ public class ESIR_GotoLabelStatement : ESIR_Statement {
 
     private readonly ESIR_ValueNode labelNode;
 
-    public ArrayPointer<byte> Label => labelNode.GetIdentifier ()!.Value;
+    public ES_Identifier Label => labelNode.GetIdentifier ()!.Value;
 
     internal ESIR_GotoLabelStatement (ESIR_ValueNode label) => labelNode = label;
 
@@ -275,7 +276,7 @@ public static partial class ESIR_Factory {
         return BlockStatement (List (statements));
     }
 
-    public static ESIR_LabeledStatement LabeledStatement (ArrayPointer<byte> label, ESIR_Statement statement)
+    public static ESIR_LabeledStatement LabeledStatement (ES_Identifier label, ESIR_Statement statement)
         => LabeledStatement (ValueNode (label), statement);
     private static ESIR_LabeledStatement LabeledStatement (ESIR_ValueNode label, ESIR_Statement statement) {
         var node = ESIR_NodeCache.Shared.TryGetNode (ESIR_NodeKind.LabeledStatement, label, statement, out var hash);
@@ -302,7 +303,7 @@ public static partial class ESIR_Factory {
     }
 
     public static ESIR_BreakStatement BreakStatement () => BreakStatement (null);
-    public static ESIR_BreakStatement BreakStatement (ArrayPointer<byte> label) => BreakStatement (ValueNode (label));
+    public static ESIR_BreakStatement BreakStatement (ES_Identifier label) => BreakStatement (ValueNode (label));
     private static ESIR_BreakStatement BreakStatement (ESIR_ValueNode? label) {
         var node = ESIR_NodeCache.Shared.TryGetNode (ESIR_NodeKind.BreakStatement, label, out var hash);
         if (node is not null)
@@ -316,7 +317,7 @@ public static partial class ESIR_Factory {
     }
 
     public static ESIR_ContinueStatement ContinueStatement () => ContinueStatement (null);
-    public static ESIR_ContinueStatement ContinueStatement (ArrayPointer<byte> label)
+    public static ESIR_ContinueStatement ContinueStatement (ES_Identifier label)
         => ContinueStatement (ValueNode (label));
     private static ESIR_ContinueStatement ContinueStatement (ESIR_ValueNode? label) {
         var node = ESIR_NodeCache.Shared.TryGetNode (ESIR_NodeKind.ContinueStatement, label, out var hash);
@@ -330,7 +331,7 @@ public static partial class ESIR_Factory {
         return ret;
     }
 
-    public static ESIR_GotoLabelStatement GotoLabelStatement (ArrayPointer<byte> label)
+    public static ESIR_GotoLabelStatement GotoLabelStatement (ES_Identifier label)
         => GotoLabelStatement (ValueNode (label));
     private static ESIR_GotoLabelStatement GotoLabelStatement (ESIR_ValueNode label) {
         var node = ESIR_NodeCache.Shared.TryGetNode (ESIR_NodeKind.GotoLabelStatement, label, out var hash);

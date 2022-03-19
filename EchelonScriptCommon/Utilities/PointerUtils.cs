@@ -67,7 +67,7 @@ public unsafe struct ArrayPointer<T>
     public static bool operator != (ArrayPointer<T> lhs, ArrayPointer<T> rhs) => !lhs.Equals (rhs);
 }
 
-public static class ES_Utils {
+public static partial class ES_Utils {
     public unsafe static ArrayPointer<T> GetArray<T> (this IMemoryManager manager, int count)
         where T : unmanaged {
         if (count < 1)

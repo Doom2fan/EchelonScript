@@ -11,11 +11,11 @@ using System;
 using System.Diagnostics;
 using ChronosLib.Pooled;
 using ChronosLib.Unmanaged;
+using EchelonScriptCommon.Data;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.Utilities;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data;
-using EchelonScriptCompiler.Utilities;
 
 namespace EchelonScriptCompiler.Frontend;
 
@@ -28,7 +28,7 @@ public unsafe partial class CompilerFrontend {
                 var symbols = astUnit.Symbols;
                 var unitSrc = astUnit.SourceData;
 
-                ArrayPointer<byte> namespaceName;
+                ES_Identifier namespaceName;
                 using (var nameArr = nm.NamespaceName.ToPooledChars ())
                     namespaceName = idPool.GetIdentifier (nameArr);
 
@@ -89,18 +89,15 @@ public unsafe partial class CompilerFrontend {
             var namespaceName = namespaceBuilder.NamespaceData.NamespaceName;
             fullyQualifiedName = new ES_FullyQualifiedName (namespaceName, funcName);
         } else {
-            using var namespaceBytes = UnmanagedArray<byte>.GetArray (parentType->Name.NamespaceName.Length + 2 + parentType->Name.TypeName.Length);
-            var span = namespaceBytes.Span;
+            using var namespaceChars = new StructPooledList<char> (CL_ClearMode.Auto);
 
-            parentType->Name.NamespaceName.Span.CopyTo (span);
-            span = span [parentType->Name.NamespaceName.Length..];
+            namespaceChars.AddRange (parentType->Name.NamespaceName.GetCharsSpan ());
 
-            span [0..2].Fill ((byte) ':');
-            span = span [2..^0];
+            namespaceChars.AddRange ("::");
 
-            parentType->Name.TypeName.Span.CopyTo (span);
+            namespaceChars.AddRange (parentType->Name.TypeName.GetCharsSpan ());
 
-            var namespaceName = idPool.GetIdentifier (namespaceBytes.Span);
+            var namespaceName = idPool.GetIdentifier (namespaceChars.Span);
             fullyQualifiedName = new ES_FullyQualifiedName (namespaceName, funcName);
         }
 
@@ -114,19 +111,19 @@ public unsafe partial class CompilerFrontend {
 
         var optArgNum = 0;
         var argNum = 0;
-        var argNamesList = CL_PooledListPool<ArrayPointer<byte>>.Shared.Rent ();
         var reqAfterOptReported = false;
         foreach (var arg in funcDef.ArgumentsList) {
             var argName = idPool.GetIdentifier (arg.Name.Text.Span);
             arg.ValueType = GenerateASTTypeRef (transUnit.Name, symbols, unitSrc, arg.ValueType!);
 
-            var idx = argNamesList.BinarySearch (argName, UnmanagedIdentifierComparer.Instance);
-            if (idx >= 0) {
+            foreach (var otherArg in argData) {
+                if (otherArg.Name != argName)
+                    continue;
+
                 errorList.Add (ES_FrontendErrors.GenArgAlreadyDefined (
                     arg.Name.Text.Span.GetPooledString (), arg.Name
                 ));
-            } else
-                argNamesList.Insert (~idx, argName);
+            }
 
             argData.Add (new ES_FunctionArgData (argName, null));
             argTypes.Add (new ES_FunctionPrototypeArgData (arg.ArgType, GetTypeRef (arg.ValueType)));
@@ -145,7 +142,6 @@ public unsafe partial class CompilerFrontend {
             }
             argNum++;
         }
-        CL_PooledListPool<ArrayPointer<byte>>.Shared.Return (argNamesList);
 
         var argDataMem = ArrayPointer<ES_FunctionArgData>.Null;
         if (argData.Count > 0) {
@@ -163,7 +159,7 @@ public unsafe partial class CompilerFrontend {
         } else {
             if (namespaceBuilder.CheckTypeExists (funcName, null) != null) {
                 errorList.Add (ES_FrontendErrors.GenTypeAlreadyDefined (
-                    namespaceBuilder.NamespaceData.NamespaceNameString,
+                    namespaceBuilder.NamespaceData.NamespaceName.GetCharsSpan ().GetPooledString (),
                     funcDef.Name.Text.Span.GetPooledString (),
                     funcDef.Name
                 ));

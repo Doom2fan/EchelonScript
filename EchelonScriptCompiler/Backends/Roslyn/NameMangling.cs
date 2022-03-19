@@ -11,11 +11,9 @@ using System;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using ChronosLib.Pooled;
-using EchelonScriptCommon;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCompiler.CompilerCommon.IR;
 using EchelonScriptCompiler.Frontend;
-using EchelonScriptCompiler.Utilities;
 
 namespace EchelonScriptCompiler.Backends.RoslynBackend;
 
@@ -40,15 +38,13 @@ public unsafe sealed partial class RoslynCompilerBackend {
             mangleChars.AddRange ("defaultStaticConstructor!");
 
         // The namespace.
-        var namespaceName = typeName->Name.NamespaceName.Span;
-        ES_Encodings.Identifier.GetChars (namespaceName, mangleChars.AddSpan (namespaceName.Length));
+        mangleChars.AddRange (typeName->Name.NamespaceName.GetCharsSpan ());
 
         // The mangled namespace separator.
         mangleChars.Add ('_', 2);
 
         // The function name.
-        var structName = typeName->Name.TypeName.Span;
-        ES_Encodings.Identifier.GetChars (structName, mangleChars.AddSpan (structName.Length));
+        mangleChars.AddRange (typeName->Name.TypeName.GetCharsSpan ());
 
         return mangleChars.Span.GetPooledString ();
     }
@@ -58,13 +54,13 @@ public unsafe sealed partial class RoslynCompilerBackend {
         using var mangleChars = new StructPooledList<char> (CL_ClearMode.Auto);
 
         // The namespace.
-        mangleChars.AddRange (func->Name.NamespaceNameString);
+        mangleChars.AddRange (func->Name.NamespaceName.GetCharsSpan ());
 
         // The mangled namespace separator.
         mangleChars.AddRange ("__");
 
         // The function name.
-        mangleChars.AddRange (func->Name.TypeNameString);
+        mangleChars.AddRange (func->Name.TypeName.GetCharsSpan ());
 
         return mangleChars.Span.GetPooledString ();
     }
@@ -73,31 +69,24 @@ public unsafe sealed partial class RoslynCompilerBackend {
         using var mangleChars = new StructPooledList<char> (CL_ClearMode.Auto);
 
         // The type name.
-        mangleChars.AddRange (owner->Name.TypeNameString);
+        mangleChars.AddRange (owner->Name.TypeName.GetCharsSpan ());
 
         // The mangled namespace separator.
         mangleChars.AddRange ("__");
 
         // The function name.
-        mangleChars.AddRange (func->Name.TypeNameString);
+        mangleChars.AddRange (func->Name.TypeName.GetCharsSpan ());
 
         return mangleChars.Span.GetPooledString ();
     }
 
     internal static string MangleStaticVariable ([DisallowNull] ESIR_StaticVariable staticVar) {
-        const string prefix = "StaticVar_";
-        var enc = ES_Encodings.Identifier;
-        var varName = staticVar.Name;
+        using var charsList = new StructPooledList<char> (CL_ClearMode.Auto);
 
-        var prefixLen = enc.GetByteCount (prefix);
-        using var chars = PooledArray<byte>.GetArray (prefixLen + varName.Length);
+        charsList.AddRange ("StaticVar_");
+        charsList.AddRange (staticVar.Name.GetCharsSpan ());
 
-        var writtenPrefixLen = enc.GetBytes (prefix, chars);
-        Debug.Assert (writtenPrefixLen == prefixLen);
-
-        varName.Span.CopyTo (chars.Span [prefixLen..]);
-
-        return varName.Span.GetPooledString (enc);
+        return charsList.Span.GetPooledString ();
     }
 
     #region Type names
@@ -110,15 +99,13 @@ public unsafe sealed partial class RoslynCompilerBackend {
         mangleChars.AddRange ("struct!");
 
         // The namespace.
-        var namespaceName = structData->TypeInfo.Name.NamespaceName.Span;
-        ES_Encodings.Identifier.GetChars (namespaceName, mangleChars.AddSpan (namespaceName.Length));
+        mangleChars.AddRange (structData->TypeInfo.Name.NamespaceName.GetCharsSpan ());
 
         // The mangled namespace separator.
         mangleChars.Add (':', 2);
 
         // The function name.
-        var structName = structData->TypeInfo.Name.TypeName.Span;
-        ES_Encodings.Identifier.GetChars (structName, mangleChars.AddSpan (structName.Length));
+        mangleChars.AddRange (structData->TypeInfo.Name.TypeName.GetCharsSpan ());
 
         return mangleChars.Span.GetPooledString ();
     }
@@ -128,9 +115,9 @@ public unsafe sealed partial class RoslynCompilerBackend {
 
         // Add the return type.
         mangleChars.AddRange ("Ret");
-        mangleChars.AddRange (type->ReturnType->Name.NamespaceNameString);
+        mangleChars.AddRange (type->ReturnType->Name.NamespaceName.GetCharsSpan ());
         mangleChars.AddRange ("__");
-        mangleChars.AddRange (type->ReturnType->Name.TypeNameString);
+        mangleChars.AddRange (type->ReturnType->Name.TypeName.GetCharsSpan ());
 
         // Add the arg types.
         foreach (var arg in type->ArgumentsList.Span) {
@@ -143,9 +130,9 @@ public unsafe sealed partial class RoslynCompilerBackend {
                 case ES_ArgumentType.Ref: mangleChars.AddRange ("ref"); break;
             }
 
-            mangleChars.AddRange (arg.ValueType->Name.NamespaceNameString);
+            mangleChars.AddRange (arg.ValueType->Name.NamespaceName.GetCharsSpan ());
             mangleChars.AddRange ("__");
-            mangleChars.AddRange (arg.ValueType->Name.TypeNameString);
+            mangleChars.AddRange (arg.ValueType->Name.TypeName.GetCharsSpan ());
         }
 
         return mangleChars.Span.GetPooledString ();
@@ -159,15 +146,13 @@ public unsafe sealed partial class RoslynCompilerBackend {
         mangleChars.AddRange ("array!");
 
         // The namespace.
-        var namespaceName = arrayData->TypeInfo.Name.NamespaceName.Span;
-        ES_Encodings.Identifier.GetChars (namespaceName, mangleChars.AddSpan (namespaceName.Length));
+        mangleChars.AddRange (arrayData->TypeInfo.Name.NamespaceName.GetCharsSpan ());
 
         // The mangled namespace separator.
         mangleChars.Add (':', 2);
 
         // The element type name.
-        var elementMangle = MangleTypeNameAny (arrayData->ElementType);
-        mangleChars.AddRange (elementMangle);
+        mangleChars.AddRange (MangleTypeNameAny (arrayData->ElementType));
 
         // The dimensions suffix.
         Debug.Assert (arrayData->DimensionsCount <= byte.MaxValue);
