@@ -376,7 +376,7 @@ public partial class ParserTest : UserControl {
                 foreach (var variable in localVarDefStatement.Variables) {
                     var exprText = variable.InitializationExpression != null ? " = [...]" : "";
 
-                    var varNode = AddNodeToTree ($"{baseText} {variable.Name}{exprText}", parentItem);
+                    var varNode = AddNodeToTree ($"{baseText} {variable.Name.Text}{exprText}", parentItem);
                     varNode.Tag = variable.Name;
 
                     AddAstNodeToTree (variable.InitializationExpression, varNode);

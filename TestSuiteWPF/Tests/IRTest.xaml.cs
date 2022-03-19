@@ -558,7 +558,7 @@ public partial class IRTest : UserControl {
                 break;
 
             case ESIR_NodeKind.StaticVariable when node is ESIR_StaticVariable staticVar:
-                AddNodeToTree ($"{staticVar.Name} : {GetTypeName (staticVar.Type)}", parentItem);
+                AddNodeToTree ($"{staticVar.Name.GetCharsSpan ()} : {GetTypeName (staticVar.Type)}", parentItem);
                 break;
 
 
