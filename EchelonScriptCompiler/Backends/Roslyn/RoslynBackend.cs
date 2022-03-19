@@ -21,6 +21,7 @@ using ChronosLib.Pooled;
 using Collections.Pooled;
 using CommunityToolkit.HighPerformance;
 using EchelonScriptCommon;
+using EchelonScriptCommon.Data;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.GarbageCollection;
 using EchelonScriptCommon.Utilities;
@@ -241,7 +242,7 @@ public unsafe sealed partial class RoslynCompilerBackend : ICompilerBackend, IDi
         public List<EchelonScriptErrorMessage> InfoList { get; init; }
 
         public ChronosLib.Unmanaged.IMemoryManager MemoryManager => EnvBuilder.MemoryManager;
-        public UnmanagedIdentifierPool IdPool => Env.IdPool;
+        public ES_IdentifierPool IdPool => Env.IdPool;
 
         public Span<StructPooledList<BackendMapping>> MappingsInit { private get; init; }
         public ref StructPooledList<BackendMapping> Mappings => ref MappingsInit [0];
@@ -252,8 +253,8 @@ public unsafe sealed partial class RoslynCompilerBackend : ICompilerBackend, IDi
         public Span<StructPooledList<MemberDeclarationSyntax>> TypesInit { private get; init; }
         public ref StructPooledList<MemberDeclarationSyntax> Types => ref TypesInit [0];
 
-        public Dictionary<ArrayPointer<byte>, ESIR_StaticVariable> StaticVariables { get; init; }
-        public Dictionary<ArrayPointer<byte>, ESIR_Function> Functions { get; init; }
+        public Dictionary<ES_Identifier, ESIR_StaticVariable> StaticVariables { get; init; }
+        public Dictionary<ES_Identifier, ESIR_Function> Functions { get; init; }
         public Dictionary<Pointer<ES_TypeInfo>, ESIR_Struct> Structs { get; init; }
 
         public SymbolStack<LabelSymbol> LabelStack { get; init; }

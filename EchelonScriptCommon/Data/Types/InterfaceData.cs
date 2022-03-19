@@ -8,7 +8,6 @@
  */
 
 using System.Diagnostics.CodeAnalysis;
-using EchelonScriptCommon.Utilities;
 
 namespace EchelonScriptCommon.Data.Types;
 
@@ -24,7 +23,7 @@ public unsafe struct ES_InterfaceData {
         #region ================== Constructors
 
         internal Builder ([DisallowNull] ES_InterfaceData* data, ES_AccessModifier accessMod,
-            ES_FullyQualifiedName fullyQualifiedName, ArrayPointer<byte> sourceUnit
+            ES_FullyQualifiedName fullyQualifiedName, ES_Identifier sourceUnit
         ) {
             InterfaceData = data;
             data->TypeInfo = new ES_TypeInfo (ES_TypeTag.Interface, accessMod, ES_TypeFlag.NoNew, sourceUnit, fullyQualifiedName);

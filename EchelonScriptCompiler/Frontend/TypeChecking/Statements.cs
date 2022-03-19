@@ -13,7 +13,6 @@ using ChronosLib.Pooled;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.CompilerCommon.IR;
-using EchelonScriptCompiler.Utilities;
 
 using static EchelonScriptCompiler.CompilerCommon.IR.ESIR_Factory;
 

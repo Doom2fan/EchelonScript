@@ -11,6 +11,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using ChronosLib.Pooled;
+using EchelonScriptCommon.Data;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.Utilities;
 using EchelonScriptCompiler.CompilerCommon;
@@ -30,11 +31,12 @@ internal unsafe static partial class Compiler_TypeChecking {
         public List<EchelonScriptErrorMessage> WarnList { get; init; }
         public List<EchelonScriptErrorMessage> InfoList { get; init; }
 
-        public ArrayPointer<byte> TransUnitName { get; set; }
+        public ES_Identifier TransUnitName { get; set; }
         public SourceData Source { get; set; }
 
         public SymbolStack<TCSymbol> Symbols { get; set; }
         public ESIR_Writer IRWriter { get; init; }
+        public ES_IdentifierPool IdPool => Env.IdPool;
 
         public TypeData GetArrayIndexType () => new (Constness.Const, Env.GetArrayIndexType ());
         public TypeData GetUnknownType (Constness constness) => new (constness, Env.TypeUnknownValue);
@@ -209,7 +211,7 @@ internal unsafe static partial class Compiler_TypeChecking {
         GatherAstImports (ref passData, ref astUnit);
 
         foreach (var nm in astUnit.Ast.Namespaces) {
-            ArrayPointer<byte> namespaceName;
+            ES_Identifier namespaceName;
             using (var nameArr = nm.NamespaceName.ToPooledChars ())
                 namespaceName = idPool.GetIdentifier (nameArr);
 

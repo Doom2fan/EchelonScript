@@ -13,7 +13,7 @@ using ChronosLib.Pooled;
 using EchelonScriptCommon;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCompiler.CompilerCommon.IR;
-using EchelonScriptCompiler.Utilities;
+using EchelonScriptCommon.Utilities;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
@@ -95,7 +95,7 @@ public unsafe sealed partial class RoslynCompilerBackend {
             var value = MemberAccessExpression (
                 SyntaxKind.SimpleMemberAccessExpression,
                 structExpr,
-                IdentifierName (expr.Name.GetPooledString (ES_Encodings.Identifier))
+                IdentifierName (expr.Name.GetCharsSpan ().GetPooledString ())
             );
             return new ExpressionData { Type = field.Type.Pointer, Value = value };
         }
@@ -114,7 +114,7 @@ public unsafe sealed partial class RoslynCompilerBackend {
         var typeArr = (ES_ArrayTypeData*) parentExpr.Type;
         var typeIndex = passData.Env.GetArrayIndexType ();
 
-        var memberChars = expr.Name.GetPooledString (ES_Encodings.Identifier).AsSpan ();
+        var memberChars = expr.Name.GetCharsSpan ();
         var arrExpr = CompileCode_NullCheck (parentExpr.Value!);
 
         ES_TypeInfo* memberType;

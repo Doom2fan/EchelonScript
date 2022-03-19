@@ -9,6 +9,7 @@
 
 using System;
 using System.Diagnostics;
+using EchelonScriptCommon.Data;
 using EchelonScriptCommon.Utilities;
 
 namespace EchelonScriptCompiler.CompilerCommon.IR;
@@ -183,7 +184,7 @@ public class ESIR_StaticVariableExpression : ESIR_Expression {
 
     private readonly ESIR_ValueNode nameNode;
 
-    public ArrayPointer<byte> Name => nameNode.GetIdentifier ()!.Value;
+    public ES_Identifier Name => nameNode.GetIdentifier ()!.Value;
 
     internal ESIR_StaticVariableExpression (ESIR_ValueNode index) => nameNode = index;
 
@@ -269,7 +270,7 @@ public class ESIR_MemberAccessExpression : ESIR_Expression {
     private readonly ESIR_ValueNode nameNode;
 
     public ESIR_Expression ExprParent => parentNode;
-    public ArrayPointer<byte> Name => nameNode.GetIdentifier ()!.Value;
+    public ES_Identifier Name => nameNode.GetIdentifier ()!.Value;
 
     internal ESIR_MemberAccessExpression (ESIR_Expression parent, ESIR_ValueNode name) {
         parentNode = parent;
@@ -295,7 +296,7 @@ public class ESIR_FunctionCallExpression : ESIR_Expression {
     private readonly ESIR_ValueNode nameNode;
     private readonly ESIR_List<ESIR_ArgumentValue> argumentsNode;
 
-    public ArrayPointer<byte> Name => nameNode.GetIdentifier ()!.Value;
+    public ES_Identifier Name => nameNode.GetIdentifier ()!.Value;
     public ESIR_List<ESIR_ArgumentValue> Arguments => argumentsNode;
 
     internal ESIR_FunctionCallExpression (ESIR_ValueNode name, ESIR_List<ESIR_ArgumentValue> arguments) {
@@ -573,7 +574,7 @@ public static partial class ESIR_Factory {
         return ret;
     }
 
-    public static ESIR_StaticVariableExpression StaticVariableExpression (ArrayPointer<byte> name)
+    public static ESIR_StaticVariableExpression StaticVariableExpression (ES_Identifier name)
         => StaticVariableExpression (ValueNode (name));
     private static ESIR_StaticVariableExpression StaticVariableExpression (ESIR_ValueNode name) {
         var node = ESIR_NodeCache.Shared.TryGetNode (ESIR_NodeKind.StaticVariableExpression, name, out var hash);
@@ -627,7 +628,7 @@ public static partial class ESIR_Factory {
         return ret;
     }
 
-    public static ESIR_MemberAccessExpression MemberAccessExpression (ESIR_Expression parent, ArrayPointer<byte> name)
+    public static ESIR_MemberAccessExpression MemberAccessExpression (ESIR_Expression parent, ES_Identifier name)
         => MemberAccessExpression (parent, ValueNode (name));
     private static ESIR_MemberAccessExpression MemberAccessExpression (ESIR_Expression parent, ESIR_ValueNode name) {
         var node = ESIR_NodeCache.Shared.TryGetNode (ESIR_NodeKind.MemberAccessExpression, parent, name, out var hash);
@@ -641,7 +642,7 @@ public static partial class ESIR_Factory {
         return ret;
     }
 
-    public static ESIR_FunctionCallExpression FunctionCallExpression (ArrayPointer<byte> name, ESIR_List<ESIR_ArgumentValue> arguments)
+    public static ESIR_FunctionCallExpression FunctionCallExpression (ES_Identifier name, ESIR_List<ESIR_ArgumentValue> arguments)
         => FunctionCallExpression (ValueNode (name), arguments);
     private static ESIR_FunctionCallExpression FunctionCallExpression (ESIR_ValueNode name, ESIR_List<ESIR_ArgumentValue> arguments) {
         var node = ESIR_NodeCache.Shared.TryGetNode (ESIR_NodeKind.FunctionCallExpression, name, arguments, out var hash);

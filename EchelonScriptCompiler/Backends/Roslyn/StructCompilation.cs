@@ -12,7 +12,6 @@ using System.Runtime.InteropServices;
 using ChronosLib.Pooled;
 using EchelonScriptCommon;
 using EchelonScriptCompiler.CompilerCommon.IR;
-using EchelonScriptCompiler.Utilities;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
@@ -30,7 +29,7 @@ public unsafe sealed partial class RoslynCompilerBackend {
             switch (member.Kind) {
                 case ESIR_NodeKind.Field when member is ESIR_Field fieldDef: {
                     var roslynType = GetRoslynType (fieldDef.Type.Pointer);
-                    var variableName = fieldDef.Name.GetPooledString (ES_Encodings.Identifier);
+                    var variableName = fieldDef.Name.GetCharsSpan ().GetPooledString ();
 
                     var variablesList = SingletonSeparatedList (VariableDeclarator (Identifier (variableName)));
                     memberTypes.Add (

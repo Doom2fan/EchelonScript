@@ -12,8 +12,8 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using ChronosLib.Pooled;
+using EchelonScriptCommon.Data;
 using EchelonScriptCommon.Data.Types;
-using EchelonScriptCommon.Utilities;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.CompilerCommon.IR;
 using EchelonScriptCompiler.Data;
@@ -23,7 +23,7 @@ namespace EchelonScriptCompiler.Frontend;
 public struct TranslationUnitData : IDisposable {
     #region ================== Instance fields
 
-    public ArrayPointer<byte> Name;
+    public ES_Identifier Name;
     public PooledArray<AstUnitData> AstUnits;
 
     #endregion
@@ -152,15 +152,15 @@ public unsafe struct FrontendSymbol {
 
 public unsafe class SymbolStack<TSymbolType> : IDisposable {
     private unsafe struct Scope {
-        public Dictionary<ArrayPointer<byte>, TSymbolType> Symbols;
+        public Dictionary<ES_Identifier, TSymbolType> Symbols;
 
-        public Scope (Dictionary<ArrayPointer<byte>, TSymbolType> symbols) => Symbols = symbols;
+        public Scope (Dictionary<ES_Identifier, TSymbolType> symbols) => Symbols = symbols;
     }
 
     #region ================== Instance fields
 
     private CL_PooledList<Scope> scopes;
-    private CL_PooledList<Dictionary<ArrayPointer<byte>, TSymbolType>> pooledDicts;
+    private CL_PooledList<Dictionary<ES_Identifier, TSymbolType>> pooledDicts;
     private int version;
 
     private TSymbolType notFoundValue;
@@ -182,7 +182,7 @@ public unsafe class SymbolStack<TSymbolType> : IDisposable {
 
     public SymbolStack (TSymbolType notFoundVal) {
         scopes = new CL_PooledList<Scope> ();
-        pooledDicts = new CL_PooledList<Dictionary<ArrayPointer<byte>, TSymbolType>> ();
+        pooledDicts = new CL_PooledList<Dictionary<ES_Identifier, TSymbolType>> ();
         version = 0;
 
         notFoundValue = notFoundVal;
@@ -194,9 +194,9 @@ public unsafe class SymbolStack<TSymbolType> : IDisposable {
 
     #region ================== Instance methods
 
-    private Dictionary<ArrayPointer<byte>, TSymbolType> GetDict () {
+    private Dictionary<ES_Identifier, TSymbolType> GetDict () {
         if (pooledDicts.Count < 1)
-            return new Dictionary<ArrayPointer<byte>, TSymbolType> ();
+            return new Dictionary<ES_Identifier, TSymbolType> ();
 
         var idx = pooledDicts.Count - 1;
 
@@ -230,7 +230,7 @@ public unsafe class SymbolStack<TSymbolType> : IDisposable {
         pooledDicts.Add (dict);
     }
 
-    public TSymbolType? GetSymbol (ArrayPointer<byte> name) {
+    public TSymbolType? GetSymbol (ES_Identifier name) {
         CheckDisposed ();
 
         for (var i = scopes.Count - 1; i >= 0; i--) {
@@ -243,7 +243,7 @@ public unsafe class SymbolStack<TSymbolType> : IDisposable {
         return notFoundValue;
     }
 
-    public bool AddSymbol (ArrayPointer<byte> name, TSymbolType symbol) {
+    public bool AddSymbol (ES_Identifier name, TSymbolType symbol) {
         CheckDisposed ();
 
         version++;
@@ -290,7 +290,7 @@ public unsafe class SymbolStack<TSymbolType> : IDisposable {
 
     public Enumerator GetEnumerator () => new (this);
 
-    public struct Enumerator : IEnumerator<IReadOnlyDictionary<ArrayPointer<byte>, TSymbolType>> {
+    public struct Enumerator : IEnumerator<IReadOnlyDictionary<ES_Identifier, TSymbolType>> {
         #region ================== Instance fields
 
         private int version;
@@ -302,7 +302,7 @@ public unsafe class SymbolStack<TSymbolType> : IDisposable {
 
         #region ================== Instance properties
 
-        public IReadOnlyDictionary<ArrayPointer<byte>, TSymbolType> Current {
+        public IReadOnlyDictionary<ES_Identifier, TSymbolType> Current {
             get {
                 CheckValid ();
                 return enumerator.Current.Symbols;

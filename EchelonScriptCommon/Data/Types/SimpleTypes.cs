@@ -9,7 +9,6 @@
 
 using System;
 using System.Runtime.InteropServices;
-using EchelonScriptCommon.Utilities;
 
 namespace EchelonScriptCommon.Data.Types;
 
@@ -39,7 +38,7 @@ public unsafe struct ES_IntTypeData {
     #region ================== Constructors
 
     public ES_IntTypeData (
-        ES_AccessModifier accessMod, ArrayPointer<byte> sourceUnit, ES_FullyQualifiedName fullyQualifiedName,
+        ES_AccessModifier accessMod, ES_Identifier sourceUnit, ES_FullyQualifiedName fullyQualifiedName,
         ES_IntSize size, bool unsigned
     ) {
         TypeInfo = new ES_TypeInfo (ES_TypeTag.Int, accessMod, ES_TypeFlag.NoRefs, sourceUnit, fullyQualifiedName);
@@ -73,7 +72,7 @@ public unsafe struct ES_FloatTypeData {
     #region ================== Constructors
 
     public ES_FloatTypeData (
-        ES_AccessModifier accessMod, ArrayPointer<byte> sourceUnit, ES_FullyQualifiedName fullyQualifiedName,
+        ES_AccessModifier accessMod, ES_Identifier sourceUnit, ES_FullyQualifiedName fullyQualifiedName,
         ES_FloatSize size
     ) {
         TypeInfo = new ES_TypeInfo (ES_TypeTag.Float, accessMod, ES_TypeFlag.NoRefs, sourceUnit, fullyQualifiedName);
@@ -103,10 +102,8 @@ public unsafe struct ES_ReferenceData {
 
     #region ================== Constructors
 
-    public ES_ReferenceData (
-        ES_FullyQualifiedName fullyQualifiedName, ES_TypeInfo* pointedType
-    ) {
-        TypeInfo = new (ES_TypeTag.Reference, ES_AccessModifier.Public, ES_TypeFlag.None, ArrayPointer<byte>.Null, fullyQualifiedName) {
+    public ES_ReferenceData (ES_FullyQualifiedName fullyQualifiedName, ES_TypeInfo* pointedType) {
+        TypeInfo = new (ES_TypeTag.Reference, ES_AccessModifier.Public, ES_TypeFlag.None, ES_Identifier.Empty, fullyQualifiedName) {
             RuntimeSize = sizeof (void*)
         };
 
@@ -127,11 +124,9 @@ public unsafe struct ES_ConstData {
 
     #region ================== Constructors
 
-    public ES_ConstData (
-        ES_FullyQualifiedName fullyQualifiedName, ES_TypeInfo* innerType, bool immutable
-    ) {
+    public ES_ConstData (ES_FullyQualifiedName fullyQualifiedName, ES_TypeInfo* innerType, bool immutable) {
         var tag = immutable ? ES_TypeTag.Immutable : ES_TypeTag.Const;
-        TypeInfo = new ES_TypeInfo (tag, ES_AccessModifier.Public, ES_TypeFlag.None, ArrayPointer<byte>.Null, fullyQualifiedName);
+        TypeInfo = new ES_TypeInfo (tag, ES_AccessModifier.Public, ES_TypeFlag.None, ES_Identifier.Empty, fullyQualifiedName);
 
         InnerType = innerType;
     }

@@ -15,7 +15,7 @@ using CommunityToolkit.HighPerformance;
 using EchelonScriptCommon;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.GarbageCollection;
-using EchelonScriptCompiler.Utilities;
+using EchelonScriptCommon.Utilities;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;

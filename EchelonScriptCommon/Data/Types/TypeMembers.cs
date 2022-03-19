@@ -27,13 +27,13 @@ public unsafe struct ES_MemberData {
     public readonly ES_AccessModifier AccessModifier;
     public readonly ES_MemberType MemberType;
     public readonly ES_MemberFlags Flags;
-    public readonly ArrayPointer<byte> Name;
-    public readonly ArrayPointer<byte> SourceUnit;
+    public readonly ES_Identifier Name;
+    public readonly ES_Identifier SourceUnit;
 
     public ES_MemberData (
         ES_AccessModifier accessMod,
         ES_MemberType type, ES_MemberFlags flags,
-        ArrayPointer<byte> name, ArrayPointer<byte> srcUnit
+        ES_Identifier name, ES_Identifier srcUnit
     ) {
         AccessModifier = accessMod;
         MemberType = type;
@@ -50,7 +50,7 @@ public unsafe struct ES_MemberData_Variable {
     public readonly ES_TypeInfo* Type;
 
     public ES_MemberData_Variable (
-        ArrayPointer<byte> name, ArrayPointer<byte> srcUnit, ES_AccessModifier accessMod,
+        ES_Identifier name, ES_Identifier srcUnit, ES_AccessModifier accessMod,
         ES_MemberFlags flags, int offset, ES_TypeInfo* type
     ) {
         Info = new ES_MemberData (accessMod, ES_MemberType.Field, flags, name, srcUnit);
@@ -66,7 +66,7 @@ public unsafe struct ES_MemberData_Function {
 
     public ES_MemberData_Function (
         ES_MemberFlags flags, ES_FullyQualifiedName fqn,
-        ES_AccessModifier accessMod, ArrayPointer<byte> srcUnit,
+        ES_AccessModifier accessMod, ES_Identifier srcUnit,
         ES_FunctionPrototypeData* funcType, ArrayPointer<ES_FunctionArgData> args, int optArgCount
     ) {
         Info = new ES_MemberData (accessMod, ES_MemberType.Field, flags, fqn.TypeName, srcUnit);

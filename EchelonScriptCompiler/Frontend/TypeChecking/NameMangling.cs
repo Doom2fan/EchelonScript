@@ -7,124 +7,101 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-using System;
 using ChronosLib.Pooled;
-using EchelonScriptCommon;
+using EchelonScriptCommon.Data;
 using EchelonScriptCommon.Data.Types;
-using EchelonScriptCommon.Utilities;
 
 namespace EchelonScriptCompiler.Frontend;
 
 internal unsafe static partial class Compiler_TypeChecking {
-    private static void AddSplit<T> (ref this Span<T> span, ReadOnlySpan<T> data) {
-        data.CopyTo (span);
-        span = span [data.Length..];
-    }
-
-    private static void AddSplit<T> (ref this Span<T> span, T data, int count) {
-        span [..count].Fill (data);
-        span = span [count..];
-    }
-
-    private static ArrayPointer<byte> MangleTypeName (ref PassData passData, ES_FullyQualifiedName fqn) {
+    private static ES_Identifier MangleTypeName (ref PassData passData, ES_FullyQualifiedName fqn) {
         if (fqn.NamespaceName.Equals (passData.Env.GlobalTypesNamespace))
             return fqn.TypeName;
 
-        var totalLen = fqn.NamespaceName.Length + 2 + fqn.TypeName.Length;
-        using var bytesArr = PooledArray<byte>.GetArray (totalLen);
+        using var charsArray = new StructPooledList<char> (CL_ClearMode.Auto);
+        charsArray.AddRange (fqn.NamespaceName.GetCharsSpan ());
+        charsArray.AddRange ("::");
+        charsArray.AddRange (fqn.TypeName.GetCharsSpan ());
 
-        var workSpan = bytesArr.Span;
-        workSpan.AddSplit (fqn.NamespaceName.Span);
-        workSpan.AddSplit ((byte) ':', 2);
-        workSpan.AddSplit (fqn.TypeName.Span);
-
-        return passData.Env.IdPool.GetIdentifier (bytesArr.Span);
+        return passData.Env.IdPool.GetIdentifier (charsArray.Span);
     }
 
-    private static ArrayPointer<byte> MangleTypeName (ref PassData passData, ES_TypeInfo* type)
+    private static ES_Identifier MangleTypeName (ref PassData passData, ES_TypeInfo* type)
         => MangleTypeName (ref passData, type->Name);
 
-    private static void MangleTypeName (ref PassData passData, ES_TypeInfo* type, ref StructPooledList<byte> list) {
+    private static void MangleTypeName (ref PassData passData, ES_TypeInfo* type, ref StructPooledList<char> list) {
         var fqn = type->Name;
 
         if (!fqn.NamespaceName.Equals (passData.Env.GlobalTypesNamespace)) {
-            list.AddRange (fqn.NamespaceName.Span);
-            list.Add ((byte) ':', 2);
+            list.AddRange (fqn.NamespaceName.GetCharsSpan ());
+            list.AddRange ("::");
         }
-        list.AddRange (fqn.TypeName.Span);
+        list.AddRange (fqn.TypeName.GetCharsSpan ());
     }
 
-    private static ArrayPointer<byte> MangleFunctionName (ref PassData passData, ES_FunctionData* func) {
-        var bytesList = new StructPooledList<byte> (CL_ClearMode.Auto);
+    private static ES_Identifier MangleFunctionName (ref PassData passData, ES_FunctionData* func) {
+        var charsList = new StructPooledList<char> (CL_ClearMode.Auto);
 
         try {
-            bytesList.AddRange (func->Name.NamespaceName.Span);
-            bytesList.Add ((byte) ':', 2);
-            bytesList.AddRange (func->Name.TypeName.Span);
+            charsList.AddRange (func->Name.NamespaceName.GetCharsSpan ());
+            charsList.AddRange ("::");
+            charsList.AddRange (func->Name.TypeName.GetCharsSpan ());
 
             var protoArgs = func->FunctionType->ArgumentsList.Span;
             if (protoArgs.Length > 0) {
-                bytesList.Add ((byte) '$');
+                charsList.Add ('$');
 
                 var firstArg = true;
                 foreach (var arg in protoArgs) {
                     if (firstArg)
                         firstArg = false;
                     else
-                        bytesList.Add ((byte) '_');
+                        charsList.Add ('_');
 
                     switch (arg.ArgType) {
                         case ES_ArgumentType.Out:
-                            bytesList.Add ((byte) '@');
+                            charsList.Add ('@');
                             break;
 
                         case ES_ArgumentType.Ref:
-                            bytesList.Add ((byte) '&');
+                            charsList.Add ('&');
                             break;
                     }
 
-                    MangleTypeName (ref passData, arg.ValueType, ref bytesList);
+                    MangleTypeName (ref passData, arg.ValueType, ref charsList);
                 }
             }
 
-            return passData.Env.IdPool.GetIdentifier (bytesList.Span);
+            return passData.Env.IdPool.GetIdentifier (charsList.Span);
         } finally {
-            bytesList.Dispose ();
+            charsList.Dispose ();
         }
     }
 
-    private static ArrayPointer<byte> MangleStaticVar (
-        ref PassData passData, ES_FullyQualifiedName typeName, ArrayPointer<byte> varName
+    private static ES_Identifier MangleStaticVar (
+        ref PassData passData, ES_FullyQualifiedName typeName, ES_Identifier varName
     ) {
-        var idPool = passData.Env.IdPool;
+        using var charsArr = new StructPooledList<char> (CL_ClearMode.Auto);
 
-        var totalLen = typeName.NamespaceName.Length + 2 + typeName.TypeName.Length + 1 + varName.Length;
-        using var bytesArr = PooledArray<byte>.GetArray (totalLen);
+        charsArr.AddRange (typeName.NamespaceName.GetCharsSpan ());
+        charsArr.AddRange ("::");
+        charsArr.AddRange (typeName.TypeName.GetCharsSpan ());
+        charsArr.Add ('.');
+        charsArr.AddRange (varName.GetCharsSpan ());
 
-        var workSpan = bytesArr.Span;
-        workSpan.AddSplit (typeName.NamespaceName.Span);
-        workSpan.AddSplit ((byte) ':', 2);
-        workSpan.AddSplit (typeName.TypeName.Span);
-        workSpan.AddSplit ((byte) '.', 1);
-        workSpan.AddSplit (varName.Span);
-
-        return idPool.GetIdentifier (bytesArr.Span);
+        return passData.IdPool.GetIdentifier (charsArr.Span);
     }
 
-    private static ArrayPointer<byte> MangleDefStaticConstructor (ref PassData passData, ES_FullyQualifiedName typeFQN) {
+    private static ES_Identifier MangleDefStaticConstructor (ref PassData passData, ES_FullyQualifiedName typeFQN) {
         const string defConsName = ES_Constants.DefaultStaticConstructorName;
 
         var fqnMangle = MangleTypeName (ref passData, typeFQN);
+        using var chars = new StructPooledList<char> (CL_ClearMode.Auto);
 
-        var fqnMangleLen = fqnMangle.Length;
-        var suffixLen = defConsName.Length;
+        chars.AddRange (fqnMangle.GetCharsSpan ());
+        chars.AddRange ("$$");
+        chars.AddRange (defConsName);
 
-        using var bytes = PooledArray<byte>.GetArray (fqnMangleLen + 2 + suffixLen);
-
-        fqnMangle.Span.CopyTo (bytes);
-        bytes.Span.Slice (fqnMangleLen, 2).Fill ((byte) '$');
-        ES_Encodings.Identifier.GetBytes (defConsName, bytes.Span [(fqnMangleLen + 2)..]);
-
-        return passData.Env.IdPool.GetIdentifier (bytes);
+        return passData.IdPool.GetIdentifier (chars.Span);
     }
 }

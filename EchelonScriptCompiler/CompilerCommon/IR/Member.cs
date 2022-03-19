@@ -8,6 +8,7 @@
  */
 
 using System.Diagnostics;
+using EchelonScriptCommon.Data;
 using EchelonScriptCommon.Utilities;
 
 namespace EchelonScriptCompiler.CompilerCommon.IR;
@@ -24,7 +25,7 @@ public class ESIR_Field : ESIR_MemberNode {
 
     public ESIR_TypeNode Type => typeNode;
     public int Offset => (int) offsetNode.GetInt ()!.Value;
-    public ArrayPointer<byte> Name => nameNode.GetIdentifier ()!.Value;
+    public ES_Identifier Name => nameNode.GetIdentifier ()!.Value;
 
     internal ESIR_Field (ESIR_TypeNode type, ESIR_ValueNode offset, ESIR_ValueNode name) {
         typeNode = type;
@@ -52,8 +53,8 @@ public class ESIR_StaticField : ESIR_MemberNode {
     private readonly ESIR_ValueNode nameNode;
     private readonly ESIR_ValueNode staticVariableNode;
 
-    public ArrayPointer<byte> Name => nameNode.GetIdentifier ()!.Value;
-    public ArrayPointer<byte> StaticVariable => staticVariableNode.GetIdentifier ()!.Value;
+    public ES_Identifier Name => nameNode.GetIdentifier ()!.Value;
+    public ES_Identifier StaticVariable => staticVariableNode.GetIdentifier ()!.Value;
 
     internal ESIR_StaticField (ESIR_ValueNode name, ESIR_ValueNode staticVar) {
         nameNode = name;
@@ -73,12 +74,12 @@ public class ESIR_StaticField : ESIR_MemberNode {
 }
 
 public static partial class ESIR_Factory {
-    public static ESIR_Field Field (ESIR_TypeNode type, int offset, ArrayPointer<byte> name)
+    public static ESIR_Field Field (ESIR_TypeNode type, int offset, ES_Identifier name)
         => Field (type, ValueNode (offset), ValueNode (name));
     private static ESIR_Field Field (ESIR_TypeNode type, ESIR_ValueNode offset, ESIR_ValueNode name)
         => new (type, offset, name);
 
-    public static ESIR_StaticField StaticField (ArrayPointer<byte> name, ArrayPointer<byte> staticVar)
+    public static ESIR_StaticField StaticField (ES_Identifier name, ES_Identifier staticVar)
         => StaticField (ValueNode (name), ValueNode (staticVar));
     private static ESIR_StaticField StaticField (ESIR_ValueNode name, ESIR_ValueNode staticVar)
         => new (name, staticVar);

@@ -10,6 +10,7 @@
 using System;
 using System.Collections.Generic;
 using ChronosLib.Pooled;
+using EchelonScriptCommon.Data;
 using EchelonScriptCompiler.Backends;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.CompilerCommon.IR;
@@ -74,11 +75,11 @@ public class EchelonScript_Compiler : IDisposable {
 
     #region ================== Instance methods
 
-    public void Setup (out EchelonScriptEnvironment env) {
+    public void Setup (ES_IdentifierPool idPool, out EchelonScriptEnvironment env) {
         if (environment != null)
             throw new CompilationException ("The compiler has already been set up!");
 
-        environment = EchelonScriptEnvironment.CreateEnvironment (out environmentBuilder);
+        environment = EchelonScriptEnvironment.CreateEnvironment (idPool, out environmentBuilder);
         frontend.Setup (environment, environmentBuilder);
 
         env = environment;

@@ -12,11 +12,11 @@ using System.Buffers;
 using System.Diagnostics;
 using ChronosLib.Pooled;
 using EchelonScriptCommon;
+using EchelonScriptCommon.Data;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.Utilities;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.CompilerCommon.IR;
-using EchelonScriptCompiler.Utilities;
 
 using static EchelonScriptCompiler.CompilerCommon.IR.ESIR_Factory;
 
@@ -1225,7 +1225,7 @@ internal unsafe static partial class Compiler_TypeChecking {
 
     private static ExpressionData CheckExpression_MemberAccess_Basic (
         ref PassData passData, ES_AstMemberAccessExpression expr,
-        ExpressionData parentExpr, ArrayPointer<byte> memberId,
+        ExpressionData parentExpr, ES_Identifier memberId,
         TypeData expectedType
     ) {
         Debug.Assert (expr.Member is not null);
@@ -1282,7 +1282,7 @@ internal unsafe static partial class Compiler_TypeChecking {
 
     private static ExpressionData CheckExpression_MemberAccessStatic_Aggregate (
         ref PassData passData, ES_AstMemberAccessExpression expr,
-        ExpressionData parentExpr, ArrayPointer<byte> memberId,
+        ExpressionData parentExpr, ES_Identifier memberId,
         TypeData expectedType
     ) {
         Debug.Assert (expr.Member is not null);
@@ -1485,8 +1485,8 @@ internal unsafe static partial class Compiler_TypeChecking {
 
             var arg = func->Arguments.Span [callArgCount];
             passData.ErrorList.Add (ES_FrontendErrors.GenMissingFuncArg (
-                arg.Name.GetPooledString (ES_Encodings.Identifier),
-                func->Name.TypeName.GetPooledString (ES_Encodings.Identifier),
+                arg.Name.GetCharsSpan ().GetPooledString (),
+                func->Name.TypeName.GetCharsSpan ().GetPooledString (),
                 passData.Source, errBounds
             ));
             ignoreDefArgs = true;
@@ -1503,8 +1503,8 @@ internal unsafe static partial class Compiler_TypeChecking {
             if (argIdx >= funcArgCount) {
                 if (argIdx == funcArgCount) {
                     passData.ErrorList.Add (ES_FrontendErrors.GenTooManyFuncArgs (
-                        func->Name.TypeName.GetPooledString (ES_Encodings.Identifier), passData.Source,
-                        arg.ValueExpression.NodeBounds
+                        func->Name.TypeName.GetCharsSpan ().GetPooledString (),
+                        passData.Source, arg.ValueExpression.NodeBounds
                     ));
                     ignoreDefArgs = true;
                 }
@@ -1520,7 +1520,7 @@ internal unsafe static partial class Compiler_TypeChecking {
 
             if (arg.ArgType != argTypeData->ArgType && argTypeData->ArgType != ES_ArgumentType.In) {
                 passData.ErrorList.Add (ES_FrontendErrors.GenWrongArgType (
-                    argData->Name.GetPooledString (ES_Encodings.Identifier),
+                    argData->Name.GetCharsSpan ().GetPooledString (),
                     arg.ArgType.ToString (), passData.Source, arg.ValueExpression.NodeBounds
                 ));
             }

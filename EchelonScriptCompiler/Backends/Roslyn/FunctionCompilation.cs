@@ -12,10 +12,10 @@ using System.Diagnostics;
 using System.Globalization;
 using ChronosLib.Pooled;
 using EchelonScriptCommon;
+using EchelonScriptCommon.Data;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.Utilities;
 using EchelonScriptCompiler.CompilerCommon.IR;
-using EchelonScriptCompiler.Utilities;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -79,19 +79,19 @@ public unsafe sealed partial class RoslynCompilerBackend {
     }
 
     internal struct LabelSymbol {
-        public ArrayPointer<byte> Name { get; init; }
+        public ES_Identifier? Name { get; init; }
         public string JumpTarget { get; init; }
         public string? BreakTarget { get; init; }
         public string? ContinueTarget { get; init; }
 
-        public LabelSymbol (ArrayPointer<byte> name, string jumpTarget, string? breakTarget, string? continueTarget) {
+        public LabelSymbol (ES_Identifier? name, string jumpTarget, string? breakTarget, string? continueTarget) {
             Name = name;
             JumpTarget = jumpTarget;
             BreakTarget = breakTarget;
             ContinueTarget = continueTarget;
         }
 
-        public LabelSymbol (ArrayPointer<byte> name, string jumpTarget) {
+        public LabelSymbol (ES_Identifier? name, string jumpTarget) {
             Name = name;
             JumpTarget = jumpTarget;
             BreakTarget = null;
@@ -141,7 +141,7 @@ public unsafe sealed partial class RoslynCompilerBackend {
                     var varValue = GetDefaultValue (memberVarType);
                     initExprNodes.Add (AssignmentExpression (
                         SyntaxKind.SimpleAssignmentExpression,
-                        IdentifierName (memberPtr->Name.GetPooledString (ES_Encodings.Identifier)),
+                        IdentifierName (memberPtr->Name.GetCharsSpan ().GetPooledString ()),
                         varValue
                     ));
                     initExprNodes.Add (Token (SyntaxKind.CommaToken));
@@ -199,7 +199,7 @@ public unsafe sealed partial class RoslynCompilerBackend {
     private static string GetLabelNameLoopContinue (ReadOnlySpan<char> name) => GetPrefixedName (name, "_LoopContinue");
 
     private static void CompileFunction (ref PassData passData, ESIR_Function func) {
-        var roslynFuncName = func.Name.GetPooledString (ES_Encodings.Identifier);
+        var roslynFuncName = func.Name.GetCharsSpan ().GetPooledString ();
         using var argsList = new StructPooledList<ParameterSyntax> (CL_ClearMode.Auto);
 
         passData.LabelStack.Push ();
@@ -247,16 +247,16 @@ public unsafe sealed partial class RoslynCompilerBackend {
                 var parentTypeExpr = LiteralExpression (SyntaxKind.NullLiteralExpression);
                 var fileNameExpr = LiteralExpression (SyntaxKind.NullLiteralExpression);
 
-                if (traceData.ParentType.Elements != null)
-                    parentTypeExpr = StringLiteral (traceData.ParentType.GetPooledString (ES_Encodings.Identifier));
+                if (traceData.ParentType.HasValue)
+                    parentTypeExpr = StringLiteral (traceData.ParentType.Value.GetCharsSpan ().GetPooledString ());
                 if (traceData.FileName is not null)
                     fileNameExpr = StringLiteral (traceData.FileName);
 
                 attrsList.Add (Attribute (
                     IdentifierName (nameof (ES_MethodTraceDataAttribute)),
                     SimpleAttributeArgumentList (
-                        AttributeArgument (StringLiteral (traceData.Namespace.GetPooledString (ES_Encodings.Identifier))),
-                        AttributeArgument (StringLiteral (traceData.Name.GetPooledString (ES_Encodings.Identifier))),
+                        AttributeArgument (StringLiteral (traceData.Namespace.GetCharsSpan ().GetPooledString ())),
+                        AttributeArgument (StringLiteral (traceData.Name.GetCharsSpan ().GetPooledString ())),
 
                         AttributeArgument (
                             NameEquals (IdentifierName (nameof (ES_MethodTraceDataAttribute.ParentType))), null,
@@ -416,7 +416,7 @@ public unsafe sealed partial class RoslynCompilerBackend {
                 if (breakStmt.Label is not null) {
                     var label = passData.LabelStack.GetSymbol (breakStmt.Label.Value);
 
-                    if (label.Name.Elements is null)
+                    if (!label.Name.HasValue)
                         throw new CompilationException ("Break label doesn't exist.");
                     else if (label.BreakTarget is null)
                         throw new CompilationException ("Break label has no continue target.");
@@ -439,7 +439,7 @@ public unsafe sealed partial class RoslynCompilerBackend {
                 if (continueStmt.Label is not null) {
                     var label = passData.LabelStack.GetSymbol (continueStmt.Label.Value);
 
-                    if (label.Name.Elements is null)
+                    if (!label.Name.HasValue)
                         throw new CompilationException ("Continue label doesn't exist.");
                     else if (label.ContinueTarget is null)
                         throw new CompilationException ("Continue label has no continue target.");
@@ -460,7 +460,7 @@ public unsafe sealed partial class RoslynCompilerBackend {
             case ESIR_NodeKind.GotoLabelStatement when stmt is ESIR_GotoLabelStatement gotoLabelStmt: {
                 var label = passData.LabelStack.GetSymbol (gotoLabelStmt.Label);
 
-                if (label.Name.Elements is null)
+                if (!label.Name.HasValue)
                     throw new CompilationException ("Goto label doesn't exist.");
 
                 stmtsList.Add (GotoStatement (SyntaxKind.GotoStatement, IdentifierName (label.JumpTarget)));
@@ -508,7 +508,7 @@ public unsafe sealed partial class RoslynCompilerBackend {
         const string alreadyInUseError = "Name already in use in label stack?";
 
         var labelName = labelStmt.Label;
-        var labelNameStr = labelName.GetPooledString (ES_Encodings.Identifier);
+        var labelNameStr = labelName.GetCharsSpan ().GetPooledString ();
 
         if (labelStmt.Statement is ESIR_LoopStatement labeledLoop) {
             var labelSymbol = new LabelSymbol (
