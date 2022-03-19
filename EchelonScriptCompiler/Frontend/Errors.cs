@@ -290,7 +290,7 @@ public static class ES_FrontendErrors {
         return new EchelonScriptErrorMessage (errorToken, errorMessage);
     }
     public static EchelonScriptErrorMessage GenArgTypeCantUseDefExpr (string argName, string argType, EchelonScriptToken errorToken) {
-        var errorMessage = ArgAlreadyDefined.Replace ("{arg}", argName).Replace ("{argType}", argType);
+        var errorMessage = ArgTypeCantUseDefExpr.Replace ("{arg}", argName).Replace ("{argType}", argType);
         return new EchelonScriptErrorMessage (errorToken, errorMessage);
     }
 
