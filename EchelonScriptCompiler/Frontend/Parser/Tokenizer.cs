@@ -739,7 +739,8 @@ public class EchelonScriptTokenizer : IDisposable {
     protected int ReadStringWhile (Predicate<char> func) {
         var length = 0;
 
-        while (PeekChar () != null) {
+        char? c;
+        while ((c = PeekChar ()) != null && func (c.Value)) {
             ReadChar ();
             length++;
         }
