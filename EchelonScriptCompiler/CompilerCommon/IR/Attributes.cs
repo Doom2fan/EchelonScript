@@ -11,7 +11,6 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using EchelonScriptCommon.Data;
 using EchelonScriptCommon.Data.Types;
-using EchelonScriptCommon.Utilities;
 
 namespace EchelonScriptCompiler.CompilerCommon.IR;
 

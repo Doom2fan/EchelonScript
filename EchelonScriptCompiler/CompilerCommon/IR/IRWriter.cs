@@ -12,7 +12,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using ChronosLib.Pooled;
 using EchelonScriptCommon.Data;
-using EchelonScriptCommon.Utilities;
 using static EchelonScriptCompiler.CompilerCommon.IR.ESIR_Factory;
 
 namespace EchelonScriptCompiler.CompilerCommon.IR;

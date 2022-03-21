@@ -12,7 +12,6 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text;
 using EchelonScriptCommon.Data;
-using EchelonScriptCommon.Utilities;
 
 namespace EchelonScriptCompiler.CompilerCommon.IR;
 

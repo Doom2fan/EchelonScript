@@ -9,7 +9,6 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
-using EchelonScriptCommon.Utilities;
 
 namespace EchelonScriptCommon.Data.Types;
 

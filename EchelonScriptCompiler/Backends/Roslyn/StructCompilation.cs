@@ -10,7 +10,6 @@
 using System;
 using System.Runtime.InteropServices;
 using ChronosLib.Pooled;
-using EchelonScriptCommon;
 using EchelonScriptCompiler.CompilerCommon.IR;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;

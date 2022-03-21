@@ -9,7 +9,6 @@
 
 using System.Diagnostics;
 using EchelonScriptCommon.Data;
-using EchelonScriptCommon.Utilities;
 
 namespace EchelonScriptCompiler.CompilerCommon.IR;
 

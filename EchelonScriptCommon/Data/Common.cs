@@ -7,9 +7,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-using System;
 using ChronosLib.Pooled;
-using CommunityToolkit.HighPerformance.Buffers;
 using EchelonScriptCommon.Utilities;
 
 namespace EchelonScriptCommon.Data.Types;

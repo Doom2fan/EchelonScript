@@ -11,7 +11,6 @@ using System;
 using System.Buffers;
 using System.Diagnostics;
 using ChronosLib.Pooled;
-using EchelonScriptCommon;
 using EchelonScriptCommon.Data;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.Utilities;
