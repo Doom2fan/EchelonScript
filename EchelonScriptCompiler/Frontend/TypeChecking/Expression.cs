@@ -701,7 +701,7 @@ internal unsafe static partial class Compiler_TypeChecking {
         if (exprData.Type.Type->TypeTag == ES_TypeTag.Null) {
             if (!IsNullable (ref passData, destType, out var retType)) {
                 passData.ErrorList.Add (ES_FrontendErrors.GenTypeNotNullable (
-                    destType.ToType (ref passData)->Name.GetNameAsTypeString (),
+                    passData.Env.GetNiceTypeNameString (destType.ToType (ref passData), true),
                     passData.Source, bounds
                 ));
 
@@ -716,14 +716,14 @@ internal unsafe static partial class Compiler_TypeChecking {
         } else if (!MustBeCompat (ref passData, ref exprData, destType)) {
             if (ExplicitCast (ref passData, ref exprData, destType, out _, true)) {
                 passData.ErrorList.Add (ES_FrontendErrors.GenNoImplicitCast (
-                    destType.ToType (ref passData)->Name.GetNameAsTypeString (),
-                    exprData.Type.ToType (ref passData)->Name.GetNameAsTypeString (),
+                    passData.Env.GetNiceTypeNameString (destType.ToType (ref passData), true),
+                    passData.Env.GetNiceTypeNameString (exprData.Type.ToType (ref passData), true),
                     passData.Source, bounds
                 ));
             } else {
                 passData.ErrorList.Add (ES_FrontendErrors.GenNoCast (
-                    destType.ToType (ref passData)->Name.GetNameAsTypeString (),
-                    exprData.Type.ToType (ref passData)->Name.GetNameAsTypeString (),
+                    passData.Env.GetNiceTypeNameString (destType.ToType (ref passData), true),
+                    passData.Env.GetNiceTypeNameString (exprData.Type.ToType (ref passData), true),
                     passData.Source, bounds
                 ));
             }
@@ -898,7 +898,7 @@ internal unsafe static partial class Compiler_TypeChecking {
 
         if (objType->Flags.HasFlag (ES_TypeFlag.NoNew)) {
             passData.ErrorList.Add (ES_FrontendErrors.GenNoTypeNew (
-                objType->Name.GetNameAsTypeString (), passData.Source, expr.NodeBounds
+                passData.Env.GetNiceTypeNameString (objType, true), passData.Source, expr.NodeBounds
             ));
 
             errorFound = true;
@@ -945,7 +945,8 @@ internal unsafe static partial class Compiler_TypeChecking {
         // Error out if the constructor is null.
         if (constructor is null && expr.Arguments.Length > 0) {
             passData.ErrorList.Add (ES_FrontendErrors.GenNoSuchConstructor (
-                objType->Name.GetNameAsTypeString (), passData.Env.GetFunctionSignatureString (argsList),
+                passData.Env.GetNiceTypeNameString (objType, true),
+                passData.Env.GetFunctionSignatureString (argsList),
                 passData.Source, expr.NodeBounds
             ));
             retType = typeUnknMut;
@@ -988,7 +989,7 @@ internal unsafe static partial class Compiler_TypeChecking {
         var noNew = elemType->Flags.HasFlag (ES_TypeFlag.NoNew);
         if (noNew) {
             passData.ErrorList.Add (ES_FrontendErrors.GenNoTypeNew (
-                elemType->Name.GetNameAsTypeString (), passData.Source, expr.NodeBounds
+                passData.Env.GetNiceTypeNameString (elemType, true), passData.Source, expr.NodeBounds
             ));
         }
 
@@ -1077,7 +1078,7 @@ internal unsafe static partial class Compiler_TypeChecking {
                 writable = true;
             } else {
                 passData.ErrorList.Add (ES_FrontendErrors.GenCantApplyIndexingToType (
-                    indexedExprData.Type.ToType (ref passData)->Name.GetNameAsTypeString (),
+                    passData.Env.GetNiceTypeNameString (indexedExprData.Type.ToType (ref passData), true),
                     passData.Source, indexedExprData.Expr.NodeBounds
                 ));
             }
@@ -1205,7 +1206,7 @@ internal unsafe static partial class Compiler_TypeChecking {
 
                 case ES_TypeTag.Array: {
                     passData.ErrorList.Add (ES_FrontendErrors.GenMemberDoesntExist (
-                        type->Name.GetNameAsTypeString (),
+                        passData.Env.GetNiceTypeNameString (type, true),
                         expr.Member.Value.Text.Span.GetPooledString (),
                         expr.Member.Value
                     ));
@@ -1248,7 +1249,7 @@ internal unsafe static partial class Compiler_TypeChecking {
 
                     if (memberVar->Info.Flags.HasFlag (ES_MemberFlags.Static)) {
                         passData.ErrorList.Add (ES_FrontendErrors.GenStaticAccessOnInst (
-                            parentExpr.Type.ToType (ref passData)->Name.GetNameAsTypeString (),
+                            passData.Env.GetNiceTypeNameString (parentExpr.Type.ToType (ref passData), true),
                             expr.Member.Value.Text.Span.GetPooledString (),
                             expr.Member.Value
                         ));
@@ -1270,7 +1271,7 @@ internal unsafe static partial class Compiler_TypeChecking {
         }
 
         passData.ErrorList.Add (ES_FrontendErrors.GenMemberDoesntExist (
-            parentExpr.Type.ToType (ref passData)->Name.GetNameAsTypeString (),
+            passData.Env.GetNiceTypeNameString (parentExpr.Type.ToType (ref passData), true),
             expr.Member.Value.Text.Span.GetPooledString (),
             expr.Member.Value
         ));
@@ -1330,7 +1331,7 @@ internal unsafe static partial class Compiler_TypeChecking {
         }
 
         passData.ErrorList.Add (ES_FrontendErrors.GenMemberDoesntExist (
-            type->Name.GetNameAsTypeString (),
+            passData.Env.GetNiceTypeNameString (type, true),
             expr.Member.Value.Text.Span.GetPooledString (),
             expr.Member.Value
         ));
@@ -1384,7 +1385,7 @@ internal unsafe static partial class Compiler_TypeChecking {
         if (!CompilerFrontend.UnaryOpCompat (passData.Env, exprData.Type.Type, expr.ExpressionType, out var finalType, out _)) {
             passData.ErrorList.Add (ES_FrontendErrors.GenCantApplyUnaryOp (
                 expr.OperatorToken.Text.Span.GetPooledString (),
-                exprData.Type.ToType (ref passData)->Name.GetNameAsTypeString (),
+                passData.Env.GetNiceTypeNameString (exprData.Type.ToType (ref passData), true),
                 passData.Source, exprData.Expr.NodeBounds
             ));
 
@@ -1419,8 +1420,8 @@ internal unsafe static partial class Compiler_TypeChecking {
 
         if (!ExplicitCast (ref passData, ref exprData, destType, out var castRedundant)) {
             passData.ErrorList.Add (ES_FrontendErrors.GenNoExplicitCast (
-                destType.ToType (ref passData)->Name.GetNameAsTypeString (),
-                exprData.Type.ToType (ref passData)->Name.GetNameAsTypeString (),
+                passData.Env.GetNiceTypeNameString (destType.ToType (ref passData), true),
+                passData.Env.GetNiceTypeNameString (exprData.Type.ToType (ref passData), true),
                 passData.Source, expr.NodeBounds
             ));
 
@@ -1449,7 +1450,7 @@ internal unsafe static partial class Compiler_TypeChecking {
             return CheckExpression_SimpleFunctionCall (ref passData, expr, funcExpr);
         else if (funcExpr.TypeInfo is not null) {
             passData.ErrorList.Add (ES_FrontendErrors.GenCantInvokeType (
-                funcExpr.TypeInfo->Name.GetNameAsTypeString (), passData.Source, funcExpr.Expr.NodeBounds
+                passData.Env.GetNiceTypeNameString (funcExpr.TypeInfo, true), passData.Source, funcExpr.Expr.NodeBounds
             ));
         } else if (funcExpr.Type.Type is not null) {
             // TODO: Some types might be allowed to have `()` overrides too in the future. But not now.
@@ -1700,8 +1701,8 @@ internal unsafe static partial class Compiler_TypeChecking {
         if (!CheckExpression_SimpleBinaryExpression_Compat (ref passData, expr, ref leftExpr, ref rightExpr, out var finalType)) {
             passData.ErrorList.Add (ES_FrontendErrors.GenCantApplyBinaryOp (
                 expr.OperatorToken.Text.Span.GetPooledString (),
-                leftExpr.Type.ToType (ref passData)->Name.GetNameAsTypeString (),
-                rightExpr.Type.ToType (ref passData)->Name.GetNameAsTypeString (),
+                passData.Env.GetNiceTypeNameString (leftExpr.Type.ToType (ref passData), true),
+                passData.Env.GetNiceTypeNameString (rightExpr.Type.ToType (ref passData), true),
                 passData.Source, expr.NodeBounds
             ));
 

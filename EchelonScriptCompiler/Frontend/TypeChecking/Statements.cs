@@ -360,7 +360,7 @@ internal unsafe static partial class Compiler_TypeChecking {
             }
         } else if (retType.Type->TypeTag != ES_TypeTag.Void) {
             passData.ErrorList.Add (ES_FrontendErrors.GenMissingReturnValue (
-                retType.ToType (ref passData)->Name.GetNameAsTypeString (),
+                passData.Env.GetNiceTypeNameString (retType.ToType (ref passData), true),
                 passData.Source, retStmt.NodeBounds
             ));
         } else

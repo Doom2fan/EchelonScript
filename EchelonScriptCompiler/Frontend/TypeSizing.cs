@@ -167,7 +167,7 @@ public unsafe partial class CompilerFrontend {
 
                 errorList.Add (ES_FrontendErrors.GenFieldCausesCycle (
                     member->Name.GetCharsSpan ().GetPooledString (),
-                    type->Name.GetNameAsTypeString (),
+                    Environment!.GetNiceTypeNameString (type, true),
                     fieldAstNode.Name
                 ));
 

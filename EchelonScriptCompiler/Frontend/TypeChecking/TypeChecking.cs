@@ -387,7 +387,7 @@ internal unsafe static partial class Compiler_TypeChecking {
 
                     if (varType.Type->Flags.HasFlag (ES_TypeFlag.NoNew)) {
                         passData.ErrorList.Add (ES_FrontendErrors.GenNoTypeNew (
-                            varType.Type->Name.GetNameAsTypeString (), passData.Source, varDef.ValueType.NodeBounds
+                            passData.Env.GetNiceTypeNameString (varType.Type, true), passData.Source, varDef.ValueType.NodeBounds
                         ));
                     }
 

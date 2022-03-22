@@ -69,6 +69,7 @@ public partial class IRTest : UserControl {
 
     ES_IdentifierPool idPool;
     EchelonScript_Compiler compiler;
+    EchelonScriptEnvironment env;
 
     #endregion
 
@@ -145,16 +146,16 @@ public partial class IRTest : UserControl {
 
             _ => "[UNRECOGNIZED]",
         };
-        var typeNode = AddNodeToTree ($"{typeType} {typeData->Name.TypeName.GetCharsSpan ()}", parentItem);
+        var typeNode = AddNodeToTree ($"{typeType} {GetTypeName (typeData, false)}", parentItem);
 
         AddNodeToTree ($"Runtime size: {typeData->RuntimeSize}", typeNode);
-        AddNodeToTree ($"Fully qualified name: {typeData->Name.GetNameAsTypeString ()}", typeNode);
+        AddNodeToTree ($"Fully qualified name: {GetTypeName (typeData, true)}", typeNode);
         AddNodeToTree ($"Source unit: {typeData->SourceUnitString}", typeNode);
 
         if (typeData->TypeTag == ES_TypeTag.Function) {
             var funcData = (ES_FunctionPrototypeData*) typeData;
 
-            AddNodeToTree ($"Return type: {funcData->ReturnType->Name.GetNameAsTypeString ()}", typeNode);
+            AddNodeToTree ($"Return type: {GetTypeName (funcData->ReturnType, true)}", typeNode);
 
             var argsListNode = AddNodeToTree ($"Arguments list", typeNode);
             foreach (var arg in funcData->ArgumentsList.Span) {
@@ -162,7 +163,7 @@ public partial class IRTest : UserControl {
                 string argTypeName;
 
                 if (arg.ValueType != null)
-                    argTypeName = arg.ValueType->Name.GetNameAsTypeString ();
+                    argTypeName = GetTypeName (arg.ValueType, true);
                 else
                     argTypeName = "[NULL]";
 
@@ -178,7 +179,7 @@ public partial class IRTest : UserControl {
         AddNodeToTree ($"Source unit: {functionData->SourceUnitString}", typeNode);
 
         var protoData = functionData->FunctionType;
-        AddNodeToTree ($"Return type: {protoData->ReturnType->Name.GetNameAsTypeString ()}", typeNode);
+        AddNodeToTree ($"Return type: {GetTypeName (protoData->ReturnType, true)}", typeNode);
 
         var argsListNode = AddNodeToTree ($"Arguments list", typeNode);
         var reqArgsCount = protoData->ArgumentsList.Length - functionData->OptionalArgsCount;
@@ -188,14 +189,14 @@ public partial class IRTest : UserControl {
 
             var argType = string.Empty;
             var argTypeName = "[NULL]";
-            var argName = argData.Name.GetCharsSpan ().GetPooledString ();
+            var argName = argData.Name.GetCharsSpan ();
             var argDef = string.Empty;
 
             if (argProto.ArgType != ES_ArgumentType.Normal)
                 argType = $"{argProto.ArgType} ";
 
             if (argProto.ValueType != null)
-                argTypeName = argProto.ValueType->Name.GetNameAsTypeString ();
+                argTypeName = GetTypeName (argProto.ValueType, true);
 
             if (i >= reqArgsCount)
                 argDef = " = [...]";
@@ -204,57 +205,19 @@ public partial class IRTest : UserControl {
         }
     }
 
-    private unsafe string GetTypeName (ESIR_TypeNode type) => type is not null ? GetTypeName (type.Pointer) : "[TYPE NODE NULL]";
-    private unsafe string GetTypeName (ES_TypeInfo* type) {
-        switch (type->TypeTag) {
-            case ES_TypeTag.UNKNOWN: return "[UNKNOWN]";
-
-            case ES_TypeTag.Null: return "[null]";
-
-            case ES_TypeTag.Reference: {
-                var refData = (ES_ReferenceData*) type;
-                return $"{GetTypeName (refData->PointedType)}&";
-            }
-
-            case ES_TypeTag.Array: {
-                var arrData = (ES_ArrayTypeData*) type;
-
-                var dimCount = arrData->DimensionsCount;
-                var dimString = dimCount > 1 ? new string (',', arrData->DimensionsCount - 1) : string.Empty;
-
-                return $"{GetTypeName (arrData->ElementType)} [{dimString}]";
-            }
-
-            /*case ES_TypeTag.Const:
-            case ES_TypeTag.Immutable:
-                return "Const/Immutable [NOT IMPLEMENTED INTERNALLY]";*/
-
-            case ES_TypeTag.Void:
-            case ES_TypeTag.Bool:
-            case ES_TypeTag.Int:
-            case ES_TypeTag.Float:
-                return type->Name.TypeName.GetCharsSpan ().GetPooledString ();
-
-            //case ES_TypeTag.Function: return "Function [NOT IMPLEMENTED]";
-
-            case ES_TypeTag.Struct:
-            case ES_TypeTag.Class:
-            case ES_TypeTag.Interface:
-            case ES_TypeTag.Enum:
-                return type->Name.GetNameAsTypeString ();
-
-            default: return $"{type->TypeTag} [NOT IMPLEMENTED]";
-        }
-    }
+    private unsafe string GetTypeName (ESIR_TypeNode type, bool fullyQualified)
+        => type is not null ? GetTypeName (type.Pointer, fullyQualified) : "[TYPE NODE NULL]";
+    private unsafe string GetTypeName (ES_TypeInfo* type, bool fullyQualified)
+        => env!.GetNiceTypeNameString (type, fullyQualified);
     private static unsafe string GetString (ES_Identifier id) => id.GetCharsSpan ().GetPooledString ();
 
     private unsafe string GetArgString (int i, ESIR_ArgumentDefinition arg) {
         if (arg.ArgType == ES_ArgumentType.Normal)
-            return $"{i} : {GetTypeName (arg.ValueType)}";
+            return $"{i} : {GetTypeName (arg.ValueType, true)}";
 
-        return $"{i} : {arg.ArgType} {GetTypeName (arg.ValueType)}";
+        return $"{i} : {arg.ArgType} {GetTypeName (arg.ValueType, true)}";
     }
-    private unsafe string GetLocalValueString (int i, ESIR_TypeNode valType) => $"{i} : {GetTypeName (valType)}";
+    private unsafe string GetLocalValueString (int i, ESIR_TypeNode valType) => $"{i} : {GetTypeName (valType, true)}";
 
     private string GetExprLabel (ESIR_Expression node) {
         Debug.Assert (node is not null);
@@ -499,13 +462,13 @@ public partial class IRTest : UserControl {
                 return $"{GetExprLabel (indexExpr.IndexedExpr)} [{new string (',', indexExpr.Indices.Elements.Length - 1)}]";
 
             case ESIR_NodeKind.NewObjectExpression when node is ESIR_NewObjectExpression newObjExpr:
-                return $"new ({GetTypeName (newObjExpr.Type)})";
+                return $"new ({GetTypeName (newObjExpr.Type, true)})";
 
             case ESIR_NodeKind.NewArrayExpression when node is ESIR_NewArrayExpression newArrExpr:
-                return $"array ({GetTypeName (newArrExpr.ElementType)} [{new string (',', newArrExpr.Ranks.Elements.Length - 1)}])";
+                return $"array ({GetTypeName (newArrExpr.ElementType, true)} [{new string (',', newArrExpr.Ranks.Elements.Length - 1)}])";
 
             case ESIR_NodeKind.CastExpression when node is ESIR_CastExpression castExpr:
-                return $"cast ({GetExprLabel (castExpr.Expression)} -> {GetTypeName (castExpr.DestType)})";
+                return $"cast ({GetExprLabel (castExpr.Expression)} -> {GetTypeName (castExpr.DestType, true)})";
 
             case ESIR_NodeKind.ConditionalExpression when node is ESIR_ConditionalExpression condExpr:
                 return $"{GetExprLabel (condExpr.Condition)} ? {GetExprLabel (condExpr.ThenExpression)} : {GetExprLabel (condExpr.ElseExpression)}";
@@ -558,12 +521,12 @@ public partial class IRTest : UserControl {
                 break;
 
             case ESIR_NodeKind.StaticVariable when node is ESIR_StaticVariable staticVar:
-                AddNodeToTree ($"{staticVar.Name.GetCharsSpan ()} : {GetTypeName (staticVar.Type)}", parentItem);
+                AddNodeToTree ($"{staticVar.Name.GetCharsSpan ()} : {GetTypeName (staticVar.Type, true)}", parentItem);
                 break;
 
 
             case ESIR_NodeKind.Struct when node is ESIR_Struct structDef: {
-                var structItem = AddNodeToTree ($"{GetTypeName (structDef.Type)}", parentItem);
+                var structItem = AddNodeToTree ($"{GetTypeName (structDef.Type, true)}", parentItem);
                 AddNodeToTree ($"Size: {structDef.Type->RuntimeSize}", structItem);
 
                 foreach (var member in structDef.Members.Elements)
@@ -574,7 +537,7 @@ public partial class IRTest : UserControl {
 
             case ESIR_NodeKind.Function when node is ESIR_Function funcDef: {
                 var structItem = AddNodeToTree ($"{GetString (funcDef.Name)}", parentItem);
-                AddNodeToTree ($"Return type: {GetTypeName (funcDef.ReturnType)}", structItem);
+                AddNodeToTree ($"Return type: {GetTypeName (funcDef.ReturnType, true)}", structItem);
 
                 var argsItem = AddNodeToTree ("Arguments", structItem);
                 var localsItem = AddNodeToTree ("Locals", structItem);
@@ -606,7 +569,7 @@ public partial class IRTest : UserControl {
                 break;
 
             case ESIR_NodeKind.Field when node is ESIR_Field field: {
-                var fieldItem = AddNodeToTree ($"{GetString (field.Name)} : {GetTypeName (field.Type)}", parentItem);
+                var fieldItem = AddNodeToTree ($"{GetString (field.Name)} : {GetTypeName (field.Type, true)}", parentItem);
                 AddNodeToTree ($"Offset: {field.Offset}", fieldItem);
                 break;
             }
@@ -786,7 +749,7 @@ public partial class IRTest : UserControl {
                 AddNodeToTree ($"Char {(char) litExpr.Value.GetInt ()}", parentItem);
                 break;
             case ESIR_NodeKind.LiteralNull when node is ESIR_NullLiteralExpression nullExpr:
-                AddNodeToTree ($"Null {GetTypeName (nullExpr.Type)}", parentItem);
+                AddNodeToTree ($"Null {GetTypeName (nullExpr.Type, true)}", parentItem);
                 break;
 
             #endregion
@@ -814,7 +777,7 @@ public partial class IRTest : UserControl {
             }
 
             case ESIR_NodeKind.DefaultValueExpression when node is ESIR_DefaultValueExpression defValExpr: {
-                AddNodeToTree ($"Defaults {GetTypeName (defValExpr.Type)}", parentItem);
+                AddNodeToTree ($"Defaults {GetTypeName (defValExpr.Type, true)}", parentItem);
                 break;
             }
 
@@ -865,13 +828,13 @@ public partial class IRTest : UserControl {
             }
 
             case ESIR_NodeKind.NewObjectExpression when node is ESIR_NewObjectExpression newObjExpr: {
-                AddNodeToTree ($"New {GetTypeName (newObjExpr.Type)}", parentItem);
+                AddNodeToTree ($"New {GetTypeName (newObjExpr.Type, true)}", parentItem);
                 break;
             }
 
             case ESIR_NodeKind.NewArrayExpression when node is ESIR_NewArrayExpression newArrExpr: {
                 var dimsCount = newArrExpr.Ranks.Elements.Length;
-                var newItem = AddNodeToTree ($"New {GetTypeName (newArrExpr.ElementType)} [{new string (',', dimsCount - 1)}]", parentItem);
+                var newItem = AddNodeToTree ($"New {GetTypeName (newArrExpr.ElementType, true)} [{new string (',', dimsCount - 1)}]", parentItem);
 
                 foreach (var dim in newArrExpr.Ranks.Elements)
                     AddIRNodeToTree (dim, newItem);
@@ -880,7 +843,7 @@ public partial class IRTest : UserControl {
             }
 
             case ESIR_NodeKind.CastExpression when node is ESIR_CastExpression castExpr: {
-                var castItem = AddNodeToTree ($"Cast ({GetTypeName (castExpr.DestType)})", parentItem);
+                var castItem = AddNodeToTree ($"Cast ({GetTypeName (castExpr.DestType, true)})", parentItem);
                 AddIRNodeToTree (castExpr.Expression, castItem);
 
                 break;
@@ -1028,9 +991,10 @@ public partial class IRTest : UserControl {
             ("Buffer".AsMemory (), code.AsMemory ())
         };
 
+        env?.Dispose ();
         compiler.Reset ();
         compiler.Setup (idPool, out var envOut);
-        using var env = envOut;
+        env = envOut;
         compiler.AddTranslationUnit ("MainUnit", codeUnits.Span);
 
         var irTree = compiler.CompileIR ();

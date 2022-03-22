@@ -728,45 +728,45 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
     protected ES_Identifier GetFunctionTypeName (ES_TypeInfo* returnType, ReadOnlySpan<ES_FunctionPrototypeArgData> args) {
         Debug.Assert (returnType != null);
 
-        using var charList = new StructPooledList<char> (CL_ClearMode.Auto);
+        var charList = new StructPooledList<char> (CL_ClearMode.Auto);
 
-        charList.AddRange ("@FuncType<");
+        try {
 
-        // Add the return type.
-        charList.AddRange ("ret@");
-        charList.AddRange (returnType->Name.NamespaceName.GetCharsSpan ());
+            charList.AddRange ("@FuncType<");
 
-        charList.AddRange ("::");
-        charList.AddRange (returnType->Name.TypeName.GetCharsSpan ());
+            // Add the return type.
+            charList.AddRange ("ret@");
+            GetNiceTypeName (ref charList, returnType, true);
 
-        charList.AddRange (", ");
+            charList.AddRange (", ");
 
-        // Add the arguments.
-        var firstArg = true;
-        foreach (var arg in args) {
-            Debug.Assert (arg.ValueType != null);
+            // Add the arguments.
+            var firstArg = true;
+            foreach (var arg in args) {
+                Debug.Assert (arg.ValueType != null);
 
-            if (!firstArg)
-                charList.AddRange (", ");
-            else
-                firstArg = false;
+                if (!firstArg)
+                    charList.AddRange (", ");
+                else
+                    firstArg = false;
 
-            charList.AddRange ("arg ");
-            switch (arg.ArgType) {
-                case ES_ArgumentType.Normal: charList.AddRange ("normal@"); break;
-                case ES_ArgumentType.In: charList.AddRange ("in@"); break;
-                case ES_ArgumentType.Out: charList.AddRange ("out@"); break;
-                case ES_ArgumentType.Ref: charList.AddRange ("ref@"); break;
+                charList.AddRange ("arg ");
+                switch (arg.ArgType) {
+                    case ES_ArgumentType.Normal: charList.AddRange ("normal@"); break;
+                    case ES_ArgumentType.In: charList.AddRange ("in@"); break;
+                    case ES_ArgumentType.Out: charList.AddRange ("out@"); break;
+                    case ES_ArgumentType.Ref: charList.AddRange ("ref@"); break;
+                }
+
+                GetNiceTypeName (ref charList, arg.ValueType, true);
             }
 
-            charList.AddRange (arg.ValueType->Name.NamespaceName.GetCharsSpan ());
-            charList.AddRange ("::");
-            charList.AddRange (arg.ValueType->Name.TypeName.GetCharsSpan ());
+            charList.AddRange (">");
+
+            return IdPool.GetIdentifier (charList.Span);
+        } finally {
+            charList.Dispose ();
         }
-
-        charList.AddRange (">");
-
-        return IdPool.GetIdentifier (charList.Span);
     }
 
     public ES_TypeInfo* GetIntType (ES_IntSize size, bool unsigned) {
@@ -819,7 +819,7 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
                 case ES_ArgumentType.Ref: chars.AddRange ("ref "); break;
             }
 
-            chars.AddRange (arg.ValueType->Name.GetNameAsTypeString ());
+            chars.AddRange (GetNiceTypeNameString (arg.ValueType, true));
         }
 
         chars.Add (')');
@@ -849,6 +849,23 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
 
     public T? GetFunctionDelegate<T> (ES_FunctionData* funcData) where T : Delegate
         => backendData?.GetFunctionDelegate<T> (funcData);
+
+    #region Nice names
+
+    public void GetNiceTypeName (ref StructPooledList<char> charList, ES_TypeInfo* type, bool fullyQualified)
+        => ES_TypeInfo.GetNiceTypeName (ref charList, type, fullyQualified, GlobalTypesNamespace, GeneratedTypesNamespace);
+
+    public string GetNiceTypeNameString (ES_TypeInfo* type, bool fullyQualified) {
+        var charList = new StructPooledList<char> (CL_ClearMode.Auto);
+        try {
+            GetNiceTypeName (ref charList, type, fullyQualified);
+            return charList.Span.GetPooledString ();
+        } finally {
+            charList.Dispose ();
+        }
+    }
+
+    #endregion
 
     #endregion
 

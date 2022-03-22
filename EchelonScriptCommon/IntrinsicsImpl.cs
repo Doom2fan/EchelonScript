@@ -7,9 +7,17 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+using System;
+using ChronosLib.Pooled;
+using EchelonScriptCommon.Data;
+using EchelonScriptCommon.Data.Types;
+using ClrGCHandle = System.Runtime.InteropServices.GCHandle;
+
 namespace EchelonScriptCommon;
 
-public static class ES_DotNetIntrinsicsImpl {
+public unsafe static class ES_DotNetIntrinsicsImpl {
+    #region Integer division
+
     public static int IntegerDivision (int lhs, int rhs) {
         if (rhs == 0)
             throw new EchelonScriptIntegerDivisionByZeroException ();
@@ -65,4 +73,29 @@ public static class ES_DotNetIntrinsicsImpl {
 
         return lhs % rhs;
     }
+
+    #endregion
+
+    #region Nice names
+
+    public static ES_Identifier GetNiceTypeName (
+        IntPtr idPoolHandle,
+        ES_TypeInfo* type,
+        bool fullyQualified,
+        ES_Identifier globalTypesNS,
+        ES_Identifier generatedTypesNS
+    ) {
+        var charsList = new StructPooledList<char> (CL_ClearMode.Auto);
+        try {
+            var idPool = (ES_IdentifierPool?) ClrGCHandle.FromIntPtr (idPoolHandle).Target;
+
+            ES_TypeInfo.GetNiceTypeName (ref charsList, type, fullyQualified, globalTypesNS, generatedTypesNS);
+
+            return idPool!.GetIdentifier (charsList.Span);
+        } finally {
+            charsList.Dispose ();
+        }
+    }
+
+    #endregion
 }

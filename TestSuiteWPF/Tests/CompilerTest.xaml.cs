@@ -126,6 +126,9 @@ public partial class CompilerTest : UserControl {
         }
     }
 
+    private unsafe string GetTypeName (ES_TypeInfo* type, bool fullyQualified)
+        => env!.GetNiceTypeNameString (type, fullyQualified);
+
     private static TreeViewItem AddNodeToTree (string nodeText, TreeViewItem parentItem) {
         var thisItem = new TreeViewItem ();
         parentItem.Items.Add (thisItem);
@@ -157,16 +160,16 @@ public partial class CompilerTest : UserControl {
             ES_TypeTag.Immutable => "Immutable",
             _ => "[UNRECOGNIZED]",
         };
-        var typeNode = AddNodeToTree ($"{typeType} {typeData->Name.TypeName.GetCharsSpan ()}", parentItem);
+        var typeNode = AddNodeToTree ($"{typeType} {GetTypeName (typeData, false)}", parentItem);
 
         AddNodeToTree ($"Runtime size: {typeData->RuntimeSize}", typeNode);
-        AddNodeToTree ($"Fully qualified name: {typeData->Name.GetNameAsTypeString ()}", typeNode);
+        AddNodeToTree ($"Fully qualified name: {GetTypeName (typeData, true)}", typeNode);
         AddNodeToTree ($"Source unit: {typeData->SourceUnitString}", typeNode);
 
         if (typeData->TypeTag == ES_TypeTag.Function) {
             var funcData = (ES_FunctionPrototypeData*) typeData;
 
-            AddNodeToTree ($"Return type: {funcData->ReturnType->Name.GetNameAsTypeString ()}", typeNode);
+            AddNodeToTree ($"Return type: {GetTypeName (funcData->ReturnType, true)}", typeNode);
 
             var argsListNode = AddNodeToTree ($"Arguments list", typeNode);
             foreach (var arg in funcData->ArgumentsList.Span) {
@@ -174,7 +177,7 @@ public partial class CompilerTest : UserControl {
                 string argTypeName;
 
                 if (arg.ValueType != null)
-                    argTypeName = arg.ValueType->Name.GetNameAsTypeString ();
+                    argTypeName = GetTypeName (arg.ValueType, false);
                 else
                     argTypeName = "[NULL]";
 
@@ -190,7 +193,7 @@ public partial class CompilerTest : UserControl {
         AddNodeToTree ($"Source unit: {functionData->SourceUnitString}", typeNode);
 
         var protoData = functionData->FunctionType;
-        AddNodeToTree ($"Return type: {protoData->ReturnType->Name.GetNameAsTypeString ()}", typeNode);
+        AddNodeToTree ($"Return type: {GetTypeName (protoData->ReturnType, true)}", typeNode);
 
         var argsListNode = AddNodeToTree ($"Arguments list", typeNode);
         var reqArgsCount = protoData->ArgumentsList.Length - functionData->OptionalArgsCount;
@@ -207,7 +210,7 @@ public partial class CompilerTest : UserControl {
                 argType = $"{argProto.ArgType} ";
 
             if (argProto.ValueType != null)
-                argTypeName = argProto.ValueType->Name.GetNameAsTypeString ();
+                argTypeName = GetTypeName (argProto.ValueType, true);
 
             if (i >= reqArgsCount)
                 argDef = " = [...]";

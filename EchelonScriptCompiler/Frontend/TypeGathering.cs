@@ -414,7 +414,7 @@ public unsafe partial class CompilerFrontend {
                 }
 
                 if (interfaceInList) {
-                    var interfaceFqnStr = type->Name.GetNameAsTypeString ();
+                    var interfaceFqnStr = Environment!.GetNiceTypeNameString (type, true);
                     errorList.Add (ES_FrontendErrors.GenRepeatedInterfaceInList (interfaceFqnStr, srcCode, inheritId.NodeBounds));
                     continue;
                 }

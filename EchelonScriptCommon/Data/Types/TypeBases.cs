@@ -7,6 +7,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+using System;
 using ChronosLib.Pooled;
 using EchelonScriptCommon.Utilities;
 
@@ -122,4 +123,93 @@ public unsafe struct ES_TypeInfo {
     public bool IsWritable () => TypeTag != ES_TypeTag.Const && TypeTag != ES_TypeTag.Immutable;
 
     #endregion
+
+    public static void GetNiceName (
+        ref StructPooledList<char> charsList,
+        ES_FullyQualifiedName name,
+        bool fullyQualified,
+        ES_Identifier globalsTypesNS,
+        ES_Identifier generatedTypesNS
+    ) {
+        if (
+            fullyQualified &&
+            name.NamespaceName != globalsTypesNS &&
+            name.NamespaceName != generatedTypesNS
+        ) {
+            charsList.AddRange (name.NamespaceName.GetCharsSpan ());
+            charsList.AddRange ("::");
+        }
+
+        charsList.AddRange (name.TypeName.GetCharsSpan ());
+    }
+
+    public static void GetNiceTypeName (
+        ref StructPooledList<char> charsList,
+        ES_TypeInfo* type,
+        bool fullyQualified,
+        ES_Identifier globalTypesNS,
+        ES_Identifier generatedTypesNS
+    ) {
+        if (type is null) {
+            charsList.AddRange ("[NULL]");
+            return;
+        }
+
+        switch (type->TypeTag) {
+            case ES_TypeTag.UNKNOWN:
+            case ES_TypeTag.Null:
+
+            case ES_TypeTag.Void:
+            case ES_TypeTag.Bool:
+            case ES_TypeTag.Int:
+            case ES_TypeTag.Float:
+            case ES_TypeTag.Enum:
+
+            case ES_TypeTag.Struct:
+            case ES_TypeTag.Class:
+            case ES_TypeTag.Interface:
+                GetNiceName (ref charsList, type->Name, fullyQualified, globalTypesNS, generatedTypesNS);
+                break;
+
+            case ES_TypeTag.Function:
+                throw new NotImplementedException ("[TODO] Function nicename-ing not implemented yet.");
+
+            case ES_TypeTag.Reference: {
+                var refData = (ES_ReferenceData*) type;
+
+                GetNiceTypeName (ref charsList, refData->PointedType, fullyQualified, globalTypesNS, generatedTypesNS);
+                charsList.Add ('&');
+
+                break;
+            }
+
+            case ES_TypeTag.Array: {
+                var arrayData = (ES_ArrayTypeData*) type;
+
+                GetNiceTypeName (ref charsList, arrayData->ElementType, fullyQualified, globalTypesNS, generatedTypesNS);
+                charsList.Add ('[');
+                charsList.Add (',', arrayData->DimensionsCount - 1);
+                charsList.Add (']');
+
+                break;
+            }
+
+            case ES_TypeTag.Const:
+            case ES_TypeTag.Immutable: {
+                var constData = (ES_ConstData*) type;
+
+                var constLabel = type->TypeTag == ES_TypeTag.Const ? "const" : "immutable";
+                charsList.AddRange (constLabel);
+
+                charsList.Add ('(');
+                GetNiceTypeName (ref charsList, constData->InnerType, fullyQualified, globalTypesNS, generatedTypesNS);
+                charsList.Add (')');
+
+                break;
+            }
+
+            default:
+                throw new NotImplementedException ("Type not implemented yet.");
+        }
+    }
 }
