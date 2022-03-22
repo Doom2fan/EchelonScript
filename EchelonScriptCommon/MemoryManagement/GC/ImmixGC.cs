@@ -92,12 +92,10 @@ internal unsafe struct ImmixBlockAddress {
 
     public ImmixChunkHeader* ChunkHeader {
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
-        get {
-            return (ImmixChunkHeader*) (
-                (byte*) Header - ImmixConstants.BlockSize * Header->BlockNumber
-                - ImmixConstants.ChunkMetadataSize
-            );
-        }
+        get => (ImmixChunkHeader*) (
+            (byte*) Header - ImmixConstants.BlockSize * Header->BlockNumber
+            - ImmixConstants.ChunkMetadataSize
+        );
     }
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]

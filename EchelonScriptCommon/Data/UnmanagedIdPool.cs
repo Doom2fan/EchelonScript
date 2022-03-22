@@ -27,6 +27,7 @@ public unsafe struct ES_Identifier : IEquatable<ES_Identifier> {
     internal const int EmptyIndex = -1;
 
     public static ES_Identifier Empty {
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
         get => new (IntPtr.Zero, EmptyIndex);
     }
 

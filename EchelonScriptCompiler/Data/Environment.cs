@@ -696,7 +696,7 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
         var unknType = memManager.GetMemory<ES_TypeInfo> ();
         *unknType = new ES_TypeInfo (
             ES_TypeTag.UNKNOWN, ES_AccessModifier.Public, ES_TypeFlag.None, ES_Identifier.Empty,
-            new ES_FullyQualifiedName (IdPool.IdEmpty, unknTypeId)
+            new ES_FullyQualifiedName (ES_Identifier.Empty, unknTypeId)
         );
         typeUnknownValue = unknType;
 
@@ -704,7 +704,7 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
         var nullType = memManager.GetMemory<ES_TypeInfo> ();
         *nullType = new ES_TypeInfo (
             ES_TypeTag.Null, ES_AccessModifier.Public, ES_TypeFlag.None, ES_Identifier.Empty,
-            new ES_FullyQualifiedName (IdPool.IdEmpty, nullTypeId)
+            new ES_FullyQualifiedName (ES_Identifier.Empty, nullTypeId)
         );
         typeNull = nullType;
     }
