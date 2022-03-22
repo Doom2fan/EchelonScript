@@ -28,27 +28,23 @@ public unsafe struct ES_Identifier : IEquatable<ES_Identifier> {
 
     public static ES_Identifier Empty {
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
-        get => new (IntPtr.Zero, EmptyIndex);
+        get => new (default, EmptyIndex);
     }
 
-    #region ================== Instance properties
+    #region ================== Instance fields and properties
 
-    internal readonly IntPtr idPoolHandle;
+    public readonly ES_IdPoolHandle idPoolHandle;
     internal readonly int Index;
 
-    internal ES_IdentifierPool idPool {
+    internal ES_IdentifierPool IdPool {
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
-        get {
-            var pool = GCHandle.FromIntPtr (idPoolHandle).Target as ES_IdentifierPool;
-            Debug.Assert (pool is not null);
-            return pool;
-        }
+        get => ES_IdentifierPool.FromHandle (idPoolHandle);
     }
 
     #endregion
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
-    internal ES_Identifier (IntPtr pool, int id) {
+    internal ES_Identifier (ES_IdPoolHandle pool, int id) {
         idPoolHandle = pool;
         Index = id;
     }
@@ -57,11 +53,11 @@ public unsafe struct ES_Identifier : IEquatable<ES_Identifier> {
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     public ReadOnlySpan<byte> GetBytesSpan ()
-        => Index != EmptyIndex ? idPool.GetBytesSpan (this) : ReadOnlySpan<byte>.Empty;
+        => Index != EmptyIndex ? IdPool.GetBytesSpan (this) : ReadOnlySpan<byte>.Empty;
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     public ReadOnlySpan<char> GetCharsSpan ()
-        => Index != EmptyIndex ? idPool.GetCharsSpan (this) : ReadOnlySpan<char>.Empty;
+        => Index != EmptyIndex ? IdPool.GetCharsSpan (this) : ReadOnlySpan<char>.Empty;
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     public override bool Equals ([NotNullWhen (true)] object? obj) {
@@ -72,7 +68,7 @@ public unsafe struct ES_Identifier : IEquatable<ES_Identifier> {
     }
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
-    public override int GetHashCode () => HashCode.Combine (((nint) idPoolHandle).GetHashCode (), Index.GetHashCode ());
+    public override int GetHashCode () => HashCode.Combine (idPoolHandle.GetHashCode (), Index.GetHashCode ());
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     public bool Equals (ES_Identifier other) {
@@ -91,6 +87,42 @@ public unsafe struct ES_Identifier : IEquatable<ES_Identifier> {
 
     public static bool operator == (ES_Identifier lhs, ES_Identifier rhs) => lhs.Equals (rhs);
     public static bool operator != (ES_Identifier lhs, ES_Identifier rhs) => !lhs.Equals (rhs);
+
+    #endregion
+}
+
+public unsafe struct ES_IdPoolHandle {
+    #region ================== Instance fields
+
+    internal readonly IntPtr gcHandle;
+
+    #endregion
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    internal ES_IdPoolHandle (IntPtr handle) => gcHandle = handle;
+
+    #region ================== Instance methods
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    public override bool Equals ([NotNullWhen (true)] object? obj) {
+        if (obj is ES_IdPoolHandle other)
+            return Equals (other);
+
+        return false;
+    }
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    public override int GetHashCode () => ((nint) gcHandle).GetHashCode ();
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    public bool Equals (ES_IdPoolHandle other) => gcHandle == other.gcHandle;
+
+    #endregion
+
+    #region ================== Operators
+
+    public static bool operator == (ES_IdPoolHandle lhs, ES_IdPoolHandle rhs) => lhs.Equals (rhs);
+    public static bool operator != (ES_IdPoolHandle lhs, ES_IdPoolHandle rhs) => !lhs.Equals (rhs);
 
     #endregion
 }
@@ -245,7 +277,7 @@ public unsafe sealed class ES_IdentifierPool : IDisposable {
 
     #region ================== Instance fields and properties
 
-    private GCHandle thisHandle;
+    private GCHandle gcHandle;
 
     private IdData [] idsList;
     private int idsCount;
@@ -253,7 +285,7 @@ public unsafe sealed class ES_IdentifierPool : IDisposable {
 
     private MemoryArena memArena;
 
-    public ES_Identifier IdEmpty {
+    public ES_IdPoolHandle Handle {
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
         get;
         private init;
@@ -264,7 +296,7 @@ public unsafe sealed class ES_IdentifierPool : IDisposable {
     public ES_IdentifierPool () {
         IsDisposed = false;
 
-        thisHandle = GCHandle.Alloc (this, GCHandleType.Weak);
+        gcHandle = GCHandle.Alloc (this, GCHandleType.Weak);
 
         idsList = Array.Empty<IdData> ();
         idsMap = new (1000);
@@ -272,8 +304,19 @@ public unsafe sealed class ES_IdentifierPool : IDisposable {
         memArena = new ();
         memArena.Initialize ();
 
-        IdEmpty = GetIdentifier (ArrayPointer<char>.Null);
+        Handle = new ES_IdPoolHandle (GCHandle.ToIntPtr (gcHandle));
     }
+
+    #region ================== Static methods
+
+    public static ES_IdentifierPool FromHandle (ES_IdPoolHandle poolHandle) {
+        var pool = GCHandle.FromIntPtr (poolHandle.gcHandle).Target as ES_IdentifierPool;
+        Debug.Assert (pool is not null);
+
+        return pool;
+    }
+
+    #endregion
 
     #region ================== Instance methods
 
@@ -298,7 +341,7 @@ public unsafe sealed class ES_IdentifierPool : IDisposable {
 
         var index = idsCount++;
 
-        var id = new ES_Identifier (GCHandle.ToIntPtr (thisHandle), index);
+        var id = new ES_Identifier (Handle, index);
 
         var enc = ES_Encodings.Identifier;
         var bytes = memArena.GetMemory<byte> (enc.GetByteCount (chars.Span));
@@ -317,7 +360,7 @@ public unsafe sealed class ES_IdentifierPool : IDisposable {
     public ES_Identifier GetIdentifier (string str) => GetIdentifier (str.AsSpan ());
 
     public ReadOnlySpan<byte> GetBytesSpan (ES_Identifier id) {
-        if (id.Index == ES_Identifier.EmptyIndex || id.idPoolHandle != GCHandle.ToIntPtr (thisHandle))
+        if (id.Index == ES_Identifier.EmptyIndex || id.idPoolHandle != Handle)
             return ReadOnlySpan<byte>.Empty;
 
         Debug.Assert (id.Index >= 0 && id.Index < idsList.Length);
@@ -325,7 +368,7 @@ public unsafe sealed class ES_IdentifierPool : IDisposable {
     }
 
     public ReadOnlySpan<char> GetCharsSpan (ES_Identifier id) {
-        if (id.Index == ES_Identifier.EmptyIndex || id.idPoolHandle != GCHandle.ToIntPtr (thisHandle))
+        if (id.Index == ES_Identifier.EmptyIndex || id.idPoolHandle != Handle)
             return ReadOnlySpan<char>.Empty;
 
         Debug.Assert (id.Index >= 0 && id.Index < idsList.Length);
@@ -377,7 +420,7 @@ public unsafe sealed class ES_IdentifierPool : IDisposable {
 
         memArena.Dispose ();
 
-        thisHandle.Free ();
+        gcHandle.Free ();
 
         IsDisposed = true;
     }
