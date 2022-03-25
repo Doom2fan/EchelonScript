@@ -124,6 +124,8 @@ public unsafe struct ES_TypeInfo {
 
     #endregion
 
+    #region ================== Static methods
+
     public static void GetNiceName (
         ref StructPooledList<char> charsList,
         ES_FullyQualifiedName name,
@@ -171,8 +173,46 @@ public unsafe struct ES_TypeInfo {
                 GetNiceName (ref charsList, type->Name, fullyQualified, globalTypesNS, generatedTypesNS);
                 break;
 
-            case ES_TypeTag.FuncPrototype:
-                throw new NotImplementedException ("[TODO] Function nicename-ing not implemented yet.");
+            case ES_TypeTag.FuncPrototype: {
+                var protoData = (ES_FunctionPrototypeData*) type;
+
+                charsList.AddRange ("func ");
+                GetNiceTypeName (ref charsList, protoData->ReturnType, fullyQualified, globalTypesNS, generatedTypesNS);
+                charsList.Add ('(');
+
+                var firstArg = true;
+                foreach (var arg in protoData->ArgumentsList.Span) {
+                    if (!firstArg)
+                        charsList.AddRange (", ");
+                    firstArg = false;
+
+                    switch (arg.ArgType) {
+                        case ES_ArgumentType.Normal:
+                            break;
+
+                        case ES_ArgumentType.In:
+                            charsList.AddRange ("in ");
+                            break;
+
+                        case ES_ArgumentType.Out:
+                            charsList.AddRange ("out ");
+                            break;
+
+                        case ES_ArgumentType.Ref:
+                            charsList.AddRange ("ref ");
+                            break;
+
+                        default:
+                            throw new NotImplementedException ("Arg type not implemented yet.");
+                    }
+
+                    GetNiceTypeName (ref charsList, arg.ValueType, fullyQualified, globalTypesNS, generatedTypesNS);
+                }
+
+                charsList.Add (')');
+
+                break;
+            }
 
             case ES_TypeTag.Reference: {
                 var refData = (ES_ReferenceData*) type;
@@ -212,4 +252,6 @@ public unsafe struct ES_TypeInfo {
                 throw new NotImplementedException ("Type not implemented yet.");
         }
     }
+
+    #endregion
 }
