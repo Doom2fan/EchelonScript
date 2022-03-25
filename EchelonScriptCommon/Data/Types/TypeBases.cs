@@ -27,7 +27,7 @@ public enum ES_TypeTag : int {
     Class,
     Interface,
 
-    Function,
+    FuncPrototype,
 
     Reference,
     Array,
@@ -171,7 +171,7 @@ public unsafe struct ES_TypeInfo {
                 GetNiceName (ref charsList, type->Name, fullyQualified, globalTypesNS, generatedTypesNS);
                 break;
 
-            case ES_TypeTag.Function:
+            case ES_TypeTag.FuncPrototype:
                 throw new NotImplementedException ("[TODO] Function nicename-ing not implemented yet.");
 
             case ES_TypeTag.Reference: {

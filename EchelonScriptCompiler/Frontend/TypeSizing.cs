@@ -57,7 +57,7 @@ public unsafe partial class CompilerFrontend {
             case ES_TypeTag.Bool:
             case ES_TypeTag.Int:
             case ES_TypeTag.Float:
-            case ES_TypeTag.Function:
+            case ES_TypeTag.FuncPrototype:
             case ES_TypeTag.Enum:
                 type->Flags |= ES_TypeFlag.Analyzed;
                 return;
@@ -133,7 +133,7 @@ public unsafe partial class CompilerFrontend {
             case ES_TypeTag.Bool:
             case ES_TypeTag.Int:
             case ES_TypeTag.Float:
-            case ES_TypeTag.Function:
+            case ES_TypeTag.FuncPrototype:
             case ES_TypeTag.Enum:
             case ES_TypeTag.Interface:
             case ES_TypeTag.Reference:
@@ -195,7 +195,7 @@ public unsafe partial class CompilerFrontend {
             case ES_TypeTag.Bool:
             case ES_TypeTag.Int:
             case ES_TypeTag.Float:
-            case ES_TypeTag.Function:
+            case ES_TypeTag.FuncPrototype:
             case ES_TypeTag.Enum:
             case ES_TypeTag.Interface:
             case ES_TypeTag.Reference:

@@ -76,8 +76,8 @@ public unsafe class ES_NamespaceData {
             if (ignoredType != ES_TypeTag.Enum && EnumBuilders.TryGetValue (name, out var _))
                 return ES_TypeTag.Enum;
 
-            if (ignoredType != ES_TypeTag.Function && NamespaceData.functions.TryGetValue (name, out var _))
-                return ES_TypeTag.Function;
+            if (ignoredType != ES_TypeTag.FuncPrototype && NamespaceData.functions.TryGetValue (name, out var _))
+                return ES_TypeTag.FuncPrototype;
 
             return null;
         }
@@ -403,7 +403,7 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
                 case ES_TypeTag.Bool:
                 case ES_TypeTag.Int:
                 case ES_TypeTag.Float:
-                case ES_TypeTag.Function:
+                case ES_TypeTag.FuncPrototype:
                 case ES_TypeTag.Struct:
                 case ES_TypeTag.Class:
                 case ES_TypeTag.Enum:

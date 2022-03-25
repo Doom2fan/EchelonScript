@@ -175,7 +175,7 @@ public unsafe sealed partial class RoslynCompilerBackend {
             case ES_TypeTag.Struct:
                 return MangleStructName ((ES_StructData*) type);
 
-            case ES_TypeTag.Function:
+            case ES_TypeTag.FuncPrototype:
                 return MangleFunctionType ((ES_FunctionPrototypeData*) type);
 
             case ES_TypeTag.Array:

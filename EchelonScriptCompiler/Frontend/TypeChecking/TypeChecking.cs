@@ -531,7 +531,7 @@ internal unsafe static partial class Compiler_TypeChecking {
                     case ES_TypeTag.Bool:
                     case ES_TypeTag.Int:
                     case ES_TypeTag.Float:
-                    case ES_TypeTag.Function:
+                    case ES_TypeTag.FuncPrototype:
                     case ES_TypeTag.Enum:
                     case ES_TypeTag.Interface:
                     case ES_TypeTag.Reference:

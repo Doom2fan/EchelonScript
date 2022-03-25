@@ -376,7 +376,7 @@ public unsafe sealed partial class RoslynCompilerBackend : ICompilerBackend, IDi
                     case ES_TypeTag.Bool:
                     case ES_TypeTag.Int:
                     case ES_TypeTag.Float:
-                    case ES_TypeTag.Function:
+                    case ES_TypeTag.FuncPrototype:
                     case ES_TypeTag.Reference:
                     case ES_TypeTag.Const:
                     case ES_TypeTag.Immutable:

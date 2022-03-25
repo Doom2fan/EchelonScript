@@ -48,7 +48,7 @@ public unsafe sealed partial class RoslynCompilerBackend {
                 return srcData->FloatSize == dstData->FloatSize;
             }
 
-            case ES_TypeTag.Function:
+            case ES_TypeTag.FuncPrototype:
             case ES_TypeTag.Struct:
             case ES_TypeTag.Class:
             case ES_TypeTag.Interface:

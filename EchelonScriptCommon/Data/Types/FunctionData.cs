@@ -137,7 +137,7 @@ public unsafe struct ES_FunctionPrototypeData {
         ES_TypeInfo* retType, ArrayPointer<ES_FunctionPrototypeArgData> argsList,
         ES_FullyQualifiedName fullyQualifiedName, ES_Identifier sourceUnit
     ) {
-        TypeInfo = new (ES_TypeTag.Function, accessMod, ES_TypeFlag.NoNew, sourceUnit, fullyQualifiedName);
+        TypeInfo = new (ES_TypeTag.FuncPrototype, accessMod, ES_TypeFlag.NoNew, sourceUnit, fullyQualifiedName);
         TypeInfo.RuntimeSize = IntPtr.Size;
 
         returnType = retType;

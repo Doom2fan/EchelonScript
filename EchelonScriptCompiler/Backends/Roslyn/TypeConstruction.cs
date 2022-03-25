@@ -41,7 +41,7 @@ public unsafe sealed partial class RoslynCompilerBackend {
 
             case ES_TypeTag.Array: return PointerType (IdentifierName (MangleTypeName (type)));
 
-            case ES_TypeTag.Function:
+            case ES_TypeTag.FuncPrototype:
             case ES_TypeTag.Class:
             case ES_TypeTag.Enum:
             case ES_TypeTag.Interface:

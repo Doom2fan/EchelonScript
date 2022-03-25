@@ -136,7 +136,7 @@ public partial class IRTest : UserControl {
             ES_TypeTag.Class => "Class",
             ES_TypeTag.Interface => "Interface",
 
-            ES_TypeTag.Function => "Prototype",
+            ES_TypeTag.FuncPrototype => "Prototype",
 
             ES_TypeTag.Reference => "Reference",
             ES_TypeTag.Array => "Array",
@@ -152,7 +152,7 @@ public partial class IRTest : UserControl {
         AddNodeToTree ($"Fully qualified name: {GetTypeName (typeData, true)}", typeNode);
         AddNodeToTree ($"Source unit: {typeData->SourceUnitString}", typeNode);
 
-        if (typeData->TypeTag == ES_TypeTag.Function) {
+        if (typeData->TypeTag == ES_TypeTag.FuncPrototype) {
             var funcData = (ES_FunctionPrototypeData*) typeData;
 
             AddNodeToTree ($"Return type: {GetTypeName (funcData->ReturnType, true)}", typeNode);
