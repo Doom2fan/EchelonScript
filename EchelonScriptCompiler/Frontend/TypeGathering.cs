@@ -554,7 +554,42 @@ public unsafe partial class CompilerFrontend {
     }
 
     private void GatherTypes_Enum (ref TranslationUnitData transUnit, ref AstUnitData astUnit, ES_AstEnumDefinition enumDef, ES_EnumData.Builder builder) {
-        throw new NotImplementedException ("[TODO] Enums not implemented yet.");
+        var baseTypeName = ES_PrimitiveTypes.Int32;
+        if (enumDef.BaseType.HasValue)
+            baseTypeName = enumDef.BaseType.Value.Text.Span.GetPooledString ();
+
+        var baseType = Environment!.TypeUnknownValue;
+        switch (baseTypeName) {
+            case ES_PrimitiveTypes.Bool: baseType = Environment.TypeBool; break;
+
+            case ES_PrimitiveTypes.Int8: baseType = Environment.GetIntType (ES_IntSize.Int8, false); break;
+            case ES_PrimitiveTypes.Int16: baseType = Environment.GetIntType (ES_IntSize.Int16, false); break;
+            case ES_PrimitiveTypes.Int32: baseType = Environment.GetIntType (ES_IntSize.Int32, false); break;
+            case ES_PrimitiveTypes.Int64: baseType = Environment.GetIntType (ES_IntSize.Int64, false); break;
+
+            case ES_PrimitiveTypes.UInt8: baseType = Environment.GetIntType (ES_IntSize.Int8, true); break;
+            case ES_PrimitiveTypes.UInt16: baseType = Environment.GetIntType (ES_IntSize.Int16, true); break;
+            case ES_PrimitiveTypes.UInt32: baseType = Environment.GetIntType (ES_IntSize.Int32, true); break;
+            case ES_PrimitiveTypes.UInt64: baseType = Environment.GetIntType (ES_IntSize.Int64, true); break;
+
+            case ES_PrimitiveTypes.Float32: baseType = Environment.TypeFloat32; break;
+            case ES_PrimitiveTypes.Float64: baseType = Environment.TypeFloat64; break;
+
+            case ES_PrimitiveTypes.String:
+            case ES_PrimitiveTypes.Char:
+                throw new NotImplementedException ("[TODO] Types not implemented yet.");
+        }
+
+        builder.BaseType = baseType;
+
+        foreach (ref var pair in enumDef.MembersList.AsSpan ()) {
+            if (pair.Item2 is null)
+                continue;
+
+            GatherTypes_Expression (ref transUnit, astUnit.Symbols, astUnit.SourceData, pair.Item2);
+        }
+
+        throw new NotImplementedException ("[TODO] Enum type gathering not implemented yet.");
     }
 
     private void GatherTypes_Function (ref TranslationUnitData transUnit, ref AstUnitData astUnit, ES_AstFunctionDefinition funcDef) {
