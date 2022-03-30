@@ -132,37 +132,37 @@ public unsafe partial class CompilerFrontend {
         Debug.Assert (Environment is not null);
         Debug.Assert (EnvironmentBuilder is not null);
 
-        var globalTypesList = EnvironmentBuilder.GetOrCreateNamespace (Environment.GlobalTypesNamespace).NamespaceData.Types;
+        var globalList = EnvironmentBuilder.GetOrCreateNamespace (Environment.GlobalsNamespace).NamespaceData.Types;
 
-        globalTypesList.Add (GenerateBuiltinTypes_Int (ES_IntSize.Int8, false));
-        globalTypesList.Add (GenerateBuiltinTypes_Int (ES_IntSize.Int16, false));
-        globalTypesList.Add (GenerateBuiltinTypes_Int (ES_IntSize.Int32, false));
-        globalTypesList.Add (GenerateBuiltinTypes_Int (ES_IntSize.Int64, false));
+        globalList.Add (GenerateBuiltinTypes_Int (ES_IntSize.Int8, false));
+        globalList.Add (GenerateBuiltinTypes_Int (ES_IntSize.Int16, false));
+        globalList.Add (GenerateBuiltinTypes_Int (ES_IntSize.Int32, false));
+        globalList.Add (GenerateBuiltinTypes_Int (ES_IntSize.Int64, false));
 
-        globalTypesList.Add (GenerateBuiltinTypes_Int (ES_IntSize.Int8, true));
-        globalTypesList.Add (GenerateBuiltinTypes_Int (ES_IntSize.Int16, true));
-        globalTypesList.Add (GenerateBuiltinTypes_Int (ES_IntSize.Int32, true));
-        globalTypesList.Add (GenerateBuiltinTypes_Int (ES_IntSize.Int64, true));
+        globalList.Add (GenerateBuiltinTypes_Int (ES_IntSize.Int8, true));
+        globalList.Add (GenerateBuiltinTypes_Int (ES_IntSize.Int16, true));
+        globalList.Add (GenerateBuiltinTypes_Int (ES_IntSize.Int32, true));
+        globalList.Add (GenerateBuiltinTypes_Int (ES_IntSize.Int64, true));
 
         var floatType = GenerateBuiltinTypes_Float (ES_FloatSize.Single);
         var doubleType = GenerateBuiltinTypes_Float (ES_FloatSize.Double);
         EnvironmentBuilder.TypeFloat32 = floatType;
         EnvironmentBuilder.TypeFloat64 = doubleType;
-        globalTypesList.Add (floatType);
-        globalTypesList.Add (doubleType);
+        globalList.Add (floatType);
+        globalList.Add (doubleType);
 
         var voidType = GenerateBuiltinTypes_Simple (ES_PrimitiveTypes.Void, ES_TypeTag.Void, 0);
         var boolType = GenerateBuiltinTypes_Simple (ES_PrimitiveTypes.Bool, ES_TypeTag.Bool, 1);
         EnvironmentBuilder.TypeVoid = voidType;
         EnvironmentBuilder.TypeBool = boolType;
-        globalTypesList.Add (voidType);
-        globalTypesList.Add (boolType);
+        globalList.Add (voidType);
+        globalList.Add (boolType);
     }
 
     private Pointer<ES_TypeInfo> GenerateBuiltinTypes_Int (ES_IntSize size, bool unsigned) {
         var intDataPtr = EnvironmentBuilder!.MemoryManager.GetMemory<ES_IntTypeData> ();
         var namePtr = Environment!.IdPool.GetIdentifier (ES_PrimitiveTypes.GetIntName (size, unsigned));
-        var fqn = new ES_FullyQualifiedName (Environment.GlobalTypesNamespace, namePtr);
+        var fqn = new ES_FullyQualifiedName (Environment.GlobalsNamespace, namePtr);
 
         *intDataPtr = new ES_IntTypeData (ES_AccessModifier.Public, ES_Identifier.Empty, fqn, size, unsigned);
 
@@ -172,7 +172,7 @@ public unsafe partial class CompilerFrontend {
     private Pointer<ES_TypeInfo> GenerateBuiltinTypes_Float (ES_FloatSize size) {
         var floatDataPtr = EnvironmentBuilder!.MemoryManager.GetMemory<ES_FloatTypeData> ();
         var namePtr = Environment!.IdPool.GetIdentifier (ES_PrimitiveTypes.GetFloatName (size));
-        var fqn = new ES_FullyQualifiedName (Environment.GlobalTypesNamespace, namePtr);
+        var fqn = new ES_FullyQualifiedName (Environment.GlobalsNamespace, namePtr);
 
         *floatDataPtr = new ES_FloatTypeData (ES_AccessModifier.Public, ES_Identifier.Empty, fqn, size);
 
@@ -182,7 +182,7 @@ public unsafe partial class CompilerFrontend {
     private Pointer<ES_TypeInfo> GenerateBuiltinTypes_Simple (ReadOnlySpan<char> name, ES_TypeTag tag, int runtimeSize) {
         var voidDataPtr = EnvironmentBuilder!.MemoryManager.GetMemory<ES_TypeInfo> ();
         var namePtr = Environment!.IdPool.GetIdentifier (name);
-        var fqn = new ES_FullyQualifiedName (Environment.GlobalTypesNamespace, namePtr);
+        var fqn = new ES_FullyQualifiedName (Environment.GlobalsNamespace, namePtr);
 
         *voidDataPtr = new ES_TypeInfo (tag, ES_AccessModifier.Public, ES_TypeFlag.NoRefs | ES_TypeFlag.NoNew, ES_Identifier.Empty, fqn);
         voidDataPtr->RuntimeSize = runtimeSize;

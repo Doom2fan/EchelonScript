@@ -324,10 +324,10 @@ public partial class CompilerTest : UserControl {
         var idTestF32 = env.IdPool.GetIdentifier (testF32Name);
 
         var idInt32 = env.IdPool.GetIdentifier (ES_PrimitiveTypes.GetIntName (ES_IntSize.Int32, false));
-        var typeInt32 = env.GetFullyQualifiedType (env.GlobalTypesNamespace, idInt32);
+        var typeInt32 = env.GetFullyQualifiedType (env.GlobalsNamespace, idInt32);
 
         var idFloat32 = env.IdPool.GetIdentifier (ES_PrimitiveTypes.GetFloatName (ES_FloatSize.Single));
-        var typeFloat32 = env.GetFullyQualifiedType (env.GlobalTypesNamespace, idFloat32);
+        var typeFloat32 = env.GetFullyQualifiedType (env.GlobalsNamespace, idFloat32);
 
         Debug.Assert (typeInt32 is not null);
         Debug.Assert (typeFloat32 is not null);

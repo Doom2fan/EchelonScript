@@ -300,7 +300,7 @@ public unsafe partial class CompilerFrontend {
     private void GatherGlobalImports (ref TranslationUnitData transUnit) {
         var idPool = Environment!.IdPool;
         var namespaces = Environment.Namespaces;
-        var globalTypesList = EnvironmentBuilder!.GetOrCreateNamespace (Environment.GlobalTypesNamespace).NamespaceData.Types;
+        var globalsList = EnvironmentBuilder!.GetOrCreateNamespace (Environment.GlobalsNamespace).NamespaceData.Types;
 
         foreach (ref var astUnit in transUnit.AstUnits.Span) {
             var ast = astUnit.Ast;
@@ -309,7 +309,7 @@ public unsafe partial class CompilerFrontend {
 
             // Add built-in symbols
             symbols.Push ();
-            foreach (var type in globalTypesList)
+            foreach (var type in globalsList)
                 symbols.AddSymbol (type.Address->Name.TypeName, FrontendSymbol.NewType (type));
 
             // Add imported symbols

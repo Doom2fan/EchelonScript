@@ -15,7 +15,7 @@ namespace EchelonScriptCompiler.Frontend;
 
 internal unsafe static partial class Compiler_TypeChecking {
     private static ES_Identifier MangleTypeName (ref PassData passData, ES_FullyQualifiedName fqn) {
-        if (fqn.NamespaceName.Equals (passData.Env.GlobalTypesNamespace))
+        if (fqn.NamespaceName.Equals (passData.Env.GlobalsNamespace))
             return fqn.TypeName;
 
         using var charsArray = new StructPooledList<char> (CL_ClearMode.Auto);
@@ -32,7 +32,7 @@ internal unsafe static partial class Compiler_TypeChecking {
     private static void MangleTypeName (ref PassData passData, ES_TypeInfo* type, ref StructPooledList<char> list) {
         var fqn = type->Name;
 
-        if (!fqn.NamespaceName.Equals (passData.Env.GlobalTypesNamespace)) {
+        if (!fqn.NamespaceName.Equals (passData.Env.GlobalsNamespace)) {
             list.AddRange (fqn.NamespaceName.GetCharsSpan ());
             list.AddRange ("::");
         }

@@ -10,6 +10,9 @@
 namespace EchelonScriptCompiler;
 
 public static class ES_Constants {
+    public const string GlobalsNamespace = "@globals";
+    public const string GeneratedNamespace = "@generated";
+
     public const string GlobalStaticConstructorName = "$_GlobalStaticCons";
     public const string DefaultStaticConstructorName = "$_DefaultStaticCons";
     public const string CustomStaticConstructorName = "$_CustomStaticCons";

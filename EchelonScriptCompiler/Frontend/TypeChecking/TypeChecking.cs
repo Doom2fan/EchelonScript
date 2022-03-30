@@ -185,11 +185,11 @@ internal unsafe static partial class Compiler_TypeChecking {
 
     private static void GatherGlobalImports (ref PassData passData) {
         var idPool = passData.Env.IdPool;
-        var globalTypesNS = passData.EnvBuilder.GetOrCreateNamespace (passData.Env.GlobalTypesNamespace);
-        var globalTypesList = globalTypesNS.NamespaceData.Types;
+        var globalsNS = passData.EnvBuilder.GetOrCreateNamespace (passData.Env.GlobalsNamespace);
+        var globalsList = globalsNS.NamespaceData.Types;
 
         // Add built-in symbols.
-        foreach (var type in globalTypesList)
+        foreach (var type in globalsList)
             passData.Symbols.AddSymbol (type.Address->Name.TypeName, TCSymbol.NewType (type));
     }
 

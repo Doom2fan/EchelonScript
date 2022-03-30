@@ -320,7 +320,7 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
 
         public ES_FunctionPrototypeData* GetOrAddFunctionType (ES_TypeInfo* returnType, ReadOnlySpan<ES_FunctionPrototypeArgData> args, bool doAdd) {
             var name = environment.GetFunctionTypeName (returnType, args);
-            var fqn = new ES_FullyQualifiedName (environment.GeneratedTypesNamespace, name);
+            var fqn = new ES_FullyQualifiedName (environment.GeneratedNamespace, name);
 
             var funcType = (ES_FunctionPrototypeData*) environment.GetFullyQualifiedType (fqn);
 
@@ -339,7 +339,7 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
                     fqn, ES_Identifier.Empty
                 );
 
-                var namespaceData = GetOrCreateNamespace (environment.GeneratedTypesNamespace).NamespaceData;
+                var namespaceData = GetOrCreateNamespace (environment.GeneratedNamespace).NamespaceData;
                 namespaceData.Types.Add (&funcType->TypeInfo);
             }
 
@@ -454,8 +454,8 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
             var baseFQN = baseType->Name;
 
             var noNamespace = (
-                baseFQN.NamespaceName.Equals (environment.GeneratedTypesNamespace) ||
-                baseFQN.NamespaceName.Equals (environment.GlobalTypesNamespace)
+                baseFQN.NamespaceName.Equals (environment.GeneratedNamespace) ||
+                baseFQN.NamespaceName.Equals (environment.GlobalsNamespace)
             );
 
             if (!noNamespace) {
@@ -486,7 +486,7 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
             using var charsList = GetGeneratedTypeName (baseType, "&", "");
 
             var refId = environment.IdPool.GetIdentifier (charsList.Span);
-            var refFQN = new ES_FullyQualifiedName (environment.GeneratedTypesNamespace, refId);
+            var refFQN = new ES_FullyQualifiedName (environment.GeneratedNamespace, refId);
 
             var refType = environment.GetFullyQualifiedType (refFQN);
 
@@ -498,7 +498,7 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
             refType = (ES_TypeInfo*) environment.memManager.GetMemory<ES_ReferenceData> ();
             *((ES_ReferenceData*) refType) = new ES_ReferenceData (refFQN, baseType);
 
-            GetOrCreateNamespace (environment.GeneratedTypesNamespace).NamespaceData.Types.Add (refType);
+            GetOrCreateNamespace (environment.GeneratedNamespace).NamespaceData.Types.Add (refType);
 
             return refType;
         }
@@ -519,7 +519,7 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
             using var charsList = GetGeneratedTypeName (baseType, prefixName, ")");
 
             var constId = environment.IdPool.GetIdentifier (charsList.Span);
-            var constFQN = new ES_FullyQualifiedName (environment.GeneratedTypesNamespace, constId);
+            var constFQN = new ES_FullyQualifiedName (environment.GeneratedNamespace, constId);
 
             var constType = environment.GetFullyQualifiedType (constFQN);
 
@@ -531,7 +531,7 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
             constType = (ES_TypeInfo*) environment.memManager.GetMemory<ES_ConstData> ();
             *((ES_ConstData*) constType) = new ES_ConstData (constFQN, baseType, immutable);
 
-            GetOrCreateNamespace (environment.GeneratedTypesNamespace).NamespaceData.Types.Add (constType);
+            GetOrCreateNamespace (environment.GeneratedNamespace).NamespaceData.Types.Add (constType);
 
             return constType;
         }
@@ -549,7 +549,7 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
             charsList.Add (']');
 
             var arrId = environment.IdPool.GetIdentifier (charsList.Span);
-            var arrFQN = new ES_FullyQualifiedName (environment.GeneratedTypesNamespace, arrId);
+            var arrFQN = new ES_FullyQualifiedName (environment.GeneratedNamespace, arrId);
 
             var arrType = environment.GetFullyQualifiedType (arrFQN);
 
@@ -598,7 +598,7 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
 
             GenerateMembersList (membersBuilder, memberVars.Span, null);
 
-            GetOrCreateNamespace (environment.GeneratedTypesNamespace).NamespaceData.Types.Add (arrType);
+            GetOrCreateNamespace (environment.GeneratedNamespace).NamespaceData.Types.Add (arrType);
 
             return arrType;
         }
@@ -667,8 +667,8 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
 
     public IReadOnlyDictionary<ES_Identifier, ES_NamespaceData> Namespaces => namespacesDict;
 
-    public ES_Identifier GlobalTypesNamespace { get; private set; }
-    public ES_Identifier GeneratedTypesNamespace { get; private set; }
+    public ES_Identifier GlobalsNamespace { get; private set; }
+    public ES_Identifier GeneratedNamespace { get; private set; }
 
     public ES_TypeInfo* TypeUnknownValue => typeUnknownValue;
     public ES_TypeInfo* TypeVoid => typeVoid;
@@ -689,8 +689,8 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
 
         backendData = null;
 
-        GlobalTypesNamespace = IdPool.GetIdentifier ("@globals");
-        GeneratedTypesNamespace = IdPool.GetIdentifier ("@generated");
+        GlobalsNamespace = IdPool.GetIdentifier (ES_Constants.GlobalsNamespace);
+        GeneratedNamespace = IdPool.GetIdentifier (ES_Constants.GeneratedNamespace);
 
         var unknTypeId = IdPool.GetIdentifier ("#UNKNOWN_TYPE");
         var unknType = memManager.GetMemory<ES_TypeInfo> ();
@@ -771,7 +771,7 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
 
     public ES_TypeInfo* GetIntType (ES_IntSize size, bool unsigned) {
         var intName = IdPool.GetIdentifier (ES_PrimitiveTypes.GetIntName (size, unsigned));
-        var intType = GetFullyQualifiedType (GlobalTypesNamespace, intName);
+        var intType = GetFullyQualifiedType (GlobalsNamespace, intName);
         Debug.Assert (intType is not null && intType->TypeTag == ES_TypeTag.Int);
 
         return intType;
@@ -853,7 +853,7 @@ public unsafe class EchelonScriptEnvironment : IDisposable {
     #region Nice names
 
     public void GetNiceTypeName (ref StructPooledList<char> charList, ES_TypeInfo* type, bool fullyQualified)
-        => ES_TypeInfo.GetNiceTypeName (ref charList, type, fullyQualified, GlobalTypesNamespace, GeneratedTypesNamespace);
+        => ES_TypeInfo.GetNiceTypeName (ref charList, type, fullyQualified, GlobalsNamespace, GeneratedNamespace);
 
     public string GetNiceTypeNameString (ES_TypeInfo* type, bool fullyQualified) {
         var charList = new StructPooledList<char> (CL_ClearMode.Auto);
