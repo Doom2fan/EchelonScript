@@ -179,7 +179,8 @@ public class EchelonScript_Compiler : IDisposable {
 
         parser?.Dispose ();
         frontend?.Dispose ();
-        backend?.Dispose ();
+        if (disposeBackend)
+            backend?.Dispose ();
 
         environmentBuilder?.Dispose ();
 
