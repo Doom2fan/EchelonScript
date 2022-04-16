@@ -278,7 +278,7 @@ internal unsafe sealed class ImmixGC : IDisposable {
                 return true;
             }
 
-            var posOffs = (int) (BumpPointer - (byte*) CurrentBlock.Data);
+            var posOffs = (int) (BumpLimit - (byte*) CurrentBlock.Data);
             var startPos = posOffs / ImmixConstants.LineSize;
             if (startPos * ImmixConstants.LineSize < posOffs)
                 startPos++;
@@ -286,7 +286,7 @@ internal unsafe sealed class ImmixGC : IDisposable {
             var lineMapSpan = CurrentBlock.Header->LineMapSpan;
             var lastLineMarked = false; // Used for skipping implicit marks
             for (var i = startPos; i < ImmixConstants.LinesCount; i++) {
-                var curHoleSize = 0;
+                var curHoleSize = 1;
 
                 if (lineMapSpan [i] != 0) {
                     lastLineMarked = true;
@@ -297,7 +297,7 @@ internal unsafe sealed class ImmixGC : IDisposable {
                 }
 
                 for (var j = i + 1; j < ImmixConstants.LinesCount; j++) {
-                    if (lineMapSpan [i] != 0)
+                    if (lineMapSpan [j] != 0)
                         break;
 
                     curHoleSize++;
@@ -410,6 +410,7 @@ internal unsafe sealed class ImmixGC : IDisposable {
 
             overflowAllocData.BlocksList.RemoveAll ();
             overflowAllocData.BlocksList.Add (overflowBlock);
+            overflowAllocData.Reset ();
         }
 
         allocData.Reset ();
@@ -441,6 +442,7 @@ internal unsafe sealed class ImmixGC : IDisposable {
 
         allocData.BlocksList.RemoveAll ();
         allocData.BlocksList.AddRange (allocBlocks.Span);
+        allocData.Reset ();
 
         ImmixGC_GlobalAllocator.ReturnBlocks (freeBlocks.Span);
     }
@@ -451,7 +453,7 @@ internal unsafe sealed class ImmixGC : IDisposable {
         foreach (var line in block.Header->LineMapSpan)
             lineCount += (line != 0) ? 1 : 0;
 
-        if (lineCount == ImmixConstants.LinesCount)
+        if (lineCount >= ImmixConstants.LinesCount)
             block.Header->UsageLevel = ImmixBlockUsage.Filled;
         else
             block.Header->UsageLevel = lineCount > 0 ? ImmixBlockUsage.Recyclable : ImmixBlockUsage.Empty;
