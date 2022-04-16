@@ -265,8 +265,14 @@ internal unsafe sealed class ImmixGC : IDisposable {
 
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
         private void SetNewAllocData (int holeOffs, int holeSize) {
+            Debug.Assert (CurrentBlock.ChunkHeader != null);
+            Debug.Assert (CurrentBlock.Header != null);
+            Debug.Assert (CurrentBlock.Data != null);
+
             BumpPointer = (byte*) CurrentBlock.Data + (holeOffs * ImmixConstants.LineSize);
             BumpLimit = BumpPointer + (holeSize * ImmixConstants.LineSize);
+
+            Debug.Assert (BumpPointer != null);
         }
 
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
@@ -524,8 +530,10 @@ internal unsafe sealed class ImmixGC : IDisposable {
         // Ensure there's enough space to allocate the object.
         if (allocSize > allocSpace.BumpSpace)
             allocSpace.EnsureAllocatable (allocSize);
+        Debug.Assert (allocSpace.BumpSpace >= allocSize);
 
         // Grab the header's pointer and bump the allocation pointer.
+        Debug.Assert (allocData.BumpPointer != null);
         var allocStart = allocSpace.BumpPointer;
         allocSpace.BumpPointer += allocSize;
 
