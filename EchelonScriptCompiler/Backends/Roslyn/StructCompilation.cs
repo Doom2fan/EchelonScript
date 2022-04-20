@@ -13,13 +13,14 @@ using ChronosLib.Pooled;
 using EchelonScriptCompiler.CompilerCommon.IR;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace EchelonScriptCompiler.Backends.RoslynBackend;
 
 public unsafe sealed partial class RoslynCompilerBackend {
     private static void CompileStruct (ref PassData passData, ESIR_Struct structDef) {
-        using var memberTypes = new StructPooledList<SyntaxNode> (CL_ClearMode.Auto);
+        using var memberNodes = new StructPooledList<SyntaxNode> (CL_ClearMode.Auto);
 
         var mangledStructName = MangleTypeName (structDef.Type);
 
@@ -31,7 +32,7 @@ public unsafe sealed partial class RoslynCompilerBackend {
                     var variableName = fieldDef.Name.GetCharsSpan ().GetPooledString ();
 
                     var variablesList = SingletonSeparatedList (VariableDeclarator (Identifier (variableName)));
-                    memberTypes.Add (
+                    memberNodes.Add (
                         FieldDeclaration (
                             VariableDeclaration (
                             roslynType
@@ -55,12 +56,16 @@ public unsafe sealed partial class RoslynCompilerBackend {
             }
         }
 
+        // Generate the default value function.
+        var defValFunc = CompileStruct_DefaultExpr (structDef);
+        memberNodes.Add (defValFunc);
+
         // Generate the struct declaration.
         passData.Types.Add (
             StructDeclaration (
                 mangledStructName
             ).WithMembers (
-                ListSpan (memberTypes.Span)
+                ListSpan (memberNodes.Span)
             ).WithModifiers (TokenList (
                 Token (SyntaxKind.PublicKeyword),
                 Token (SyntaxKind.UnsafeKeyword)
@@ -72,6 +77,50 @@ public unsafe sealed partial class RoslynCompilerBackend {
                         LiteralExpression (SyntaxKind.NumericLiteralExpression, Literal (structDef.Type->RuntimeSize))
                     )
                 )
+            ))
+        );
+    }
+
+    private static MethodDeclarationSyntax CompileStruct_DefaultExpr (ESIR_Struct structDef) {
+        var structType = GetRoslynType (structDef.Type);
+        var structName = IdentifierName (MangleTypeName (structDef.Type));
+
+        // Generate the field initialization nodes,
+        using var initExprNodes = new StructPooledList<SyntaxNodeOrToken> (CL_ClearMode.Auto);
+        foreach (var member in structDef.Members.Elements) {
+            if (member is not ESIR_Field memberField)
+                continue;
+
+            var memberVarType = memberField.Type.Pointer;
+
+            var varValue = GetDefaultValue (memberVarType);
+            initExprNodes.Add (AssignmentExpression (
+                SyntaxKind.SimpleAssignmentExpression,
+                IdentifierName (memberField.Name.GetCharsSpan ().GetPooledString ()),
+                varValue
+            ));
+            initExprNodes.Add (Token (SyntaxKind.CommaToken));
+        }
+
+        // Generate the return expression.
+        var initExpr = InitializerExpression (
+            SyntaxKind.ObjectInitializerExpression,
+            SeparatedListSpan<ExpressionSyntax> (initExprNodes.ToArray ())
+        );
+        var retValue = ObjectCreationExpression (structName).WithInitializer (initExpr);
+
+        return (
+            MethodDeclaration (
+                structType,
+                DefaultValueFuncName
+            ).WithModifiers (TokenList (
+                Token (SyntaxKind.PublicKeyword),
+                Token (SyntaxKind.StaticKeyword)
+            )).WithAttributeLists (ListParams (
+                SingletonAttributeList (Attribute_ExcludeFromStackTrace ()),
+                SingletonAttributeList (Attribute_MethodImpl_AggressiveInlining ())
+            )).WithExpressionBody (ArrowExpressionClause (
+                retValue
             ))
         );
     }

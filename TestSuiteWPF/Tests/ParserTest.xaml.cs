@@ -17,6 +17,7 @@ using ChronosLib.Pooled;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data;
+using EchelonScriptCompiler.Frontend;
 using EchelonScriptCompiler.Frontend.Parser;
 using ICSharpCode.AvalonEdit.Document;
 
@@ -34,8 +35,6 @@ public partial class ParserTest : UserControl {
 
     #endregion
 
-    #region ================== Constructors
-
     public ParserTest () {
         InitializeComponent ();
 
@@ -43,8 +42,6 @@ public partial class ParserTest : UserControl {
         parser = new EchelonScriptParser (errList);
         textMarkerService = new TextMarkerService (codeText);
     }
-
-    #endregion
 
     #region ================== Instance methods
 
@@ -627,11 +624,11 @@ public partial class ParserTest : UserControl {
             case ES_AstIndexingExpression indexingExpr: {
                 var thisItem = AddNodeToTree ("Indexing", parentItem);
                 var indexedExpr = AddNodeToTree ("Expression", thisItem);
-                var ranksList = AddNodeToTree ("Ranks", thisItem);
+                var dimsList = AddNodeToTree ("Dimensions", thisItem);
 
                 AddAstNodeToTree (indexingExpr.IndexedExpression, indexedExpr);
-                foreach (var rank in indexingExpr.RankExpressions)
-                    AddAstNodeToTree (rank, ranksList);
+                foreach (var dim in indexingExpr.DimensionExpressions)
+                    AddAstNodeToTree (dim, dimsList);
 
                 break;
             }
@@ -657,8 +654,8 @@ public partial class ParserTest : UserControl {
 
                 var thisItem = AddNodeToTree (thisItemText, parentItem);
 
-                foreach (var rank in newArrayExpr.Ranks)
-                    AddAstNodeToTree (rank, thisItem);
+                foreach (var dim in newArrayExpr.Dimensions)
+                    AddAstNodeToTree (dim, thisItem);
 
                 break;
             }

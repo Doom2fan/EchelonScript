@@ -28,8 +28,6 @@ public partial class GCInfo : UserControl {
 
     #endregion
 
-    #region ================== Constructors
-
     public GCInfo () {
         InitializeComponent ();
 
@@ -39,8 +37,6 @@ public partial class GCInfo : UserControl {
 
         updateTimer.Start ();
     }
-
-    #endregion
 
     #region ================== Event handlers
 

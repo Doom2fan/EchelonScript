@@ -8,68 +8,58 @@
  */
 
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using EchelonScriptCommon.Data;
 using EchelonScriptCommon.Data.Types;
-using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data;
+using EchelonScriptCompiler.Frontend.Data;
 
 namespace EchelonScriptCompiler.Frontend;
 
 internal unsafe static partial class Compiler_ConstantFolding {
     private ref struct PassData {
-        public EchelonScriptEnvironment Env { get; init; }
-        public EchelonScriptEnvironment.Builder EnvBuilder { get; init; }
-
-        public List<EchelonScriptErrorMessage> ErrorList { get; init; }
-        public List<EchelonScriptErrorMessage> WarnList { get; init; }
-        public List<EchelonScriptErrorMessage> InfoList { get; init; }
-
-        public ES_Identifier TransUnitName { get; init; }
-        public SourceData Source { get; set; }
-
-        public SymbolStack<FrontendSymbol> Symbols { get; set; }
+        public ES_Identifier TransUnitName;
+        public SourceData Source;
     }
 
     private struct ExpressionData {
         public ES_AstExpression Expr;
-        public ES_TypeInfo* Type;
-        public ES_TypeInfo* TypeInfo;
-        public ES_FunctionData* Function;
+        public ESC_TypeRef Type;
+        public ESC_TypeRef TypeInfo;
+        public ESC_Function? Function;
 
-        public static ExpressionData NewValue (ES_AstExpression expr, ES_TypeInfo* type) {
+        public static ExpressionData NewValue (ES_AstExpression expr, ESC_TypeRef type) {
             return new ExpressionData {
                 Expr = expr,
                 Type = type,
 
-                TypeInfo = null,
+                TypeInfo = ESC_TypeRef.Null (),
                 Function = null
             };
         }
 
-        public static ExpressionData NewType (ES_AstExpression expr, ES_TypeInfo* typeInfo) {
+        public static ExpressionData NewType (ES_AstExpression expr, ESC_TypeRef typeInfo) {
             return new ExpressionData {
                 Expr = expr,
                 TypeInfo = typeInfo,
 
-                Type = null,
+                Type = ESC_TypeRef.Null (),
                 Function = null
             };
         }
 
-        public static ExpressionData NewFunction (ES_AstExpression expr, ES_FunctionData* func, ES_TypeInfo* funcType) {
+        public static ExpressionData NewFunction (ES_AstExpression expr, ESC_Function? func, ESC_TypeRef funcType) {
             return new ExpressionData {
                 Expr = expr,
                 Function = func,
                 TypeInfo = funcType,
 
-                Type = null
+                Type = ESC_TypeRef.Null ()
             };
         }
     }
 
-    private static ES_TypeInfo* GetTypeRef (ES_AstTypeDeclaration? typeDecl) {
+    private static ESC_TypeRef GetTypeRef (ES_AstTypeDeclaration? typeDecl) {
         Debug.Assert (typeDecl is not null);
 
         var typeRef = typeDecl as ES_AstTypeDeclaration_TypeReference;
@@ -78,198 +68,91 @@ internal unsafe static partial class Compiler_ConstantFolding {
         return typeRef.Reference;
     }
 
-    public static void FoldConstants (
-        EchelonScriptEnvironment env,
-        EchelonScriptEnvironment.Builder envBuilder,
+    public static void FoldConstants (ref CompileData compileData) {
+        Debug.Assert (compileData.Symbols.ScopesCount == 0);
+        compileData.Symbols.Push ();
 
-        List<EchelonScriptErrorMessage> errList,
-        List<EchelonScriptErrorMessage> warnList,
-        List<EchelonScriptErrorMessage> infoList,
+        compileData.GatherGlobalImports ();
 
-        ref TranslationUnitData transUnit
-    ) {
-        var passData = new PassData {
-            Env = env,
-            EnvBuilder = envBuilder,
+        foreach (ref var transUnit in compileData.TranslationUnits) {
+            foreach (ref var astUnit in transUnit.AstUnits.Span) {
+                var passData = new PassData {
+                    TransUnitName = transUnit.Name,
+                    Source = astUnit.SourceData,
+                };
 
-            ErrorList = errList,
-            WarnList = warnList,
-            InfoList = infoList,
+                FoldConstants (ref compileData, ref passData, astUnit.Ast);
+            }
+        }
 
-            TransUnitName = transUnit.Name,
-        };
-
-        FoldConstants (ref passData, ref transUnit);
+        compileData.Symbols.Pop ();
+        Debug.Assert (compileData.Symbols.ScopesCount == 0);
     }
 
-    private static void FoldConstants (ref PassData passData, ref TranslationUnitData transUnit) {
-        var idPool = passData.Env.IdPool;
+    private static void FoldConstants (ref CompileData compileData, ref PassData passData, ES_AbstractSyntaxTree ast) {
+        var idPool = compileData.IdPool;
 
-        foreach (ref var astUnit in transUnit.AstUnits.Span) {
-            foreach (var nm in astUnit.Ast.Namespaces) {
-                ES_Identifier namespaceName;
-                using (var nameArr = nm.NamespaceName.ToPooledChars ())
-                    namespaceName = idPool.GetIdentifier (nameArr);
+        foreach (var nm in ast.Namespaces) {
+            var namespaceName = nm.NamespaceName.ToIdentifier (idPool);
+            var namespaceData = compileData.GetOrCreateNamespace (namespaceName);
 
-                var namespaceBuilder = passData.EnvBuilder.GetOrCreateNamespace (namespaceName);
-                var namespaceData = namespaceBuilder.NamespaceData;
+            compileData.Symbols.Push ();
+            compileData.ImportNamespaceSymbols (namespaceData);
 
-                passData.Source = astUnit.SourceData;
-                passData.Symbols = astUnit.Symbols;
+            foreach (var type in nm.Contents) {
+                switch (type) {
+                    case ES_AstClassDefinition classDef: {
+                        var typeName = idPool.GetIdentifier (classDef.Name.Text.Span);
+                        var classData = namespaceData.GetClass (typeName);
+                        Debug.Assert (classData is not null);
 
-                passData.Symbols.Push ();
-                ImportNamespaceSymbols (ref passData, namespaceData);
-
-                foreach (var type in nm.Contents) {
-                    switch (type) {
-                        case ES_AstClassDefinition classDef: {
-                            var typeName = idPool.GetIdentifier (classDef.Name.Text.Span);
-                            var classBuilder = namespaceBuilder.GetClass (typeName);
-                            Debug.Assert (classBuilder is not null);
-
-                            // TODO: FoldConstants_Class (ref transUnit, ref astUnit, classDef, classBuilder);
-                            throw new NotImplementedException ("[TODO] Classes not implemented yet.");
-                        }
-
-                        case ES_AstStructDefinition structDef: {
-                            var typeName = idPool.GetIdentifier (structDef.Name.Text.Span);
-                            var structBuilder = namespaceBuilder.GetStruct (typeName);
-                            Debug.Assert (structBuilder is not null);
-
-                            FoldStruct (ref passData, structDef);
-                            break;
-                        }
-
-                        case ES_AstEnumDefinition enumDef: {
-                            var typeName = idPool.GetIdentifier (enumDef.Name.Text.Span);
-                            var enumBuilder = namespaceBuilder.GetEnum (typeName);
-                            Debug.Assert (enumBuilder is not null);
-
-                            // TODO: FoldConstants_Enum (ref transUnit, ref astUnit, enumDef, enumBuilder);
-                            throw new NotImplementedException ("[TODO] Enums not implemented yet.");
-                        }
-
-                        case ES_AstFunctionDefinition funcDef:
-                            FoldFunction (ref passData, funcDef);
-                            break;
-
-                        default:
-                            throw new NotImplementedException ("Node type not implemented.");
+                        // TODO: FoldConstants_Class (ref compileData, ref passData, classDef, classData);
+                        throw new NotImplementedException ("[TODO] Classes not implemented yet.");
                     }
-                }
 
-                passData.Symbols.Pop ();
-            }
-        }
-    }
+                    case ES_AstStructDefinition structDef: {
+                        var typeName = idPool.GetIdentifier (structDef.Name.Text.Span);
+                        var structBuilder = namespaceData.GetStruct (typeName);
+                        Debug.Assert (structBuilder is not null);
 
-    private static ES_NamespaceData? GetNamespace (ref PassData passData, ReadOnlySpan<char> namespaceStr) {
-        var namespaceName = passData.Env.IdPool.GetIdentifier (namespaceStr);
+                        FoldStruct (ref compileData, ref passData, structDef);
+                        break;
+                    }
 
-        if (!passData.Env.Namespaces.TryGetValue (namespaceName, out var namespaceData)) {
-            Debug.Fail ("We shouldn't get here.");
-            return null;
-        }
+                    case ES_AstEnumDefinition enumDef: {
+                        var typeName = idPool.GetIdentifier (enumDef.Name.Text.Span);
+                        var enumData = namespaceData.GetEnum (typeName);
+                        Debug.Assert (enumData is not null);
 
-        return namespaceData;
-    }
+                        // TODO: FoldConstants_Enum (ref compileData, ref passData, enumDef, enumData);
+                        throw new NotImplementedException ("[TODO] Enums not implemented yet.");
+                    }
 
-    private static void ImportNamespaceSymbols (
-        ref PassData passData,
-        ES_NamespaceData namespaceData
-    ) {
-        foreach (var type in namespaceData.Types)
-            passData.Symbols.AddSymbol (type.Address->Name.TypeName, FrontendSymbol.NewType (type));
-        foreach (var funcKVP in namespaceData.Functions)
-            passData.Symbols.AddSymbol (funcKVP.Key, FrontendSymbol.NewFunction (funcKVP.Value));
-    }
+                    case ES_AstFunctionDefinition funcDef:
+                        var funcName = idPool.GetIdentifier (funcDef.Name.Text.Span);
+                        if (!namespaceData.Functions.TryGetValue (funcName, out var funcData))
+                            throw new CompilationException ("Function doesn't exist.");
 
-    private static void HandleImport (
-        ref PassData passData,
-        ES_AstImportStatement import
-    ) {
-        var symbols = passData.Symbols;
+                        FoldFunction (ref compileData, ref passData, funcDef, funcData);
+                        break;
 
-        using var nmNameString = import.NamespaceName.ToPooledChars ();
-        var namespaceData = GetNamespace (ref passData, nmNameString);
-
-        if (namespaceData is null)
-            return;
-
-        if (import.ImportedNames is null || import.ImportedNames.Length == 0) {
-            foreach (var type in namespaceData.Types) {
-                if (!symbols.AddSymbol (type.Address->Name.TypeName, FrontendSymbol.NewType (type)))
-                    Debug.Fail ("This shouldn't be reachable.");
-            }
-
-            foreach (var funcKVP in namespaceData.Functions) {
-                if (!symbols.AddSymbol (funcKVP.Key, FrontendSymbol.NewFunction (funcKVP.Value)))
-                    Debug.Fail ("This shouldn't be reachable.");
-            }
-
-            return;
-        }
-
-        foreach (var importTk in import.ImportedNames) {
-            var name = passData.Env.IdPool.GetIdentifier (importTk.Text.Span);
-
-            var symbolFound = false;
-            var isDuplicate = false;
-
-            if (!symbolFound) {
-                foreach (var typeData in namespaceData.Types) {
-                    if (!typeData.Address->Name.TypeName.Equals (name))
-                        continue;
-
-                    isDuplicate = !symbols.AddSymbol (name, FrontendSymbol.NewType (typeData));
-                    symbolFound = true;
-                    break;
+                    default:
+                        throw new NotImplementedException ("Node type not implemented.");
                 }
             }
 
-            if (!symbolFound) {
-                foreach (var funcKVP in namespaceData.Functions) {
-                    if (!funcKVP.Key.Equals (name))
-                        continue;
-
-                    isDuplicate = !symbols.AddSymbol (name, FrontendSymbol.NewFunction (funcKVP.Value.Address));
-                    symbolFound = true;
-                    break;
-                }
-            }
-
-            if (!symbolFound)
-                Debug.Fail ("This shouldn't be reachable.");
-
-            if (isDuplicate)
-                Debug.Fail ("This shouldn't be reachable.");
+            compileData.Symbols.Pop ();
         }
     }
 
-    private static void HandleAlias (
-        ref PassData passData,
-        ES_AstTypeAlias alias
-    ) {
-        var idPool = passData.Env.IdPool;
-
-        var aliasName = alias.AliasName.Text.Span;
-        var aliasId = idPool.GetIdentifier (aliasName);
-
-        Debug.Assert (alias.OriginalName is ES_AstTypeDeclaration_TypeReference);
-        var origType = GetTypeRef (alias.OriginalName);
-
-        if (!passData.Symbols.AddSymbol (aliasId, FrontendSymbol.NewType (origType)))
-            Debug.Fail ("This shouldn't be reachable.");
-    }
-
-    private static void FoldStruct (ref PassData passData, ES_AstStructDefinition structDef) {
+    private static void FoldStruct (ref CompileData compileData, ref PassData passData, ES_AstStructDefinition structDef) {
         foreach (var member in structDef.Contents) {
             switch (member) {
                 case ES_AstMemberVarDefinition varDef: {
                     var varType = GetTypeRef (varDef.ValueType);
 
                     if (varDef.InitializationExpression is not null)
-                        FoldExpression (ref passData, ref varDef.InitializationExpression, varType);
+                        FoldExpression (ref compileData, ref passData, ref varDef.InitializationExpression, varType);
 
                     break;
                 }
@@ -283,13 +166,14 @@ internal unsafe static partial class Compiler_ConstantFolding {
         }
     }
 
-    private static void FoldFunction (ref PassData passData, ES_AstFunctionDefinition funcDef) {
-        var idPool = passData.Env.IdPool;
+    private static void FoldFunction (ref CompileData compileData, ref PassData passData, ES_AstFunctionDefinition funcDef, ESC_Function func) {
+        var idPool = compileData.IdPool;
 
-        passData.Symbols.Push ();
+        compileData.Symbols.Push ();
 
         var retType = GetTypeRef (funcDef.ReturnType);
 
+        var argIdx = 0;
         foreach (var arg in funcDef.ArgumentsList) {
             var argName = idPool.GetIdentifier (arg.Name.Text.Span);
             var argValType = GetTypeRef (arg.ValueType);
@@ -305,7 +189,7 @@ internal unsafe static partial class Compiler_ConstantFolding {
                     break;
 
                 case ES_ArgumentType.In:
-                    argValType = passData.EnvBuilder.CreateConstType (argValType);
+                    argValType = argValType.WithConst (ESC_Constness.Const);
                     break;
 
                 case ES_ArgumentType.Out:
@@ -315,27 +199,34 @@ internal unsafe static partial class Compiler_ConstantFolding {
                     throw new NotImplementedException ("Argument type not implemented yet.");
             }
 
-            passData.Symbols.AddSymbol (argName, FrontendSymbol.NewVariable (argValType, flags));
+            compileData.Symbols.AddSymbol (argName, FrontendSymbol.NewVariable (new (argValType, null!), flags));
 
-            if (arg.DefaultExpression is not null)
-                FoldExpression (ref passData, ref arg.DefaultExpression, argValType);
+            if (arg.DefaultExpression is not null) {
+                FoldExpression (ref compileData, ref passData, ref arg.DefaultExpression, argValType);
+
+                ref var funcArg = ref func.Arguments [argIdx++];
+                funcArg = new (funcArg.Name, arg.DefaultExpression);
+            }
         }
 
         var curStatement = funcDef.Statement;
         while (curStatement is not null) {
-            FoldStatement (ref passData, retType, curStatement);
+            FoldStatement (ref compileData, ref passData, curStatement, retType);
 
             curStatement = curStatement.Endpoint;
         }
 
-        passData.Symbols.Pop ();
+        compileData.Symbols.Pop ();
     }
 
-    private static void FoldStatement (ref PassData passData, ES_TypeInfo* retType, ES_AstStatement stmt) {
-        var idPool = passData.Env.IdPool;
+    private static void FoldStatement (
+        ref CompileData compileData, ref PassData passData,
+        ES_AstStatement stmt, ESC_TypeRef retType
+    ) {
+        var idPool = compileData.IdPool;
 
-        var typeUnkn = passData.Env.TypeUnknownValue;
-        var typeBool = passData.Env.TypeBool;
+        var typeUnkn = compileData.GetUnknownType (ESC_Constness.Mutable);
+        var typeBool = compileData.GetBoolType (ESC_Constness.Mutable);
 
         switch (stmt) {
             case ES_AstEmptyStatement:
@@ -345,17 +236,17 @@ internal unsafe static partial class Compiler_ConstantFolding {
                 throw new NotImplementedException ("[TODO] Labels not implemented yet.");
 
             case ES_AstBlockStatement blockStmt: {
-                passData.Symbols.Push ();
+                compileData.Symbols.Push ();
 
                 var subStmt = blockStmt.Statement;
                 while (subStmt is not null) {
                     Debug.Assert (subStmt is not null);
-                    FoldStatement (ref passData, retType, subStmt);
+                    FoldStatement (ref compileData, ref passData, subStmt, retType);
 
                     subStmt = subStmt.Endpoint;
                 }
 
-                passData.Symbols.Pop ();
+                compileData.Symbols.Pop ();
 
                 break;
             }
@@ -363,16 +254,16 @@ internal unsafe static partial class Compiler_ConstantFolding {
             #region Symbol definition
 
             case ES_AstImportStatement importStmt:
-                HandleImport (ref passData, importStmt);
+                compileData.HandleImport (importStmt);
                 break;
 
             case ES_AstTypeAlias aliasStmt:
-                HandleAlias (ref passData, aliasStmt);
+                compileData.HandleAlias (aliasStmt);
                 break;
 
             case ES_AstLocalVarDefinition varDef: {
                 var implicitType = varDef.ValueType is null;
-                var varType = !implicitType ? GetTypeRef (varDef.ValueType) : null;
+                var varType = !implicitType ? GetTypeRef (varDef.ValueType) : ESC_TypeRef.Null ();
                 var symbolFlags = (FrontendSymbolFlags) 0;
 
                 if (varDef.UsingVar)
@@ -383,15 +274,15 @@ internal unsafe static partial class Compiler_ConstantFolding {
                     var varNameId = idPool.GetIdentifier (varName);
 
                     if (!implicitType) {
-                        passData.Symbols.AddSymbol (varNameId, FrontendSymbol.NewVariable (varType, symbolFlags));
+                        compileData.Symbols.AddSymbol (varNameId, FrontendSymbol.NewVariable (new (varType, null!), symbolFlags));
 
                         if (variable.InitializationExpression is not null)
-                            FoldExpression (ref passData, ref variable.InitializationExpression, varType);
+                            FoldExpression (ref compileData, ref passData, ref variable.InitializationExpression, varType);
                     } else {
                         Debug.Assert (variable.InitializationExpression is not null);
-                        var exprData = FoldExpression (ref passData, ref variable.InitializationExpression, typeUnkn);
+                        var exprData = FoldExpression (ref compileData, ref passData, ref variable.InitializationExpression, typeUnkn);
 
-                        passData.Symbols.AddSymbol (varNameId, FrontendSymbol.NewVariable (exprData.Type, symbolFlags));
+                        compileData.Symbols.AddSymbol (varNameId, FrontendSymbol.NewVariable (new (exprData.Type, null!), symbolFlags));
                     }
                 }
 
@@ -403,27 +294,27 @@ internal unsafe static partial class Compiler_ConstantFolding {
             #region Jumps
 
             case ES_AstConditionalStatement condStmt: {
-                FoldExpression (ref passData, ref condStmt.ConditionExpression, typeBool);
+                FoldExpression (ref compileData, ref passData, ref condStmt.ConditionExpression, typeBool);
 
-                FoldStatement (ref passData, retType, condStmt.ThenStatement);
+                FoldStatement (ref compileData, ref passData, condStmt.ThenStatement, retType);
                 if (condStmt.ElseStatement is not null)
-                    FoldStatement (ref passData, retType, condStmt.ElseStatement);
+                    FoldStatement (ref compileData, ref passData, condStmt.ElseStatement, retType);
 
                 break;
             }
 
             case ES_AstSwitchStatement switchStmt: {
-                var exprTypeData = FoldExpression (ref passData, ref switchStmt.ValueExpression, typeUnkn);
+                var exprTypeData = FoldExpression (ref compileData, ref passData, ref switchStmt.ValueExpression, typeUnkn);
 
                 foreach (var section in switchStmt.Sections) {
                     foreach (ref var expr in section.Expressions.AsSpan ()) {
                         if (expr is not null)
-                            FoldExpression (ref passData, ref expr, exprTypeData.Type);
+                            FoldExpression (ref compileData, ref passData, ref expr, exprTypeData.Type);
                     }
 
                     var subStmt = section.StatementsBlock;
                     while (subStmt is not null) {
-                        FoldStatement (ref passData, retType, subStmt);
+                        FoldStatement (ref compileData, ref passData, subStmt, retType);
 
                         subStmt = subStmt.Endpoint;
                     }
@@ -443,7 +334,7 @@ internal unsafe static partial class Compiler_ConstantFolding {
 
             case ES_AstReturnStatement retStmt: {
                 if (retStmt.ReturnExpression is not null)
-                    FoldExpression (ref passData, ref retStmt.ReturnExpression, retType);
+                    FoldExpression (ref compileData, ref passData, ref retStmt.ReturnExpression, retType);
 
                 break;
             }
@@ -453,27 +344,27 @@ internal unsafe static partial class Compiler_ConstantFolding {
             #region Loops
 
             case ES_AstLoopStatement loopStmt: {
-                passData.Symbols.Push ();
+                compileData.Symbols.Push ();
 
                 if (loopStmt.InitializationStatement is not null)
-                    FoldStatement (ref passData, retType, loopStmt.InitializationStatement);
+                    FoldStatement (ref compileData, ref passData, loopStmt.InitializationStatement, retType);
 
                 if (loopStmt.ConditionExpression is not null)
-                    FoldExpression (ref passData, ref loopStmt.ConditionExpression, typeBool);
+                    FoldExpression (ref compileData, ref passData, ref loopStmt.ConditionExpression, typeBool);
 
                 if (loopStmt.IterationExpressions is not null) {
                     foreach (ref var expr in loopStmt.IterationExpressions.AsSpan ()) {
                         if (expr is not null)
-                            FoldExpression (ref passData, ref expr, typeUnkn);
+                            FoldExpression (ref compileData, ref passData, ref expr, typeUnkn);
                     }
                 }
 
                 Debug.Assert (loopStmt.LoopBody is not null);
                 Debug.Assert (loopStmt.LoopBody.Endpoint is null);
 
-                FoldStatement (ref passData, retType, loopStmt.LoopBody);
+                FoldStatement (ref compileData, ref passData, loopStmt.LoopBody, retType);
 
-                passData.Symbols.Pop ();
+                compileData.Symbols.Pop ();
 
                 break;
             }
@@ -481,12 +372,12 @@ internal unsafe static partial class Compiler_ConstantFolding {
             #endregion
 
             case ES_AstExpressionStatement exprStmt:
-                FoldExpression (ref passData, ref exprStmt.Expression, typeUnkn);
+                FoldExpression (ref compileData, ref passData, ref exprStmt.Expression, typeUnkn);
                 break;
 
             case ES_AstExpressionListStatement exprListStmt: {
                 foreach (ref var expr in exprListStmt.Expressions.AsSpan ())
-                    FoldExpression (ref passData, ref expr, typeUnkn);
+                    FoldExpression (ref compileData, ref passData, ref expr, typeUnkn);
 
                 break;
             }

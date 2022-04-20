@@ -13,169 +13,154 @@ using ChronosLib.Pooled;
 using EchelonScriptCommon.Data;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.Utilities;
-using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data;
+using EchelonScriptCompiler.Frontend.Data;
 
 namespace EchelonScriptCompiler.Frontend;
 
-public unsafe partial class CompilerFrontend {
-    private void CreateFunctions (ref TranslationUnitData transUnit) {
-        var idPool = Environment!.IdPool;
-
-        foreach (ref var astUnit in transUnit.AstUnits.Span) {
-            foreach (var nm in astUnit.Ast.Namespaces) {
-                var symbols = astUnit.Symbols;
-                var unitSrc = astUnit.SourceData;
-
-                ES_Identifier namespaceName;
-                using (var nameArr = nm.NamespaceName.ToPooledChars ())
-                    namespaceName = idPool.GetIdentifier (nameArr);
-
-                var namespaceBuilder = EnvironmentBuilder!.GetOrCreateNamespace (namespaceName);
-
-                symbols.Push ();
-                ImportNamespaceSymbols (astUnit.Symbols, namespaceBuilder.NamespaceData);
-
-                foreach (var type in nm.Contents) {
-                    switch (type) {
-                        case ES_AstFunctionDefinition funcDef: {
-                            CreateFunctions_Function (
-                                ref transUnit, namespaceBuilder,
-                                symbols, unitSrc,
-                                null, funcDef
-                            );
-                            break;
-                        }
-
-                        // [TODO] Once we've got everything else working with aggregates, we need to traverse
-                        // these to create their functions.
-                        case ES_AstClassDefinition classDef:
-                            throw new NotImplementedException ("[TODO] Classes not implemented yet.");
-                        case ES_AstStructDefinition structDef:
-                            break;
-
-                        // These are ignored.
-                        case ES_AstEnumDefinition enumDef:
-                            break;
-
-                        default:
-                            throw new NotImplementedException ("Node type not implemented.");
-                    }
-                }
-
-                symbols.Pop ();
-            }
-        }
+internal static class Compiler_FunctionCreation {
+    private ref struct PassData {
+        public ES_Identifier TransUnitName;
+        public SourceData Source;
     }
 
-    private void CreateFunctions_Function (
-        ref TranslationUnitData transUnit, ES_NamespaceData.Builder namespaceBuilder,
-        SymbolStack<FrontendSymbol> symbols, SourceData unitSrc,
-        ES_TypeInfo* parentType, ES_AstFunctionDefinition funcDef
-    ) {
-        Debug.Assert (Environment is not null);
-        Debug.Assert (EnvironmentBuilder is not null);
+    private static ESC_TypeRef GetTypeRef (ES_AstTypeDeclaration typeDecl) {
+        var typeRef = typeDecl as ES_AstTypeDeclaration_TypeReference;
 
-        var sourceUnit = transUnit.Name;
-        var idPool = Environment.IdPool;
+        Debug.Assert (typeRef is not null);
 
-        // Get the namespace and function names.
-        var funcName = Environment.IdPool.GetIdentifier (funcDef.Name.Text.Span);
+        return typeRef.Reference;
+    }
 
-        // Get the fully-qualified name.
-        ES_FullyQualifiedName fullyQualifiedName;
-        if (parentType == null) {
-            var namespaceName = namespaceBuilder.NamespaceData.NamespaceName;
-            fullyQualifiedName = new ES_FullyQualifiedName (namespaceName, funcName);
-        } else {
-            using var namespaceChars = new StructPooledList<char> (CL_ClearMode.Auto);
+    public static void CreateFunctions (ref CompileData compileData) {
+        var idPool = compileData.IdPool;
 
-            namespaceChars.AddRange (parentType->Name.NamespaceName.GetCharsSpan ());
+        Debug.Assert (compileData.Symbols.ScopesCount == 0);
+        compileData.Symbols.Push ();
 
-            namespaceChars.AddRange ("::");
+        compileData.GatherGlobalImports ();
 
-            namespaceChars.AddRange (parentType->Name.TypeName.GetCharsSpan ());
+        foreach (ref var transUnit in compileData.TranslationUnits) {
+            foreach (ref var astUnit in transUnit.AstUnits.Span) {
+                var passData = new PassData {
+                    TransUnitName = transUnit.Name,
+                    Source = astUnit.SourceData,
+                };
 
-            var namespaceName = idPool.GetIdentifier (namespaceChars.Span);
-            fullyQualifiedName = new ES_FullyQualifiedName (namespaceName, funcName);
+                foreach (var nm in astUnit.Ast.Namespaces) {
+                    var nsName = nm.NamespaceName.ToIdentifier (idPool);
+                    var nsData = compileData.GetOrCreateNamespace (nsName);
+
+                    compileData.Symbols.Push ();
+                    compileData.ImportNamespaceSymbols (nsData);
+
+                    foreach (var type in nm.Contents) {
+                        switch (type) {
+                            case ES_AstFunctionDefinition funcDef: {
+                                CreateFunctions_Function (
+                                    ref compileData, ref passData,
+                                    funcDef, nsData, null
+                                );
+                                break;
+                            }
+
+                            // [TODO] Once we've got everything else working with aggregates, we need to traverse
+                            // these to create their functions.
+                            case ES_AstClassDefinition classDef:
+                                throw new NotImplementedException ("[TODO] Classes not implemented yet.");
+                            case ES_AstStructDefinition structDef:
+                                break;
+
+                            // These are ignored.
+                            case ES_AstEnumDefinition enumDef:
+                                break;
+
+                            default:
+                                throw new NotImplementedException ("Node type not implemented.");
+                        }
+                    }
+
+                    compileData.Symbols.Pop ();
+                }
+            }
         }
+
+        compileData.Symbols.Pop ();
+        Debug.Assert (compileData.Symbols.ScopesCount == 0);
+    }
+
+    private static void CreateFunctions_Function (
+        ref CompileData compileData, ref PassData passData,
+        ES_AstFunctionDefinition funcDef, ESC_Namespace nsData, ESC_TypeData? parentType
+    ) {
+        // Get the namespace and function names.
+        var funcName = compileData.IdPool.GetIdentifier (funcDef.Name.Text.Span);
 
         // Handle the return type.
         Debug.Assert (funcDef.ReturnType is not null);
-        funcDef.ReturnType = GenerateASTTypeRef (transUnit.Name, symbols, unitSrc, funcDef.ReturnType);
 
         // Handle arguments.
-        using var argData = new StructPooledList<ES_FunctionArgData> (CL_ClearMode.Auto);
-        using var argTypes = new StructPooledList<ES_FunctionPrototypeArgData> (CL_ClearMode.Auto);
+        using var argsList = new StructPooledList<ESC_FunctionArg> (CL_ClearMode.Auto);
+        using var argsTypes = new StructPooledList<ESC_PrototypeArg> (CL_ClearMode.Auto);
 
         var optArgNum = 0;
         var argNum = 0;
         var reqAfterOptReported = false;
         foreach (var arg in funcDef.ArgumentsList) {
-            var argName = idPool.GetIdentifier (arg.Name.Text.Span);
-            arg.ValueType = GenerateASTTypeRef (transUnit.Name, symbols, unitSrc, arg.ValueType!);
+            var argName = compileData.IdPool.GetIdentifier (arg.Name.Text.Span);
 
-            foreach (var otherArg in argData) {
+            foreach (var otherArg in argsList) {
                 if (otherArg.Name != argName)
                     continue;
 
-                errorList.Add (ES_FrontendErrors.GenArgAlreadyDefined (
+                compileData.ErrorList.Add (ES_FrontendErrors.GenArgAlreadyDefined (
                     arg.Name.Text.Span.GetPooledString (), arg.Name
                 ));
             }
 
-            argData.Add (new ES_FunctionArgData (argName, null));
-            argTypes.Add (new ES_FunctionPrototypeArgData (arg.ArgType, GetTypeRef (arg.ValueType)));
+            Debug.Assert (arg.ValueType is not null);
+
+            argsList.Add (new (argName, null));
+            argsTypes.Add (new (arg.ArgType, GetTypeRef (arg.ValueType)));
 
             if (arg.DefaultExpression is not null) {
                 if (arg.ArgType == ES_ArgumentType.Out || arg.ArgType == ES_ArgumentType.Ref) {
-                    errorList.Add (ES_FrontendErrors.GenArgTypeCantUseDefExpr (
+                    compileData.ErrorList.Add (ES_FrontendErrors.GenArgTypeCantUseDefExpr (
                         arg.Name.Text.Span.GetPooledString (), arg.ArgType.ToString (), arg.Name
                     ));
                 }
 
                 optArgNum++;
             } else if (optArgNum > 0 && !reqAfterOptReported) {
-                errorList.Add (new EchelonScriptErrorMessage (arg.Name, ES_FrontendErrors.ReqArgAfterOptional));
+                compileData.ErrorList.Add (new (arg.Name, ES_FrontendErrors.ReqArgAfterOptional));
                 reqAfterOptReported = true;
             }
             argNum++;
         }
 
-        var argDataMem = ArrayPointer<ES_FunctionArgData>.Null;
-        if (argData.Count > 0) {
-            argDataMem = EnvironmentBuilder.MemoryManager.GetArray<ES_FunctionArgData> (argData.Count);
-            argData.Span.CopyTo (argDataMem.Span);
-        }
-        argData.Dispose ();
-
         // Get the function type.
-        var funcType = EnvironmentBuilder.GetOrAddFunctionType (GetTypeRef (funcDef.ReturnType), argTypes.Span, true);
+        var funcType = compileData.GetPrototype (GetTypeRef (funcDef.ReturnType), argsTypes.Span, true)!;
 
         // Add the function variant to the namespace or parent type.
         if (parentType != null) {
             throw new NotImplementedException ("[TODO] Member functions not implemented yet.");
         } else {
-            if (namespaceBuilder.CheckTypeExists (funcName, null) != null) {
-                errorList.Add (ES_FrontendErrors.GenTypeAlreadyDefined (
-                    namespaceBuilder.NamespaceData.NamespaceName.GetCharsSpan ().GetPooledString (),
+            if (nsData.CheckTypeExists (funcName, null, out _) != null) {
+                compileData.ErrorList.Add (ES_FrontendErrors.GenTypeAlreadyDefined (
+                    nsData.NamespaceName.GetCharsSpan ().GetPooledString (),
                     funcDef.Name.Text.Span.GetPooledString (),
                     funcDef.Name
                 ));
                 return;
             }
 
-            var funcData = EnvironmentBuilder.MemoryManager.GetMemory<ES_FunctionData> ();
-
-            *funcData = new ES_FunctionData (
-                fullyQualifiedName,
-                funcDef.AccessModifier, sourceUnit,
-                funcType, argDataMem, optArgNum
+            var funcData = new ESC_Function (
+                new (nsData.NamespaceName), funcName,
+                funcDef.AccessModifier, passData.TransUnitName,
+                funcType, argsList.ToArray (), optArgNum
             );
 
-            EnvironmentBuilder!.PointerAstMap.Add ((IntPtr) funcData, funcDef);
-
-            namespaceBuilder.Functions.Add (funcName, funcData);
+            nsData.Functions.Add (funcName, funcData);
         }
 
         // TODO:

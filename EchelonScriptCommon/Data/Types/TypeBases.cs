@@ -53,8 +53,8 @@ public unsafe struct ES_TypeInfo {
     /// <summary>The size of the type at runtime, in bytes.</summary>
     public int RuntimeSize;
 
-    /// <summary>The type's access modifier.</summary>
-    public readonly ES_AccessModifier AccessModifier;
+    /// <summary>A list of all the references in the type.</summary>
+    public ArrayPointer<nint> RefsList;
 
     /// <summary>The type's flags.</summary>
     public ES_TypeFlag Flags;
@@ -62,18 +62,13 @@ public unsafe struct ES_TypeInfo {
     /// <summary>The fully qualified name of the type.</summary>
     public readonly ES_FullyQualifiedName Name;
 
+    /// <summary>The type's access modifier.</summary>
+    public readonly ES_AccessModifier AccessModifier;
+
     /// <summary>The source translation unit of the type.</summary>
     public readonly ES_Identifier SourceUnit;
 
-    /// <summary>A list of all the references in the type.</summary>
-    public ArrayPointer<nint> RefsList;
-
-    /// <summary>The members list of the type.</summary>
-    public ES_TypeMembers MembersList;
-
     #endregion
-
-    #region ================== Constructors
 
     public ES_TypeInfo (
         ES_TypeTag typeTag, ES_AccessModifier accessMod, ES_TypeFlag flags,
@@ -83,17 +78,13 @@ public unsafe struct ES_TypeInfo {
         TypeTag = typeTag;
         RuntimeSize = -1;
 
-        AccessModifier = accessMod;
+        RefsList = ArrayPointer<nint>.Null;
         Flags = flags;
 
         Name = fullyQualifiedName;
+        AccessModifier = accessMod;
         SourceUnit = sourceUnit;
-
-        RefsList = ArrayPointer<nint>.Null;
-        MembersList = new ES_TypeMembers ();
     }
-
-    #endregion
 
     #region ================== Instance properties
 
@@ -224,11 +215,11 @@ public unsafe struct ES_TypeInfo {
             }
 
             case ES_TypeTag.Array: {
-                var arrayData = (ES_ArrayTypeData*) type;
+                var arrayData = (ES_ArrayData*) type;
 
                 GetNiceTypeName (ref charsList, arrayData->ElementType, fullyQualified, globalTypesNS, generatedTypesNS);
                 charsList.Add ('[');
-                charsList.Add (',', arrayData->DimensionsCount - 1);
+                charsList.Add (',', arrayData->Rank - 1);
                 charsList.Add (']');
 
                 break;

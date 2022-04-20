@@ -27,6 +27,8 @@ public unsafe sealed partial class RoslynCompilerBackend {
     internal const string ArrayIndexFuncName = "$Index";
     internal const string ArrayConcatFuncName = "$Concat";
 
+    internal const string DefaultValueFuncName = "$DefaultValue";
+
     private static string MangleDefaultConstructorName (ES_TypeInfo* typeName, bool isStatic) {
         // Sample name: "struct.System.Numerics__Vector2"
         using var mangleChars = new StructPooledList<char> (CL_ClearMode.Auto);
@@ -138,7 +140,7 @@ public unsafe sealed partial class RoslynCompilerBackend {
         return mangleChars.Span.GetPooledString ();
     }
 
-    private static string MangleArrayType ([DisallowNull] ES_ArrayTypeData* arrayData) {
+    private static string MangleArrayType ([DisallowNull] ES_ArrayData* arrayData) {
         // Sample name: "array.@generated::global::int32$2D"
         using var mangleChars = new StructPooledList<char> (CL_ClearMode.Auto);
 
@@ -155,12 +157,12 @@ public unsafe sealed partial class RoslynCompilerBackend {
         mangleChars.AddRange (MangleTypeNameAny (arrayData->ElementType));
 
         // The dimensions suffix.
-        Debug.Assert (arrayData->DimensionsCount <= byte.MaxValue);
+        Debug.Assert (arrayData->Rank <= byte.MaxValue);
 
         var dimSuffixSpan = mangleChars.AddSpan (5);
         dimSuffixSpan [0] = '$';
 
-        if (!arrayData->DimensionsCount.TryFormat (dimSuffixSpan [1..], out var charsWritten))
+        if (!arrayData->Rank.TryFormat (dimSuffixSpan [1..], out var charsWritten))
             Debug.Fail ("Failed to format dimensions count.");
 
         dimSuffixSpan [charsWritten + 1] = 'D';
@@ -179,7 +181,7 @@ public unsafe sealed partial class RoslynCompilerBackend {
                 return MangleFunctionType ((ES_FunctionPrototypeData*) type);
 
             case ES_TypeTag.Array:
-                return MangleArrayType ((ES_ArrayTypeData*) type);
+                return MangleArrayType ((ES_ArrayData*) type);
 
             case ES_TypeTag.Void:
             case ES_TypeTag.Bool:
@@ -213,12 +215,12 @@ public unsafe sealed partial class RoslynCompilerBackend {
                 return ES_PrimitiveTypes.Bool;
 
             case ES_TypeTag.Int: {
-                var intType = (ES_IntTypeData*) type;
+                var intType = (ES_IntData*) type;
                 return ES_PrimitiveTypes.GetIntName (intType->IntSize, intType->Unsigned);
             }
 
             case ES_TypeTag.Float: {
-                var floatType = (ES_FloatTypeData*) type;
+                var floatType = (ES_FloatData*) type;
                 return ES_PrimitiveTypes.GetFloatName (floatType->FloatSize);
             }
 

@@ -73,8 +73,6 @@ public partial class CompilerTest : UserControl {
 
     #endregion
 
-    #region ================== Constructors
-
     public CompilerTest () {
         InitializeComponent ();
 
@@ -94,8 +92,6 @@ public partial class CompilerTest : UserControl {
 
         compilerComboBox.SelectedIndex = 0;
     }
-
-    #endregion
 
     #region ================== Instance methods
 
@@ -345,6 +341,7 @@ public partial class CompilerTest : UserControl {
 
             if (namespaceData.Functions.TryGetValue (idTestI32, out func)) {
                 var funcType = func.Address->FunctionType;
+                var funcName = func.Address->Name.GetNameAsTypeString ();
 
                 var matchSig = false;
 
@@ -363,20 +360,21 @@ public partial class CompilerTest : UserControl {
                     string infoStr;
                     try {
                         var ret = fp (a, b);
-                        infoStr = string.Format (cultureInfo, $"{testI32Name} ({{0:n0}}, {{1:n0}}) returned {{2:n0}}.", a, b, ret);
+                        infoStr = string.Format (cultureInfo, $"{funcName} ({{0:n0}}, {{1:n0}}) returned {{2:n0}}.", a, b, ret);
                     } catch (EchelonScriptException e) {
-                        infoStr = $"{testI32Name} exception: {GetExceptionString (e)}";
+                        infoStr = $"{funcName} exception: {GetExceptionString (e)}";
                     }
 
-                    errList.Add (new CompilerMessage ("Output", new EchelonScriptErrorMessage (infoStr, 0, 0, string.Empty.AsMemory (), 0, 0)));
+                    errList.Add (new ("Output", new (infoStr, 0, 0, string.Empty.AsMemory (), 0, 0)));
                 } else if (matchSig)
-                    errList.Add (new CompilerMessage ("Output", new EchelonScriptErrorMessage ($"{testI32Name} had a null function pointer.", 0, 0, string.Empty.AsMemory (), 0, 0)));
+                    errList.Add (new ("Output", new ($"{funcName} had a null function pointer.", 0, 0, string.Empty.AsMemory (), 0, 0)));
                 else
-                    errList.Add (new CompilerMessage ("Output", new EchelonScriptErrorMessage ($"{testI32Name} didn't match signature.", 0, 0, string.Empty.AsMemory (), 0, 0)));
+                    errList.Add (new ("Output", new ($"{funcName} didn't match signature.", 0, 0, string.Empty.AsMemory (), 0, 0)));
             }
 
             if (namespaceData.Functions.TryGetValue (idTestF32, out func)) {
                 var funcType = func.Address->FunctionType;
+                var funcName = func.Address->Name.GetNameAsTypeString ();
 
                 var matchSig = false;
 
@@ -395,16 +393,16 @@ public partial class CompilerTest : UserControl {
                     string infoStr;
                     try {
                         var ret = fp (a, b);
-                        infoStr = string.Format (cultureInfo, $"{testF32Name} ({{0:n}}, {{1:n}}) returned {{2:n}}.", a, b, ret);
+                        infoStr = string.Format (cultureInfo, $"{funcName} ({{0:n}}, {{1:n}}) returned {{2:n}}.", a, b, ret);
                     } catch (EchelonScriptException e) {
-                        infoStr = $"{testF32Name} exception: {GetExceptionString (e)}";
+                        infoStr = $"{funcName} exception: {GetExceptionString (e)}";
                     }
 
-                    errList.Add (new CompilerMessage ("Output", new EchelonScriptErrorMessage (infoStr, 0, 0, string.Empty.AsMemory (), 0, 0)));
+                    errList.Add (new ("Output", new (infoStr, 0, 0, string.Empty.AsMemory (), 0, 0)));
                 } else if (matchSig)
-                    errList.Add (new CompilerMessage ("Output", new EchelonScriptErrorMessage ($"{testF32Name} had a null function pointer.", 0, 0, string.Empty.AsMemory (), 0, 0)));
+                    errList.Add (new ("Output", new ($"{funcName} had a null function pointer.", 0, 0, string.Empty.AsMemory (), 0, 0)));
                 else
-                    errList.Add (new CompilerMessage ("Output", new EchelonScriptErrorMessage ($"{testF32Name} didn't match signature.", 0, 0, string.Empty.AsMemory (), 0, 0)));
+                    errList.Add (new ("Output", new ($"{funcName} didn't match signature.", 0, 0, string.Empty.AsMemory (), 0, 0)));
             }
         }
     }

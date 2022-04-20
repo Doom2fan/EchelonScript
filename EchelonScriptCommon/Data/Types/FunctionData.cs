@@ -47,7 +47,7 @@ public readonly unsafe struct ES_FunctionData {
     public readonly ES_Identifier SourceUnit;
 
     public readonly ES_FunctionPrototypeData* FunctionType;
-    public readonly ArrayPointer<ES_FunctionArgData> Arguments;
+    public readonly ArrayPointer<ES_FunctionArg> Arguments;
     public readonly int OptionalArgsCount;
 
     #endregion
@@ -58,14 +58,11 @@ public readonly unsafe struct ES_FunctionData {
 
     #endregion
 
-    #region ================== Constructors
-
     public ES_FunctionData (
         ES_FullyQualifiedName fqn, ES_AccessModifier accessMod, ES_Identifier sourceUnit,
-        ES_FunctionPrototypeData* functionType, ArrayPointer<ES_FunctionArgData> args, int optArgCount
+        ES_FunctionPrototypeData* functionType, ArrayPointer<ES_FunctionArg> args, int optArgCount
     ) {
         Debug.Assert (functionType is not null);
-        Debug.Assert (args.Length == functionType->ArgumentsList.Length);
 
         Name = fqn;
 
@@ -76,48 +73,18 @@ public readonly unsafe struct ES_FunctionData {
         Arguments = args;
         OptionalArgsCount = optArgCount;
     }
-
-    #endregion
 }
 
 [StructLayout (LayoutKind.Sequential, Pack = 1)]
-[ES_ExportAggregate (new [] { "EchelonScript", "Reflection" }, "FunctionArgData", ES_ExportAttributeBase.AggregateType.Struct)]
-public unsafe struct ES_FunctionArgData {
+[ES_ExportAggregate (new [] { "EchelonScript", "Reflection" }, "FunctionArg", ES_ExportAttributeBase.AggregateType.Struct)]
+public unsafe struct ES_FunctionArg {
     #region ================== Instance fields
 
     public readonly ES_Identifier Name;
-    public void* DefaultValue;
 
     #endregion
 
-    #region ================== Constructors
-
-    public ES_FunctionArgData (ES_Identifier name, void* defaultVal) {
-        Name = name;
-        DefaultValue = defaultVal;
-    }
-
-    #endregion
-}
-
-[StructLayout (LayoutKind.Sequential, Pack = 1)]
-[ES_ExportAggregate (new [] { "EchelonScript", "Reflection" }, "FunctionTypeArgData", ES_ExportAttributeBase.AggregateType.Struct)]
-public unsafe struct ES_FunctionPrototypeArgData {
-    #region ================== Instance fields
-
-    public readonly ES_ArgumentType ArgType;
-    public readonly ES_TypeInfo* ValueType;
-
-    #endregion
-
-    #region ================== Constructors
-
-    public ES_FunctionPrototypeArgData (ES_ArgumentType argType, ES_TypeInfo* valueType) {
-        ArgType = argType;
-        ValueType = valueType;
-    }
-
-    #endregion
+    public ES_FunctionArg (ES_Identifier name) => Name = name;
 }
 
 [StructLayout (LayoutKind.Sequential, Pack = 1)]
@@ -127,29 +94,41 @@ public unsafe struct ES_FunctionPrototypeData {
 
     public ES_TypeInfo TypeInfo;
     private ES_TypeInfo* returnType;
-    private ArrayPointer<ES_FunctionPrototypeArgData> argumentsList;
+    private ArrayPointer<ES_FunctionPrototypeArg> argumentsList;
 
     #endregion
 
-    #region ================== Constructors
-
-    public ES_FunctionPrototypeData (ES_AccessModifier accessMod,
-        ES_TypeInfo* retType, ArrayPointer<ES_FunctionPrototypeArgData> argsList,
-        ES_FullyQualifiedName fullyQualifiedName, ES_Identifier sourceUnit
+    public ES_FunctionPrototypeData (
+        ES_FullyQualifiedName fullyQualifiedName,
+        ES_TypeInfo* retType, ArrayPointer<ES_FunctionPrototypeArg> argsList
     ) {
-        TypeInfo = new (ES_TypeTag.FuncPrototype, accessMod, ES_TypeFlag.NoNew, sourceUnit, fullyQualifiedName);
+        TypeInfo = new (ES_TypeTag.FuncPrototype, ES_AccessModifier.Public, ES_TypeFlag.NoNew, ES_Identifier.Empty, fullyQualifiedName);
         TypeInfo.RuntimeSize = IntPtr.Size;
 
         returnType = retType;
         argumentsList = argsList;
     }
 
-    #endregion
-
     #region ================== Instance properties
 
     public ES_TypeInfo* ReturnType => returnType;
-    public ArrayPointer<ES_FunctionPrototypeArgData> ArgumentsList => argumentsList;
+    public ArrayPointer<ES_FunctionPrototypeArg> ArgumentsList => argumentsList;
 
     #endregion
+}
+
+[StructLayout (LayoutKind.Sequential, Pack = 1)]
+[ES_ExportAggregate (new [] { "EchelonScript", "Reflection" }, "FunctionTypeArg", ES_ExportAttributeBase.AggregateType.Struct)]
+public unsafe struct ES_FunctionPrototypeArg {
+    #region ================== Instance fields
+
+    public readonly ES_ArgumentType ArgType;
+    public readonly ES_TypeInfo* ValueType;
+
+    #endregion
+
+    public ES_FunctionPrototypeArg (ES_ArgumentType argType, ES_TypeInfo* valueType) {
+        ArgType = argType;
+        ValueType = valueType;
+    }
 }

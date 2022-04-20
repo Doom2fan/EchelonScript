@@ -60,8 +60,6 @@ public unsafe sealed class RoslynBackendData : IBackendData {
 
     #endregion
 
-    #region ================== Constructors
-
     internal RoslynBackendData (
         ref RoslynCompilerBackend.PassData passData,
         ArrayPointer<nint> rootsArr,
@@ -100,8 +98,6 @@ public unsafe sealed class RoslynBackendData : IBackendData {
         var globalStaticConsMethodInfo = GetGlobalFunction (ES_Constants.GlobalStaticConstructorName);
         globalStaticConsMethodInfo.Invoke (null, null);
     }
-
-    #endregion
 
     #region ================== Instance methods
 
@@ -276,15 +272,11 @@ public unsafe sealed partial class RoslynCompilerBackend : ICompilerBackend, IDi
 
     #endregion
 
-    #region ================== Constructors
-
     public RoslynCompilerBackend () {
         errorList = null!;
         warningList = null!;
         infoList = null!;
     }
-
-    #endregion
 
     #region ================== Instance methods
 
@@ -371,6 +363,10 @@ public unsafe sealed partial class RoslynCompilerBackend : ICompilerBackend, IDi
                 var typePtr = typeAddr.Address;
 
                 switch (typePtr->TypeTag) {
+                    case ES_TypeTag.UNKNOWN:
+                    case ES_TypeTag.Null:
+                        break;
+
                     case ES_TypeTag.Struct:
                     case ES_TypeTag.Void:
                     case ES_TypeTag.Bool:
@@ -383,7 +379,7 @@ public unsafe sealed partial class RoslynCompilerBackend : ICompilerBackend, IDi
                         break;
 
                     case ES_TypeTag.Array: {
-                        var arrayType = (ES_ArrayTypeData*) typePtr;
+                        var arrayType = (ES_ArrayData*) typePtr;
                         CompileCode_Array (ref passData, arrayType);
                         break;
                     }
@@ -458,22 +454,17 @@ public unsafe sealed partial class RoslynCompilerBackend : ICompilerBackend, IDi
             );
         }
 
-        var staticVarsMem = ArrayPointer<byte>.Null;
-        if (totalMem > 0) {
-            staticVarsMem = passData.MemoryManager.GetArrayAligned<byte> (totalMem, sizeof (nint));
-            staticVarsMem.Span.Clear ();
-        }
+        var staticVarsMem = passData.MemoryManager.GetArrayAligned<byte> (totalMem, sizeof (nint));
+        staticVarsMem.Span.Clear ();
 
         foreach (ref var root in rootsList.Span)
             root += (nint) staticVarsMem.Elements;
 
-        var rootsArray = ArrayPointer<nint>.Null;
-        if (rootsList.Count > 0) {
-            rootsArray = passData.MemoryManager.GetArrayAligned<nint> (rootsList.Count, sizeof (nint));
-            rootsList.Span.CopyTo (rootsArray.Span);
-            ES_GarbageCollector.AddRoots ((ES_ObjectAddress**) rootsArray.Elements, rootsArray.Length);
-        }
-        roots = rootsArray;
+        roots = passData.MemoryManager.GetArrayAligned<nint> (rootsList.Count, sizeof (nint));
+        rootsList.Span.CopyTo (roots.Span);
+
+        if (roots.Length > 0)
+            ES_GarbageCollector.AddRoots ((ES_ObjectAddress**) roots.Elements, roots.Length);
 
         var roslynBytePtr = PointerType (PredefinedType (Token (SyntaxKind.ByteKeyword)));
         passData.GlobalMembers.Add (

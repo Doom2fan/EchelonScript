@@ -111,7 +111,7 @@ public unsafe sealed partial class RoslynCompilerBackend {
     ) {
         Debug.Assert (parentExpr.Type->TypeTag == ES_TypeTag.Array);
 
-        var typeArr = (ES_ArrayTypeData*) parentExpr.Type;
+        var typeArr = (ES_ArrayData*) parentExpr.Type;
         var typeIndex = passData.Env.GetArrayIndexType ();
 
         var memberChars = expr.Name.GetCharsSpan ();
@@ -120,7 +120,7 @@ public unsafe sealed partial class RoslynCompilerBackend {
         ES_TypeInfo* memberType;
         ExpressionSyntax value;
 
-        var lengthName = typeArr->DimensionsCount < 2 ? "Length" : "TotalLength";
+        var lengthName = typeArr->Rank < 2 ? "Length" : "TotalLength";
         var dimLenPrefix = "LengthD";
         if (memberChars.Equals (lengthName, StringComparison.Ordinal)) {
             memberType = typeIndex;

@@ -112,15 +112,11 @@ public class EchelonScriptParser : IDisposable {
 
         #endregion
 
-        #region ================== Constructors
-
         public SimpleBinaryExpressionParselet (ExpressionPrecedence precedence, EchelonScriptTokenType type, SimpleBinaryExprType exprType) {
             opPrecedence = precedence;
             tokenType = type;
             expressionType = exprType;
         }
-
-        #endregion
 
         #region ================== Instance methods
 
@@ -153,15 +149,11 @@ public class EchelonScriptParser : IDisposable {
 
         #endregion
 
-        #region ================== Constructors
-
         public AssignExpressionParselet (ExpressionPrecedence precedence, EchelonScriptTokenType type, SimpleBinaryExprType exprType) {
             opPrecedence = precedence;
             tokenType = type;
             expressionType = exprType;
         }
-
-        #endregion
 
         #region ================== Instance methods
 
@@ -194,15 +186,11 @@ public class EchelonScriptParser : IDisposable {
 
         #endregion
 
-        #region ================== Constructors
-
         public SimpleUnaryExpressionParselet (ExpressionPrecedence precedence, EchelonScriptTokenType type, SimpleUnaryExprType exprType) {
             opPrecedence = precedence;
             tokenType = type;
             expressionType = exprType;
         }
-
-        #endregion
 
         #region ================== Instance methods
 
@@ -232,11 +220,7 @@ public class EchelonScriptParser : IDisposable {
 
         #endregion
 
-        #region ================== Constructors
-
         public DoubleDereferenceExpressionParselet (ExpressionPrecedence precedence) => opPrecedence = precedence;
-
-        #endregion
 
         #region ================== Instance methods
 
@@ -603,9 +587,9 @@ public class EchelonScriptParser : IDisposable {
                 return new ES_AstIndexingExpression (left, new ES_AstExpression? [] { null }, tkPair.tk.TextEndPos);
             }
 
-            var ranks = parser.ParseArrayRanks (out _, out var endPos, true);
+            var dims = parser.ParseArrayDimensions (out _, out var endPos, true);
 
-            return new ES_AstIndexingExpression (left, ranks, endPos);
+            return new ES_AstIndexingExpression (left, dims, endPos);
         }
 
         #endregion
@@ -651,9 +635,9 @@ public class EchelonScriptParser : IDisposable {
         private static ES_AstExpression ParseNewArray (EchelonScriptParser parser, EchelonScriptToken newTk, ES_AstTypeDeclaration? typeDecl) {
             Debug.Assert (parser.EnsureTokenPeek (EchelonScriptTokenType.BracketOpen, null) == EnsureTokenResult.Correct);
 
-            var ranks = parser.ParseArrayRanks (out _, out var endPos, false);
+            var dims = parser.ParseArrayDimensions (out _, out var endPos, false);
 
-            return new ES_AstNewArrayExpression (typeDecl, ranks, newTk, endPos);
+            return new ES_AstNewArrayExpression (typeDecl, dims, newTk, endPos);
         }
 
         #endregion
@@ -1162,8 +1146,8 @@ public class EchelonScriptParser : IDisposable {
         return false;
     }
 
-    protected ES_AstExpression? [] ParseArrayRanks (out EchelonScriptToken startTk, out int endPos, bool ignoreOpenTk) {
-        using var ranksList = new StructPooledList<ES_AstExpression?> (CL_ClearMode.Auto);
+    protected ES_AstExpression? [] ParseArrayDimensions (out EchelonScriptToken startTk, out int endPos, bool ignoreOpenTk) {
+        using var dimsList = new StructPooledList<ES_AstExpression?> (CL_ClearMode.Auto);
 
         if (!ignoreOpenTk) {
             startTk = tokenizer.NextToken ().tk;
@@ -1182,7 +1166,7 @@ public class EchelonScriptParser : IDisposable {
             }
 
             var expr = ParseExpression ();
-            ranksList.Add (expr);
+            dimsList.Add (expr);
 
             tkPair = tokenizer.PeekNextToken ();
             if (tkPair.tk.Type == EchelonScriptTokenType.BracketClose) {
@@ -1199,7 +1183,7 @@ public class EchelonScriptParser : IDisposable {
                 tokenizer.NextToken ();
         }
 
-        return ranksList.ToArray ();
+        return dimsList.ToArray ();
     }
 
     #endregion
@@ -1377,7 +1361,7 @@ public class EchelonScriptParser : IDisposable {
                     break;
                 }
 
-                var ranksCount = 0;
+                var rank = 0;
 
                 int endPos;
                 while (true) {
@@ -1390,12 +1374,12 @@ public class EchelonScriptParser : IDisposable {
                         break;
                     } else if (tkPair.tk.Type == EchelonScriptTokenType.BracketClose) {
                         endPos = tokenizer.NextToken ().tk.TextEndPos;
-                        ranksCount++;
+                        rank++;
 
                         break;
                     } else if (tkPair.tk.Type == EchelonScriptTokenType.Comma) {
                         tokenizer.NextToken ();
-                        ranksCount++;
+                        rank++;
                     } else {
                         errorsList.Add (ES_FrontendErrors.GenExpectedXGotY ("a comma or \"]\"", tkPair.tk));
                         endPos = tkPair.tk.TextStartPos;
@@ -1404,7 +1388,7 @@ public class EchelonScriptParser : IDisposable {
                     }
                 }
 
-                innerDecl = new ES_AstTypeDeclaration_Array (innerDecl, ranksCount, endPos);
+                innerDecl = new ES_AstTypeDeclaration_Array (innerDecl, rank, endPos);
             } else
                 break;
         }

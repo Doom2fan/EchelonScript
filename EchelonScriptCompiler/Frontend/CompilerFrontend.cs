@@ -13,14 +13,13 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using ChronosLib.Pooled;
 using EchelonScriptCommon.Data;
-using EchelonScriptCommon.Data.Types;
-using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.CompilerCommon.IR;
 using EchelonScriptCompiler.Data;
+using EchelonScriptCompiler.Frontend.Data;
 
 namespace EchelonScriptCompiler.Frontend;
 
-public struct TranslationUnitData : IDisposable {
+internal struct TranslationUnitData : IDisposable {
     #region ================== Instance fields
 
     public ES_Identifier Name;
@@ -47,7 +46,7 @@ public struct TranslationUnitData : IDisposable {
     #endregion
 }
 
-public struct AstUnitData : IDisposable {
+internal struct AstUnitData : IDisposable {
     #region ================== Instance fields and properties
 
     public ES_AbstractSyntaxTree Ast;
@@ -61,7 +60,7 @@ public struct AstUnitData : IDisposable {
     public unsafe void Initialize (ES_AbstractSyntaxTree ast) {
         Ast = ast;
 
-        Symbols = new SymbolStack<FrontendSymbol> (new FrontendSymbol (FrontendSymbolType.None, null, 0));
+        Symbols = new SymbolStack<FrontendSymbol> (FrontendSymbol.SymbolNone);
     }
 
     #endregion
@@ -90,15 +89,31 @@ public enum FrontendSymbolType {
 }
 
 public enum FrontendSymbolFlags {
-    UsingVar = 1,
-    RefVar   = 1 << 1,
-    OutVar   = 1 << 2,
+    UsingVar            = 1,
+    RefVar              = 1 << 1,
+    OutVar              = 1 << 2,
+    CompileTimeConstant = 1 << 3,
+    Writable            = 1 << 4,
 }
 
-public unsafe struct FrontendSymbol {
+internal struct FrontendVariable {
+    public readonly ESC_TypeRef Type;
+    public readonly ESIR_Expression IRExpression;
+
+    internal FrontendVariable (ESC_TypeRef type, ESIR_Expression irExpr) {
+        Type = type;
+        IRExpression = irExpr;
+    }
+}
+
+internal readonly struct FrontendSymbol {
+    public static FrontendSymbol SymbolNone => new (FrontendSymbolType.None);
+
     #region ================== Instance fields
 
-    private readonly void* value;
+    private readonly ESC_TypeRef valType;
+    private readonly FrontendVariable valVar;
+    private readonly ESC_Function? valFunc;
 
     public readonly FrontendSymbolType Tag;
     public readonly FrontendSymbolFlags Flags;
@@ -107,47 +122,75 @@ public unsafe struct FrontendSymbol {
 
     #region ================== Constructors
 
-    internal FrontendSymbol (FrontendSymbolType tag, void* value, FrontendSymbolFlags flags) {
+    private FrontendSymbol (FrontendSymbolType tag) {
         Tag = tag;
-        this.value = value;
+
+        valType = ESC_TypeRef.Null ();
+        valVar = default;
+        valFunc = null;
+
+        Flags = 0;
+    }
+
+    private FrontendSymbol (ESC_TypeRef value, FrontendSymbolFlags flags) {
+        Tag = FrontendSymbolType.Type;
+        valType = value;
         Flags = flags;
+
+        valFunc = null;
+        valVar = default;
+    }
+
+    private FrontendSymbol (FrontendVariable value, FrontendSymbolFlags flags) {
+        Tag = FrontendSymbolType.Variable;
+        valVar = value;
+        Flags = flags;
+
+        valType = ESC_TypeRef.Null ();
+        valFunc = null;
+    }
+
+    private FrontendSymbol (ESC_Function value, FrontendSymbolFlags flags) {
+        Tag = FrontendSymbolType.Function;
+        valFunc = value;
+        Flags = flags;
+
+        valType = ESC_TypeRef.Null ();
+        valVar = default;
     }
 
     #endregion
 
     #region ================== Instance methods
 
-    public ES_TypeInfo* MatchType () {
+    public ESC_TypeRef MatchType () {
         if (Tag != FrontendSymbolType.Type)
             throw new CompilationException ();
 
-        return (ES_TypeInfo*) value;
+        return valType;
     }
 
-    public ES_TypeInfo* MatchVar () {
+    public FrontendVariable MatchVar () {
         if (Tag != FrontendSymbolType.Variable)
             throw new CompilationException ();
 
-        return (ES_TypeInfo*) value;
+        return valVar;
     }
 
-    public ES_FunctionData* MatchFunction () {
+    public ESC_Function MatchFunction () {
         if (Tag != FrontendSymbolType.Function)
             throw new CompilationException ();
 
-        return (ES_FunctionData*) value;
+        return valFunc!;
     }
 
     #endregion
 
-    public static FrontendSymbol NewVariable (ES_TypeInfo* type, FrontendSymbolFlags flags = 0)
-        => new (FrontendSymbolType.Variable, type, flags);
+    public static FrontendSymbol NewVariable (FrontendVariable var, FrontendSymbolFlags flags = 0) => new (var, flags);
 
-    public static FrontendSymbol NewType (ES_TypeInfo* type)
-        => new (FrontendSymbolType.Type, type, 0);
+    public static FrontendSymbol NewType (ESC_TypeRef type, FrontendSymbolFlags flags = 0) => new (type, flags);
 
-    public static FrontendSymbol NewFunction (ES_FunctionData* data)
-        => new (FrontendSymbolType.Function, data, 0);
+    public static FrontendSymbol NewFunction (ESC_Function data, FrontendSymbolFlags flags = 0) => new (data, flags);
 }
 
 public unsafe class SymbolStack<TSymbolType> : IDisposable {
@@ -178,8 +221,6 @@ public unsafe class SymbolStack<TSymbolType> : IDisposable {
 
     #endregion
 
-    #region ================== Constructors
-
     public SymbolStack (TSymbolType notFoundVal) {
         scopes = new CL_PooledList<Scope> ();
         pooledDicts = new CL_PooledList<Dictionary<ES_Identifier, TSymbolType>> ();
@@ -189,8 +230,6 @@ public unsafe class SymbolStack<TSymbolType> : IDisposable {
 
         IsDisposed = false;
     }
-
-    #endregion
 
     #region ================== Instance methods
 
@@ -313,16 +352,12 @@ public unsafe class SymbolStack<TSymbolType> : IDisposable {
 
         #endregion
 
-        #region ================== Constructors
-
         public Enumerator (SymbolStack<TSymbolType> newStack) {
             stack = newStack;
 
             version = stack.version;
             enumerator = stack.scopes.GetEnumerator ();
         }
-
-        #endregion
 
         #region ================== Instance methods
 
@@ -351,7 +386,7 @@ public unsafe class SymbolStack<TSymbolType> : IDisposable {
     #endregion
 }
 
-public unsafe sealed partial class CompilerFrontend : IDisposable {
+internal unsafe sealed partial class CompilerFrontend : IDisposable {
     #region ================== Instance fields
 
     private List<EchelonScriptErrorMessage> errorList;
@@ -368,8 +403,6 @@ public unsafe sealed partial class CompilerFrontend : IDisposable {
 
     #endregion
 
-    #region ================== Constructors
-
     public CompilerFrontend (
         List<EchelonScriptErrorMessage> errList,
         List<EchelonScriptErrorMessage> warnList,
@@ -385,11 +418,9 @@ public unsafe sealed partial class CompilerFrontend : IDisposable {
         EnvironmentBuilder = null;
     }
 
-    #endregion
-
     #region ================== Instance methods
 
-    private static ES_TypeInfo* GetTypeRef (ES_AstTypeDeclaration? typeDecl) {
+    private static ESC_TypeRef GetTypeRef (ES_AstTypeDeclaration? typeDecl) {
         Debug.Assert (typeDecl is not null);
 
         var typeRef = typeDecl as ES_AstTypeDeclaration_TypeReference;
@@ -451,6 +482,25 @@ public unsafe sealed partial class CompilerFrontend : IDisposable {
         Debug.Assert (EnvironmentBuilder is not null);
 
         var nullArr = (ESIR_Tree?) null;
+        var idPool = Environment.IdPool;
+
+        var symbols = new SymbolStack<FrontendSymbol> (FrontendSymbol.SymbolNone);
+        var compileData = new CompileData {
+            Env = Environment,
+            EnvBuilder = EnvironmentBuilder,
+
+            ErrorList = errorList,
+            WarnList = warningList,
+            InfoList = infoList,
+
+            TranslationUnits = translationUnits.Span,
+            Symbols = symbols,
+
+            Namespaces = new (),
+
+            TypeUnknown = new ESC_TypeUnknown (new (ES_Identifier.Empty, idPool.GetIdentifier ("#UNKNOWN_TYPE"))),
+            TypeNull = new ESC_TypeNull (new (ES_Identifier.Empty, idPool.GetIdentifier ("#NULL"))),
+        };
 
         CheckDisposed ();
         CheckSetUp ();
@@ -458,70 +508,47 @@ public unsafe sealed partial class CompilerFrontend : IDisposable {
         if (errorList.Count > 0)
             return nullArr;
 
-        GenerateBuiltinTypes ();
+        Compiler_TypeCreation.CreateTypes (ref compileData);
 
         if (errorList.Count > 0)
             return nullArr;
 
-        foreach (ref var transUnit in translationUnits.Span)
-            CreateTypes (ref transUnit);
+        Compiler_TypeGathering.GatherTypes_Functions (ref compileData);
 
         if (errorList.Count > 0)
             return nullArr;
 
-        GenerateTypesList ();
+        Compiler_FunctionCreation.CreateFunctions (ref compileData);
 
         if (errorList.Count > 0)
             return nullArr;
 
-        foreach (ref var transUnit in translationUnits.Span)
-            GatherGlobalImports (ref transUnit);
+        Compiler_TypeGathering.GatherTypes_Types (ref compileData);
 
         if (errorList.Count > 0)
             return nullArr;
 
-        foreach (ref var transUnit in translationUnits.Span)
-            CreateFunctions (ref transUnit);
+        Compiler_TypeSizing.SizeTypes (ref compileData);
 
         if (errorList.Count > 0)
             return nullArr;
 
-        foreach (ref var transUnit in translationUnits.Span)
-            GatherTypes (ref transUnit);
+        Compiler_ConstantFolding.FoldConstants (ref compileData);
 
         if (errorList.Count > 0)
             return nullArr;
 
-        TypeSizing ();
+        var irTree = Compiler_TypeChecking.CheckTypes (ref compileData);
 
         if (errorList.Count > 0)
             return nullArr;
 
-        foreach (ref var transUnit in translationUnits.Span) {
-            Compiler_ConstantFolding.FoldConstants (
-                Environment, EnvironmentBuilder,
-                errorList, warningList, infoList,
-                ref transUnit
-            );
-        }
+        Compiler_TypeSizing.SizeTypes (ref compileData);
 
         if (errorList.Count > 0)
             return nullArr;
 
-        var irTree = Compiler_TypeChecking.CheckTypes (
-            Environment, EnvironmentBuilder,
-            errorList, warningList, infoList,
-            translationUnits.Span
-        );
-
-        if (errorList.Count > 0)
-            return nullArr;
-
-        TypeSizing ();
-
-        if (errorList.Count > 0)
-            return nullArr;
-
+        Compiler_TypeInfoGen.GenerateTypes (ref compileData);
 
         return irTree;
     }

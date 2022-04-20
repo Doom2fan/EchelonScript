@@ -159,8 +159,8 @@ public unsafe sealed partial class RoslynCompilerBackend {
         ref ExpressionData lhsExpr,
         ref ExpressionData rhsExpr
     ) {
-        var lhsInt = (ES_IntTypeData*) lhsExpr.Type;
-        var rhsInt = (ES_IntTypeData*) rhsExpr.Type;
+        var lhsInt = (ES_IntData*) lhsExpr.Type;
+        var rhsInt = (ES_IntData*) rhsExpr.Type;
 
         Debug.Assert (lhsInt->IntSize == rhsInt->IntSize);
         Debug.Assert (lhsInt->Unsigned == rhsInt->Unsigned);
@@ -174,8 +174,8 @@ public unsafe sealed partial class RoslynCompilerBackend {
         ref ExpressionData lhsExpr,
         ref ExpressionData rhsExpr
     ) {
-        var lhsInt = (ES_IntTypeData*) lhsExpr.Type;
-        var rhsInt = (ES_IntTypeData*) rhsExpr.Type;
+        var lhsInt = (ES_IntData*) lhsExpr.Type;
+        var rhsInt = (ES_IntData*) rhsExpr.Type;
 
         Debug.Assert (rhsInt->IntSize <= ES_IntSize.Int32);
         Debug.Assert (!rhsInt->Unsigned);
@@ -204,8 +204,8 @@ public unsafe sealed partial class RoslynCompilerBackend {
         ref ExpressionData lhsExpr,
         ref ExpressionData rhsExpr
     ) {
-        var lhsInt = (ES_IntTypeData*) lhsExpr.Type;
-        var rhsInt = (ES_IntTypeData*) rhsExpr.Type;
+        var lhsInt = (ES_IntData*) lhsExpr.Type;
+        var rhsInt = (ES_IntData*) rhsExpr.Type;
 
         Debug.Assert (lhsInt->IntSize == rhsInt->IntSize);
         Debug.Assert (lhsInt->Unsigned == rhsInt->Unsigned);
@@ -242,8 +242,8 @@ public unsafe sealed partial class RoslynCompilerBackend {
         ref ExpressionData lhsExpr,
         ref ExpressionData rhsExpr
     ) {
-        var lhsFloat = (ES_FloatTypeData*) lhsExpr.Type;
-        var rhsFloat = (ES_FloatTypeData*) rhsExpr.Type;
+        var lhsFloat = (ES_FloatData*) lhsExpr.Type;
+        var rhsFloat = (ES_FloatData*) rhsExpr.Type;
 
         Debug.Assert (lhsFloat->FloatSize == rhsFloat->FloatSize);
 
@@ -313,8 +313,8 @@ public unsafe sealed partial class RoslynCompilerBackend {
         ref ExpressionData lhsExpr,
         ref ExpressionData rhsExpr
     ) {
-        var lhsArray = (ES_ArrayTypeData*) lhsExpr.Type;
-        var rhsArray = (ES_ArrayTypeData*) rhsExpr.Type;
+        var lhsArray = (ES_ArrayData*) lhsExpr.Type;
+        var rhsArray = (ES_ArrayData*) rhsExpr.Type;
 
         switch (expr.Kind) {
             case ESIR_NodeKind.BinaryExprEquals:
@@ -331,9 +331,9 @@ public unsafe sealed partial class RoslynCompilerBackend {
             }
 
             case ESIR_NodeKind.BinaryExprConcat: {
-                if (lhsArray->DimensionsCount != rhsArray->DimensionsCount)
+                if (lhsArray->Rank != rhsArray->Rank)
                     throw new CompilationException ("Both arrays must have the same rank.");
-                else if (lhsArray->DimensionsCount != 1)
+                else if (lhsArray->Rank != 1)
                     throw new CompilationException ("The arrays must have rank 1.");
 
                 Debug.Assert (lhsExpr.Value is not null);

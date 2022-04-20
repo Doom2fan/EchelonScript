@@ -15,7 +15,7 @@ using EchelonScriptCompiler.Data;
 
 namespace EchelonScriptCompiler.Frontend;
 
-public static class ES_FrontendErrors {
+internal static class ES_FrontendErrors {
     #region Tokenizer errors
 
     public const string InvalidHexLiteral = "Invalid hex literal.";
@@ -171,6 +171,8 @@ public static class ES_FrontendErrors {
     public const string RepeatedInterfaceInList = "Interface \"{0}\" is already in the interfaces list.";
     public const string InstDefValOutsideClass = "Only classes may contain default initializers for instance members.";
 
+    public const string InvalidEnumBaseType = "Unsupported base type for enum: {baseType}";
+
     public const string ConstantExprExpected = "A constant value is expected.";
 
     public const string TempValueInIncDecOp = "The operand of an increment or decrement operator cannot be a temporary value.";
@@ -196,7 +198,7 @@ public static class ES_FrontendErrors {
     public const string NoSuchConstructor = "The type \"{typeName}\" has no constructor that takes the parameter types {signature}.";
     public const string CantApplyIndexingToType = "Cannot index expression of type \"{typeName}\".";
     public const string CantApplyIndexing = "Indexed expression must return a type.";
-    public const string IndexingBadRankCount = "Incorrect number of dimensions.";
+    public const string IndexingBadRank = "Incorrect number of dimensions.";
 
     public const string UnexpectedReturnValue = "Unexpected return value.";
     public const string MissingReturnValue = "A return value of or convertible to type \"{retType}\" is required.";
@@ -304,6 +306,11 @@ public static class ES_FrontendErrors {
         return new EchelonScriptErrorMessage (src, errorBounds, errorMessage);
     }
 
+    public static EchelonScriptErrorMessage GenInvalidEnumBaseType (string baseType, EchelonScriptToken errorToken) {
+        var errorMessage = InvalidEnumBaseType.Replace ("{baseType}", baseType);
+        return new EchelonScriptErrorMessage (errorToken, errorMessage);
+    }
+
     public static EchelonScriptErrorMessage GenInvalidExprTerm (string exprTerm, EchelonScriptToken errorToken) {
         var errorMessage = InvalidExprTerm.Replace ("{exprTerm}", exprTerm);
         return new EchelonScriptErrorMessage (errorToken, errorMessage);
@@ -399,9 +406,9 @@ public static class ES_FrontendErrors {
     public static EchelonScriptErrorMessage GenTypeAlreadyConst (bool newImmut, bool oldImmut, SourceData src, ES_AstNodeBounds errorBounds)
         => new (src, errorBounds, GenTypeAlreadyConst (newImmut, oldImmut));
 
-    public static EchelonScriptErrorMessage GenFieldCausesCycle (string fieldName, string typeName, EchelonScriptToken tk) {
+    public static EchelonScriptErrorMessage GenFieldCausesCycle (string fieldName, string typeName, ReadOnlySpan<char> fileName) {
         var errorMessage = FieldCausesCycle.Replace ("{fieldName}", fieldName).Replace ("{typeName}", typeName);
-        return new EchelonScriptErrorMessage (tk, errorMessage);
+        return new EchelonScriptErrorMessage (errorMessage, fileName);
     }
 
     #endregion

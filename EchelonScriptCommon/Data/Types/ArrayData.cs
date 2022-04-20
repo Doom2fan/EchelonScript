@@ -13,35 +13,21 @@ using System.Runtime.InteropServices;
 namespace EchelonScriptCommon.Data.Types;
 
 [StructLayout (LayoutKind.Sequential, Pack = 1)]
-public unsafe struct ES_ArrayTypeData {
+public unsafe struct ES_ArrayData {
     #region ================== Instance fields
 
     public ES_TypeInfo TypeInfo;
 
-    private ES_TypeInfo* elementType;
-    private int dimCount;
+    public readonly ES_TypeInfo* ElementType;
+    public readonly int Rank;
 
     #endregion
 
-    #region ================== Constructors
-
-    public ES_ArrayTypeData (ES_FullyQualifiedName fullyQualifiedName, [NotNull] ES_TypeInfo* elemType, int dims) {
+    public ES_ArrayData (ES_FullyQualifiedName fullyQualifiedName, [NotNull] ES_TypeInfo* elemType, int rank) {
         TypeInfo = new (ES_TypeTag.Array, ES_AccessModifier.Public, ES_TypeFlag.None, ES_Identifier.Empty, fullyQualifiedName);
         TypeInfo.RuntimeSize = sizeof (void*) + sizeof (int);
 
-        elementType = elemType;
-        dimCount = dims;
+        ElementType = elemType;
+        Rank = rank;
     }
-
-    #endregion
-
-    #region ================== Instance properties
-
-    /// <summary>The element type of this array.</summary>
-    public ES_TypeInfo* ElementType => elementType;
-
-    /// <summary>The number of dimensions in this array.</summary>
-    public int DimensionsCount => dimCount;
-
-    #endregion
 }

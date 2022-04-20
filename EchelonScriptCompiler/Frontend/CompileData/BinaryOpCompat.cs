@@ -9,77 +9,76 @@
 
 using System.Diagnostics;
 using EchelonScriptCommon.Data.Types;
-using EchelonScriptCompiler.CompilerCommon;
-using EchelonScriptCompiler.Data;
+using EchelonScriptCompiler.Frontend.Data;
 
 namespace EchelonScriptCompiler.Frontend;
 
-public unsafe sealed partial class CompilerFrontend {
-    public static bool BinaryOpCompat (
-        EchelonScriptEnvironment env,
-        ES_TypeInfo* lhsType, ES_TypeInfo* rhsType,
+internal ref partial struct CompileData {
+    public bool BinaryOpCompat (
+        ESC_TypeRef lhsType, ESC_TypeRef rhsType,
         SimpleBinaryExprType exprType,
-        out ES_TypeInfo* finalType,
+        out ESC_TypeRef finalType,
         out bool isConst
     ) {
-        finalType = env.TypeUnknownValue;
+        finalType = GetUnknownType (ESC_Constness.Mutable);
 
-        if (lhsType->TypeTag == ES_TypeTag.UNKNOWN || rhsType->TypeTag == ES_TypeTag.UNKNOWN) {
+        if (lhsType.Type is ESC_TypeUnknown || rhsType.Type is ESC_TypeUnknown) {
             isConst = false;
             return true;
         }
 
-        if (lhsType->TypeTag == ES_TypeTag.Null || rhsType->TypeTag == ES_TypeTag.Null)
-            return BinaryOpCompat_Null (env, lhsType, rhsType, exprType, out finalType, out isConst);
+        if (lhsType.Type is ESC_TypeNull || rhsType.Type is ESC_TypeNull)
+            return BinaryOpCompat_Null (lhsType, rhsType, exprType, out finalType, out isConst);
 
-        return (lhsType->TypeTag, rhsType->TypeTag) switch {
-            (ES_TypeTag.Int, ES_TypeTag.Int) =>
-                BinaryOpCompat_IntInt (env, lhsType, rhsType, exprType, out finalType, out isConst),
+        return (lhsType.Type, rhsType.Type) switch {
+            (ESC_TypeInt, ESC_TypeInt) =>
+                BinaryOpCompat_IntInt (lhsType, rhsType, exprType, out finalType, out isConst),
 
-            (ES_TypeTag.Bool, ES_TypeTag.Bool) =>
-                BinaryOpCompat_BoolBool (env, lhsType, rhsType, exprType, out finalType, out isConst),
+            (ESC_TypeBool, ESC_TypeBool) =>
+                BinaryOpCompat_BoolBool (lhsType, rhsType, exprType, out finalType, out isConst),
 
-            (ES_TypeTag.Float, ES_TypeTag.Float) =>
-                BinaryOpCompat_FloatFloat (env, lhsType, rhsType, exprType, out finalType, out isConst),
+            (ESC_TypeFloat, ESC_TypeFloat) =>
+                BinaryOpCompat_FloatFloat (lhsType, rhsType, exprType, out finalType, out isConst),
 
-            (ES_TypeTag.Float, ES_TypeTag.Int) =>
-                BinaryOpCompat_FloatInt (env, lhsType, rhsType, exprType, out finalType, out isConst),
+            (ESC_TypeFloat, ESC_TypeInt) =>
+                BinaryOpCompat_FloatInt (lhsType, rhsType, exprType, out finalType, out isConst),
 
-            (ES_TypeTag.Reference, ES_TypeTag.Reference) =>
-                BinaryOpCompat_RefRef (env, lhsType, rhsType, exprType, out finalType, out isConst),
+            (ESC_TypeReference, ESC_TypeReference) =>
+                BinaryOpCompat_RefRef (lhsType, rhsType, exprType, out finalType, out isConst),
 
-            (ES_TypeTag.Array, ES_TypeTag.Array) =>
-                BinaryOpCompat_ArrayArray (env, lhsType, rhsType, exprType, out finalType, out isConst),
+            (ESC_TypeArray, ESC_TypeArray) =>
+                BinaryOpCompat_ArrayArray (lhsType, rhsType, exprType, out finalType, out isConst),
 
             _ => isConst = false,
         };
     }
 
-    private static bool BinaryOpCompat_Null (
-        EchelonScriptEnvironment env,
-        ES_TypeInfo* lhsType, ES_TypeInfo* rhsType,
+    private bool BinaryOpCompat_Null (
+        ESC_TypeRef lhsType, ESC_TypeRef rhsType,
         SimpleBinaryExprType exprType,
-        out ES_TypeInfo* finalType,
+        out ESC_TypeRef finalType,
         out bool isConst
     ) {
-        Debug.Assert (lhsType->TypeTag == ES_TypeTag.Null || rhsType->TypeTag == ES_TypeTag.Null);
+        Debug.Assert (lhsType.Type is not null);
+        Debug.Assert (rhsType.Type is not null);
+        Debug.Assert (lhsType.Type is ESC_TypeNull || rhsType.Type is ESC_TypeNull);
 
         switch (exprType) {
             case SimpleBinaryExprType.Equals:
             case SimpleBinaryExprType.NotEquals:
-                if (!lhsType->IsReferenceType ())
+                if (!lhsType.Type.IsReferenceType ())
                     goto default;
 
-                finalType = env.TypeBool;
+                finalType = GetBoolType (ESC_Constness.Const);
                 isConst = false;
                 return true;
 
             case SimpleBinaryExprType.Assign:
                 isConst = false;
-                if (lhsType->IsReferenceType ())
+                if (lhsType.Type.IsReferenceType ())
                     finalType = lhsType;
-                else if (rhsType->IsReferenceType ()) {
-                    finalType = env.TypeUnknownValue;
+                else if (rhsType.Type.IsReferenceType ()) {
+                    finalType = GetUnknownType (ESC_Constness.Mutable);
                     return false;
                 } else
                     goto default;
@@ -87,26 +86,25 @@ public unsafe sealed partial class CompilerFrontend {
                 return true;
 
             default:
-                finalType = env.TypeUnknownValue;
+                finalType = GetUnknownType (ESC_Constness.Mutable);
                 isConst = false;
                 return false;
         }
     }
 
-    private static bool BinaryOpCompat_IntInt (
-        EchelonScriptEnvironment env,
-        ES_TypeInfo* lhsType, ES_TypeInfo* rhsType,
+    private bool BinaryOpCompat_IntInt (
+        ESC_TypeRef lhsType, ESC_TypeRef rhsType,
         SimpleBinaryExprType exprType,
-        out ES_TypeInfo* finalType,
+        out ESC_TypeRef finalType,
         out bool isConst
     ) {
-        Debug.Assert (lhsType->TypeTag == ES_TypeTag.Int);
-        Debug.Assert (rhsType->TypeTag == ES_TypeTag.Int);
+        Debug.Assert (lhsType.Type is ESC_TypeInt);
+        Debug.Assert (rhsType.Type is ESC_TypeInt);
 
-        var lhsIntType = (ES_IntTypeData*) lhsType;
-        var rhsIntType = (ES_IntTypeData*) rhsType;
+        var lhsIntType = (ESC_TypeInt) lhsType.Type;
+        var rhsIntType = (ESC_TypeInt) rhsType.Type;
 
-        finalType = env.TypeUnknownValue;
+        finalType = GetUnknownType (ESC_Constness.Mutable);
 
         switch (exprType) {
             case SimpleBinaryExprType.Power:
@@ -161,45 +159,44 @@ public unsafe sealed partial class CompilerFrontend {
         bool isCompatible;
 
         if (exprType.IsBitShift ()) {
-            if (rhsIntType->Unsigned)
+            if (rhsIntType.Unsigned)
                 return false;
 
-            if (rhsIntType->IntSize > ES_IntSize.Int32)
+            if (rhsIntType.Size > ES_IntSize.Int32)
                 return false;
 
             isCompatible = true;
-        } else if (lhsIntType->Unsigned == rhsIntType->Unsigned)
+        } else if (lhsIntType.Unsigned == rhsIntType.Unsigned)
             isCompatible = true;
         else
             isCompatible = false;
 
         if (isCompatible) {
             if (exprType.IsAssignment ()) {
-                if (lhsIntType->IntSize < rhsIntType->IntSize)
+                if (lhsIntType.Size < rhsIntType.Size)
                     return false;
 
                 finalType = lhsType;
             } else if (!exprType.IsComparison ()) {
-                if (lhsIntType->IntSize >= rhsIntType->IntSize)
+                if (lhsIntType.Size >= rhsIntType.Size)
                     finalType = lhsType;
                 else
                     finalType = rhsType;
             } else
-                finalType = env.TypeBool;
+                finalType = GetBoolType (ESC_Constness.Const);
         }
 
         return isCompatible;
     }
 
-    private static bool BinaryOpCompat_BoolBool (
-        EchelonScriptEnvironment env,
-        ES_TypeInfo* lhsType, ES_TypeInfo* rhsType,
+    private bool BinaryOpCompat_BoolBool (
+        ESC_TypeRef lhsType, ESC_TypeRef rhsType,
         SimpleBinaryExprType exprType,
-        out ES_TypeInfo* finalType,
+        out ESC_TypeRef finalType,
         out bool isConst
     ) {
-        Debug.Assert (lhsType->TypeTag == ES_TypeTag.Bool);
-        Debug.Assert (rhsType->TypeTag == ES_TypeTag.Bool);
+        Debug.Assert (lhsType.Type is ESC_TypeBool);
+        Debug.Assert (rhsType.Type is ESC_TypeBool);
 
         switch (exprType) {
             case SimpleBinaryExprType.BitAnd:
@@ -226,31 +223,30 @@ public unsafe sealed partial class CompilerFrontend {
                 break;
 
             default:
-                finalType = env.TypeUnknownValue;
+                finalType = GetUnknownType (ESC_Constness.Mutable);
                 isConst = false;
                 return false;
         }
 
-        finalType = env.TypeBool;
+        finalType = GetBoolType (ESC_Constness.Const);
         return true;
     }
 
-    private static bool BinaryOpCompat_FloatFloat (
-        EchelonScriptEnvironment env,
-        ES_TypeInfo* lhsType, ES_TypeInfo* rhsType,
+    private bool BinaryOpCompat_FloatFloat (
+        ESC_TypeRef lhsType, ESC_TypeRef rhsType,
         SimpleBinaryExprType exprType,
-        out ES_TypeInfo* finalType,
+        out ESC_TypeRef finalType,
         out bool isConst
     ) {
-        Debug.Assert (lhsType->TypeTag == ES_TypeTag.Float);
-        Debug.Assert (rhsType->TypeTag == ES_TypeTag.Float);
+        Debug.Assert (lhsType.Type is ESC_TypeFloat);
+        Debug.Assert (rhsType.Type is ESC_TypeFloat);
 
-        var lhsFloatType = (ES_FloatTypeData*) lhsType;
-        var rhsFloatType = (ES_FloatTypeData*) rhsType;
+        var lhsFloatType = (ESC_TypeFloat) lhsType.Type;
+        var rhsFloatType = (ESC_TypeFloat) rhsType.Type;
 
-        finalType = env.TypeUnknownValue;
+        finalType = GetUnknownType (ESC_Constness.Mutable);
 
-        if (lhsFloatType->FloatSize != rhsFloatType->FloatSize) {
+        if (lhsFloatType.Size != rhsFloatType.Size) {
             isConst = false;
             return false;
         }
@@ -289,22 +285,21 @@ public unsafe sealed partial class CompilerFrontend {
                 return false;
         }
 
-        finalType = !exprType.IsComparison () ? lhsType : env.TypeBool;
+        finalType = !exprType.IsComparison () ? lhsType : GetBoolType (ESC_Constness.Const);
 
         return true;
     }
 
-    private static bool BinaryOpCompat_FloatInt (
-        EchelonScriptEnvironment env,
-        ES_TypeInfo* lhsType, ES_TypeInfo* rhsType,
+    private bool BinaryOpCompat_FloatInt (
+        ESC_TypeRef lhsType, ESC_TypeRef rhsType,
         SimpleBinaryExprType exprType,
-        out ES_TypeInfo* finalType,
+        out ESC_TypeRef finalType,
         out bool isConst
     ) {
-        Debug.Assert (lhsType->TypeTag == ES_TypeTag.Float);
-        Debug.Assert (rhsType->TypeTag == ES_TypeTag.Int);
+        Debug.Assert (lhsType.Type is ESC_TypeFloat);
+        Debug.Assert (rhsType.Type is ESC_TypeInt);
 
-        finalType = env.TypeUnknownValue;
+        finalType = GetUnknownType (ESC_Constness.Mutable);
 
         switch (exprType) {
             case SimpleBinaryExprType.Power:
@@ -325,17 +320,16 @@ public unsafe sealed partial class CompilerFrontend {
         return true;
     }
 
-    private static bool BinaryOpCompat_RefRef (
-        EchelonScriptEnvironment env,
-        ES_TypeInfo* lhsType, ES_TypeInfo* rhsType,
+    private bool BinaryOpCompat_RefRef (
+        ESC_TypeRef lhsType, ESC_TypeRef rhsType,
         SimpleBinaryExprType exprType,
-        out ES_TypeInfo* finalType,
+        out ESC_TypeRef finalType,
         out bool isConst
     ) {
-        Debug.Assert (lhsType->TypeTag == ES_TypeTag.Reference);
-        Debug.Assert (rhsType->TypeTag == ES_TypeTag.Reference);
+        Debug.Assert (lhsType.Type is ESC_TypeReference);
+        Debug.Assert (rhsType.Type is ESC_TypeReference);
 
-        finalType = env.TypeUnknownValue;
+        finalType = GetUnknownType (ESC_Constness.Mutable);
         isConst = false;
 
         if (lhsType != rhsType)
@@ -348,7 +342,7 @@ public unsafe sealed partial class CompilerFrontend {
 
             case SimpleBinaryExprType.Equals:
             case SimpleBinaryExprType.NotEquals:
-                finalType = env.TypeBool;
+                finalType = GetBoolType (ESC_Constness.Const);
                 break;
 
             default:
@@ -358,21 +352,20 @@ public unsafe sealed partial class CompilerFrontend {
         return true;
     }
 
-    private static bool BinaryOpCompat_ArrayArray (
-        EchelonScriptEnvironment env,
-        ES_TypeInfo* lhsType, ES_TypeInfo* rhsType,
+    private bool BinaryOpCompat_ArrayArray (
+        ESC_TypeRef lhsType, ESC_TypeRef rhsType,
         SimpleBinaryExprType exprType,
-        out ES_TypeInfo* finalType,
+        out ESC_TypeRef finalType,
         out bool isConst
     ) {
-        Debug.Assert (lhsType->TypeTag == ES_TypeTag.Array);
-        Debug.Assert (rhsType->TypeTag == ES_TypeTag.Array);
+        Debug.Assert (lhsType.Type is ESC_TypeArray);
+        Debug.Assert (rhsType.Type is ESC_TypeArray);
 
-        finalType = env.TypeUnknownValue;
+        finalType = GetUnknownType (ESC_Constness.Mutable);
         isConst = false;
 
-        var lhsArr = (ES_ArrayTypeData*) lhsType;
-        var rhsArr = (ES_ArrayTypeData*) rhsType;
+        var lhsArr = (ESC_TypeArray) lhsType.Type;
+        var rhsArr = (ESC_TypeArray) rhsType.Type;
 
         if (lhsType != rhsType)
             return false;
@@ -384,7 +377,7 @@ public unsafe sealed partial class CompilerFrontend {
 
             case SimpleBinaryExprType.Concatenation:
             case SimpleBinaryExprType.AssignConcatenate:
-                if (lhsArr->DimensionsCount != 1)
+                if (lhsArr.Rank != 1 || rhsArr.Rank != 1)
                     goto default;
 
                 finalType = lhsType;
@@ -392,7 +385,7 @@ public unsafe sealed partial class CompilerFrontend {
 
             case SimpleBinaryExprType.Equals:
             case SimpleBinaryExprType.NotEquals:
-                finalType = env.TypeBool;
+                finalType = GetBoolType (ESC_Constness.Const);
                 break;
 
             default:

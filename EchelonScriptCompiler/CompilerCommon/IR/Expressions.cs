@@ -10,6 +10,7 @@
 using System;
 using System.Diagnostics;
 using EchelonScriptCommon.Data;
+using EchelonScriptCommon.Data.Types;
 
 namespace EchelonScriptCompiler.CompilerCommon.IR;
 
@@ -342,19 +343,19 @@ public class ESIR_IndexingExpression : ESIR_Expression {
     }
 }
 
-public class ESIR_NewObjectExpression : ESIR_Expression {
+public unsafe class ESIR_NewObjectExpression : ESIR_Expression {
     public override ESIR_NodeKind Kind => ESIR_NodeKind.NewObjectExpression;
     internal override int ChildrenCount => 1;
 
-    private readonly ESIR_TypeNode typeNode;
+    private readonly ESIR_TypeNode ptrTypeNode;
 
-    public ESIR_TypeNode Type => typeNode;
+    public ES_ReferenceData* PointerType => (ES_ReferenceData*) ptrTypeNode.Pointer;
 
-    internal ESIR_NewObjectExpression (ESIR_TypeNode type) => typeNode = type;
+    internal ESIR_NewObjectExpression (ESIR_TypeNode ptrType) => ptrTypeNode = ptrType;
 
     internal override ESIR_Node? GetChild (int slot) {
         switch (slot) {
-            case 0: return typeNode;
+            case 0: return ptrTypeNode;
 
             default:
                 Debug.Fail ("Invalid slot num");
@@ -363,25 +364,25 @@ public class ESIR_NewObjectExpression : ESIR_Expression {
     }
 }
 
-public class ESIR_NewArrayExpression : ESIR_Expression {
+public unsafe class ESIR_NewArrayExpression : ESIR_Expression {
     public override ESIR_NodeKind Kind => ESIR_NodeKind.NewArrayExpression;
     internal override int ChildrenCount => 2;
 
-    private readonly ESIR_TypeNode elemTypeNode;
-    private readonly ESIR_List<ESIR_Expression> ranksNode;
+    private readonly ESIR_TypeNode arrayTypeNode;
+    private readonly ESIR_List<ESIR_Expression> dimsNode;
 
-    public ESIR_TypeNode ElementType => elemTypeNode;
-    public ESIR_List<ESIR_Expression> Ranks => ranksNode;
+    public ES_ArrayData* ArrayType => (ES_ArrayData*) arrayTypeNode.Pointer;
+    public ESIR_List<ESIR_Expression> Dimensions => dimsNode;
 
-    internal ESIR_NewArrayExpression (ESIR_TypeNode elemType, ESIR_List<ESIR_Expression> ranks) {
-        elemTypeNode = elemType;
-        ranksNode = ranks;
+    internal ESIR_NewArrayExpression (ESIR_TypeNode arrayType, ESIR_List<ESIR_Expression> dims) {
+        arrayTypeNode = arrayType;
+        dimsNode = dims;
     }
 
     internal override ESIR_Node? GetChild (int slot) {
         switch (slot) {
-            case 0: return elemTypeNode;
-            case 1: return ranksNode;
+            case 0: return arrayTypeNode;
+            case 1: return dimsNode;
 
             default:
                 Debug.Fail ("Invalid slot num");
@@ -469,7 +470,7 @@ public class ESIR_ExpressionList : ESIR_Expression {
     }
 }
 
-public static partial class ESIR_Factory {
+public unsafe static partial class ESIR_Factory {
     public static ESIR_ErrorExpression ErrorExpression () {
         var node = ESIR_NodeCache.Shared.TryGetNode (ESIR_NodeKind.ErrorExpression, out var hash);
         if (node is not null)
@@ -655,36 +656,40 @@ public static partial class ESIR_Factory {
         return ret;
     }
 
-    public static ESIR_IndexingExpression IndexingExpression (ESIR_Expression indexedExpr, ESIR_List<ESIR_Expression> ranks) {
-        var node = ESIR_NodeCache.Shared.TryGetNode (ESIR_NodeKind.IndexingExpression, indexedExpr, ranks, out var hash);
+    public static ESIR_IndexingExpression IndexingExpression (ESIR_Expression indexedExpr, ESIR_List<ESIR_Expression> dims) {
+        var node = ESIR_NodeCache.Shared.TryGetNode (ESIR_NodeKind.IndexingExpression, indexedExpr, dims, out var hash);
         if (node is not null)
             return (ESIR_IndexingExpression) node;
 
-        var ret = new ESIR_IndexingExpression (indexedExpr, ranks);
+        var ret = new ESIR_IndexingExpression (indexedExpr, dims);
         if (hash >= 0)
             ESIR_NodeCache.Shared.AddNode (ret, hash);
 
         return ret;
     }
 
-    public static ESIR_NewObjectExpression NewObjectExpression (ESIR_TypeNode type) {
-        var node = ESIR_NodeCache.Shared.TryGetNode (ESIR_NodeKind.NewObjectExpression, type, out var hash);
+    public static ESIR_NewObjectExpression NewObjectExpression (ES_ReferenceData* ptrType) {
+        var ptrTypeNode = TypeNode (&ptrType->TypeInfo);
+
+        var node = ESIR_NodeCache.Shared.TryGetNode (ESIR_NodeKind.NewObjectExpression, ptrTypeNode, out var hash);
         if (node is not null)
             return (ESIR_NewObjectExpression) node;
 
-        var ret = new ESIR_NewObjectExpression (type);
+        var ret = new ESIR_NewObjectExpression (ptrTypeNode);
         if (hash >= 0)
             ESIR_NodeCache.Shared.AddNode (ret, hash);
 
         return ret;
     }
 
-    public static ESIR_NewArrayExpression NewArrayExpression (ESIR_TypeNode elemType, ESIR_List<ESIR_Expression> indices) {
-        var node = ESIR_NodeCache.Shared.TryGetNode (ESIR_NodeKind.NewArrayExpression, elemType, indices, out var hash);
+    public static ESIR_NewArrayExpression NewArrayExpression (ES_ArrayData* arrayType, ESIR_List<ESIR_Expression> indices) {
+        var arrayTypeNode = TypeNode (&arrayType->TypeInfo);
+
+        var node = ESIR_NodeCache.Shared.TryGetNode (ESIR_NodeKind.NewArrayExpression, arrayTypeNode, indices, out var hash);
         if (node is not null)
             return (ESIR_NewArrayExpression) node;
 
-        var ret = new ESIR_NewArrayExpression (elemType, indices);
+        var ret = new ESIR_NewArrayExpression (arrayTypeNode, indices);
         if (hash >= 0)
             ESIR_NodeCache.Shared.AddNode (ret, hash);
 

@@ -35,15 +35,15 @@ public unsafe sealed partial class RoslynCompilerBackend {
                 return true;
 
             case ES_TypeTag.Int: {
-                var srcData = (ES_IntTypeData*) srcType;
-                var dstData = (ES_IntTypeData*) dstType;
+                var srcData = (ES_IntData*) srcType;
+                var dstData = (ES_IntData*) dstType;
 
                 return srcData->IntSize == dstData->IntSize && srcData->Unsigned == dstData->Unsigned;
             }
 
             case ES_TypeTag.Float: {
-                var srcData = (ES_FloatTypeData*) srcType;
-                var dstData = (ES_FloatTypeData*) dstType;
+                var srcData = (ES_FloatData*) srcType;
+                var dstData = (ES_FloatData*) dstType;
 
                 return srcData->FloatSize == dstData->FloatSize;
             }
@@ -62,11 +62,11 @@ public unsafe sealed partial class RoslynCompilerBackend {
             }
 
             case ES_TypeTag.Array: {
-                var srcData = (ES_ArrayTypeData*) srcType;
-                var dstData = (ES_ArrayTypeData*) dstType;
+                var srcData = (ES_ArrayData*) srcType;
+                var dstData = (ES_ArrayData*) dstType;
 
                 return (
-                    srcData->DimensionsCount == dstData->DimensionsCount &&
+                    srcData->Rank == dstData->Rank &&
                     IsTypeEquivalent (srcData->ElementType, dstData->ElementType)
                 );
             }
@@ -111,10 +111,10 @@ public unsafe sealed partial class RoslynCompilerBackend {
         } else {
             switch (origExpr.Type->TypeTag) {
                 case ES_TypeTag.Int: {
-                    var intSrc = (ES_IntTypeData*) origExpr.Type;
+                    var intSrc = (ES_IntData*) origExpr.Type;
 
                     if (destType->TypeTag == ES_TypeTag.Int) {
-                        var intDest = (ES_IntTypeData*) destType;
+                        var intDest = (ES_IntData*) destType;
 
                         if (intDest->IntSize == intSrc->IntSize && intDest->Unsigned == intSrc->Unsigned) {
                             origExpr.Writable = false;
@@ -124,7 +124,7 @@ public unsafe sealed partial class RoslynCompilerBackend {
                         var roslynDestType = GetIntType (intDest->IntSize, intDest->Unsigned);
                         retValue = CastExpression (roslynDestType, origVal);
                     } else if (destType->TypeTag == ES_TypeTag.Float) {
-                        var floatDest = (ES_FloatTypeData*) destType;
+                        var floatDest = (ES_FloatData*) destType;
 
                         var roslynDestType = GetFloatType (floatDest->FloatSize);
                         retValue = CastExpression (roslynDestType, origVal);
@@ -137,10 +137,10 @@ public unsafe sealed partial class RoslynCompilerBackend {
                 }
 
                 case ES_TypeTag.Float: {
-                    var floatSrc = (ES_FloatTypeData*) origExpr.Type;
+                    var floatSrc = (ES_FloatData*) origExpr.Type;
 
                     if (destType->TypeTag == ES_TypeTag.Float) {
-                        var floatDest = (ES_FloatTypeData*) destType;
+                        var floatDest = (ES_FloatData*) destType;
 
                         if (floatSrc->FloatSize == floatDest->FloatSize) {
                             origExpr.Writable = false;
@@ -150,7 +150,7 @@ public unsafe sealed partial class RoslynCompilerBackend {
                         var roslynDestType = GetFloatType (floatDest->FloatSize);
                         retValue = CastExpression (roslynDestType, origVal);
                     } else if (destType->TypeTag == ES_TypeTag.Int) {
-                        var intDest = (ES_IntTypeData*) destType;
+                        var intDest = (ES_IntData*) destType;
 
                         var roslynDestType = GetIntType (intDest->IntSize, intDest->Unsigned);
                         retValue = CastExpression (roslynDestType, origVal);

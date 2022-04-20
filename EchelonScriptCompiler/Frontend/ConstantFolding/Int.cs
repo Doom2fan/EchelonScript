@@ -10,26 +10,28 @@
 using System;
 using System.Diagnostics;
 using EchelonScriptCommon.Data.Types;
-using EchelonScriptCompiler.CompilerCommon;
+using EchelonScriptCompiler.Frontend.Data;
 
 namespace EchelonScriptCompiler.Frontend;
 
 internal unsafe static partial class Compiler_ConstantFolding {
-    private static ES_IntTypeData* DetermineIntLiteralType (
-        ref PassData passData,
-        ES_AstIntegerLiteralExpression intLitExpr, ES_TypeInfo* expectedType, bool negated
+    private static ESC_TypeRef DetermineIntLiteralType (
+        ref CompileData compileData,
+        ES_AstIntegerLiteralExpression intLitExpr, ESC_TypeRef expectedType, bool negated
     ) {
-        ES_IntTypeData* expectedIntType = null;
+        ESC_TypeInt? expectedIntType = null;
 
         bool? unsigned = null;
         var isSigned = intLitExpr.Signed;
         var chosenSize = intLitExpr.Size;
+        var constness = ESC_Constness.Mutable;
 
-        if (expectedType != null && expectedType->TypeTag == ES_TypeTag.Int) {
-            expectedIntType = (ES_IntTypeData*) expectedType;
+        if (expectedType.Type != null && expectedType.Type is ESC_TypeInt) {
+            expectedIntType = (expectedType.Type as ESC_TypeInt)!;
+            constness = expectedType.Constness;
 
             if (isSigned == null)
-                isSigned = !expectedIntType->Unsigned;
+                isSigned = !expectedIntType.Unsigned;
         }
 
         ES_IntSize size;
@@ -92,7 +94,7 @@ internal unsafe static partial class Compiler_ConstantFolding {
             var errSize = minSize;
             if (chosenSize is not null)
                 errSize = chosenSize.Value;
-            passData.ErrorList.Add (ES_FrontendErrors.GenIntLitTooBig (isSigned!.Value, errSize, intLitExpr.Token));
+            compileData.ErrorList.Add (ES_FrontendErrors.GenIntLitTooBig (isSigned!.Value, errSize, intLitExpr.Token));
 
             if (unsigned is null && isSigned == false)
                 unsigned = true;
@@ -108,8 +110,8 @@ internal unsafe static partial class Compiler_ConstantFolding {
         if (expectedIntType is not null) {
             var isCompat = false;
 
-            var expectsUnsign = expectedIntType->Unsigned;
-            var expectedSize = expectedIntType->IntSize;
+            var expectsUnsign = expectedIntType.Unsigned;
+            var expectedSize = expectedIntType.Size;
 
             if (intLitExpr.HexBin && (isSigned is null || isSigned == !expectsUnsign) && minSize <= expectedSize)
                 isCompat = true;
@@ -127,80 +129,85 @@ internal unsafe static partial class Compiler_ConstantFolding {
         if (unsigned is null)
             unsigned = false;
 
-        var intType = passData.Env.GetIntType (size, unsigned.Value);
+        var intType = compileData.GetIntType (size, unsigned.Value, constness);
 
-        Debug.Assert (intType is not null);
-        Debug.Assert (intType->TypeTag == ES_TypeTag.Int);
+        Debug.Assert (intType.Type is ESC_TypeInt);
 
-        return (ES_IntTypeData*) intType;
+        return intType;
     }
 
-    private static bool FoldExpression_IntLiteral (ref PassData passData, ref ES_AstExpression expr, ES_TypeInfo* expectedType, bool negated) {
+    private static bool FoldExpression_IntLiteral (
+        ref CompileData compileData,
+        ref ES_AstExpression expr, ESC_TypeRef expectedType, bool negated
+    ) {
         var intLitExpr = expr as ES_AstIntegerLiteralExpression;
         Debug.Assert (intLitExpr is not null);
 
-        var intType = DetermineIntLiteralType (ref passData, intLitExpr, expectedType, negated);
+        var intType = DetermineIntLiteralType (ref compileData, intLitExpr, expectedType, negated);
+        var intTypeData = (ESC_TypeInt?) intType.Type;
+        Debug.Assert (intTypeData is not null);
 
         if (!negated) {
-            expr = new ES_AstIntegerConstantExpression ((ES_TypeInfo*) intType, intLitExpr.Value, intLitExpr);
+            expr = new ES_AstIntegerConstantExpression (intType, intLitExpr.Value, intLitExpr);
             return true;
         } else {
-            if (!intType->Unsigned) {
+            if (!intTypeData.Unsigned) {
                 var val = -(long) intLitExpr.Value;
 
                 if (intLitExpr.Value == (ulong) (long.MaxValue) + 1)
                     val = long.MinValue;
 
-                expr = new ES_AstIntegerConstantExpression ((ES_TypeInfo*) intType, (ulong) val, intLitExpr);
+                expr = new ES_AstIntegerConstantExpression (intType, (ulong) val, intLitExpr);
                 return true;
             } else {
-                expr = new ES_AstIntegerConstantExpression ((ES_TypeInfo*) intType, intLitExpr.Value, intLitExpr);
+                expr = new ES_AstIntegerConstantExpression (intType, intLitExpr.Value, intLitExpr);
                 return false;
             }
         }
     }
 
-    private static void FoldExpression_ExplicitCast_ToInt (ES_TypeInfo* dstType, in ES_AstExpression innerExpr, ref ES_AstExpression expr, out bool isRedundant) {
-        Debug.Assert (dstType is not null);
-        Debug.Assert (dstType->TypeTag == ES_TypeTag.Int);
-
-        var dstIntType = (ES_IntTypeData*) dstType;
+    private static void FoldExpression_ExplicitCast_ToInt (
+        ref ES_AstExpression expr, ESC_TypeRef dstType, in ES_AstExpression innerExpr, out bool isRedundant
+    ) {
+        var dstIntType = dstType.Type as ESC_TypeInt;
+        Debug.Assert (dstIntType is not null);
 
         if (innerExpr is ES_AstIntegerConstantExpression intExpr) {
-            var constIntType = (ES_IntTypeData*) intExpr.IntType;
+            var constIntType = intExpr.IntType.Type as ESC_TypeInt;
+            Debug.Assert (constIntType is not null);
 
             ulong val;
-            if (!constIntType->Unsigned)
+            if (!constIntType.Unsigned)
                 val = intExpr.SignExtend ();
             else
                 val = intExpr.Value;
 
             isRedundant = (
-                constIntType->Unsigned == dstIntType->Unsigned &&
-                constIntType->IntSize == dstIntType->IntSize
+                constIntType.Unsigned == dstIntType.Unsigned &&
+                constIntType.Size == dstIntType.Size
             );
 
             expr = new ES_AstIntegerConstantExpression (dstType, val, expr);
         } else if (innerExpr is ES_AstFloat32ConstantExpression f32Expr) {
             isRedundant = false;
 
-            var unsigned = dstIntType->Unsigned;
+            var unsigned = dstIntType.Unsigned;
             ulong val;
             if (!unsigned) {
-                val = dstIntType->IntSize switch {
-                    ES_IntSize.Int8 => val = (ulong) (sbyte) f32Expr.Value,
-                    ES_IntSize.Int16 => val = (ulong) (short) f32Expr.Value,
-                    ES_IntSize.Int32 => val = (ulong) (int) f32Expr.Value,
-                    ES_IntSize.Int64 => val = (ulong) (long) f32Expr.Value,
+                val = dstIntType.Size switch {
+                    ES_IntSize.Int8 => (ulong) (sbyte) f32Expr.Value,
+                    ES_IntSize.Int16 => (ulong) (short) f32Expr.Value,
+                    ES_IntSize.Int32 => (ulong) (int) f32Expr.Value,
+                    ES_IntSize.Int64 => (ulong) (long) f32Expr.Value,
 
                     _ => throw new NotImplementedException ("Int size not implemented yet."),
                 };
             } else {
-                val = dstIntType->IntSize switch {
-                    ES_IntSize.Int8 => val = (byte) f32Expr.Value,
-                    ES_IntSize.Int16 => val = (ushort) f32Expr.Value,
-                    ES_IntSize.Int32 => val = (uint) f32Expr.Value,
-                    ES_IntSize.Int64 => val = (ulong) f32Expr.Value,
+                val = dstIntType.Size switch {
+                    ES_IntSize.Int8 => (byte) f32Expr.Value,
+                    ES_IntSize.Int16 => (ushort) f32Expr.Value,
+                    ES_IntSize.Int32 => (uint) f32Expr.Value,
+                    ES_IntSize.Int64 => (ulong) f32Expr.Value,
 
                     _ => throw new NotImplementedException ("Int size not implemented yet."),
                 };
@@ -210,23 +217,23 @@ internal unsafe static partial class Compiler_ConstantFolding {
         } else if (innerExpr is ES_AstFloat64ConstantExpression f64Expr) {
             isRedundant = false;
 
-            var unsigned = dstIntType->Unsigned;
+            var unsigned = dstIntType.Unsigned;
             ulong val;
             if (!unsigned) {
-                val = dstIntType->IntSize switch {
-                    ES_IntSize.Int8 => val = (ulong) (sbyte) f64Expr.Value,
-                    ES_IntSize.Int16 => val = (ulong) (short) f64Expr.Value,
-                    ES_IntSize.Int32 => val = (ulong) (int) f64Expr.Value,
-                    ES_IntSize.Int64 => val = (ulong) (long) f64Expr.Value,
+                val = dstIntType.Size switch {
+                    ES_IntSize.Int8 => (ulong) (sbyte) f64Expr.Value,
+                    ES_IntSize.Int16 => (ulong) (short) f64Expr.Value,
+                    ES_IntSize.Int32 => (ulong) (int) f64Expr.Value,
+                    ES_IntSize.Int64 => (ulong) (long) f64Expr.Value,
 
                     _ => throw new NotImplementedException ("Int size not implemented yet."),
                 };
             } else {
-                val = dstIntType->IntSize switch {
-                    ES_IntSize.Int8 => val = (byte) f64Expr.Value,
-                    ES_IntSize.Int16 => val = (ushort) f64Expr.Value,
-                    ES_IntSize.Int32 => val = (uint) f64Expr.Value,
-                    ES_IntSize.Int64 => val = (ulong) f64Expr.Value,
+                val = dstIntType.Size switch {
+                    ES_IntSize.Int8 => (byte) f64Expr.Value,
+                    ES_IntSize.Int16 => (ushort) f64Expr.Value,
+                    ES_IntSize.Int32 => (uint) f64Expr.Value,
+                    ES_IntSize.Int64 => (ulong) f64Expr.Value,
 
                     _ => throw new NotImplementedException ("Int size not implemented yet."),
                 };
@@ -241,10 +248,12 @@ internal unsafe static partial class Compiler_ConstantFolding {
         ref ES_AstExpression expr, SimpleBinaryExprType op,
         ES_AstIntegerConstantExpression lhs, ES_AstIntegerConstantExpression rhs
     ) {
+        Debug.Assert (lhs.IntType.Type is ESC_TypeInt);
+        Debug.Assert (rhs.IntType.Type is ESC_TypeInt);
         Debug.Assert (op.IsComparison ());
 
-        var lhsType = (ES_IntTypeData*) lhs.IntType;
-        var rhsType = (ES_IntTypeData*) rhs.IntType;
+        var lhsType = (ESC_TypeInt) lhs.IntType.Type;
+        var rhsType = (ESC_TypeInt) rhs.IntType.Type;
 
         if (op == SimpleBinaryExprType.Equals)
             expr = new ES_AstBooleanConstantExpression (lhs.Value == rhs.Value, expr);
@@ -253,7 +262,7 @@ internal unsafe static partial class Compiler_ConstantFolding {
 
         bool finalValue;
 
-        if (!lhsType->Unsigned) {
+        if (!lhsType.Unsigned) {
             var lhsVal = (long) lhs.SignExtend ();
             var rhsVal = (long) rhs.SignExtend ();
 
@@ -303,16 +312,18 @@ internal unsafe static partial class Compiler_ConstantFolding {
         ref ES_AstExpression expr, SimpleBinaryExprType op,
         ES_AstIntegerConstantExpression lhs, ES_AstIntegerConstantExpression rhs
     ) {
+        Debug.Assert (lhs.IntType.Type is ESC_TypeInt);
+        Debug.Assert (rhs.IntType.Type is ESC_TypeInt);
         Debug.Assert (op.IsBitShift ());
 
-        var lhsType = (ES_IntTypeData*) lhs.IntType;
-        var rhsType = (ES_IntTypeData*) rhs.IntType;
+        var lhsType = (ESC_TypeInt) lhs.IntType.Type;
+        var rhsType = (ESC_TypeInt) rhs.IntType.Type;
 
-        var unsigned = lhsType->Unsigned;
+        var unsigned = lhsType.Unsigned;
 
         ulong finalValue;
 
-        switch (lhsType->IntSize) {
+        switch (lhsType.Size) {
             case ES_IntSize.Int8: {
                 var lhsValU = (byte) lhs.Value;
                 var rhsValU = (byte) rhs.Value;
@@ -449,22 +460,24 @@ internal unsafe static partial class Compiler_ConstantFolding {
                 throw new NotImplementedException ("Size not implemented.");
         }
 
-        expr = new ES_AstIntegerConstantExpression (&lhsType->TypeInfo, finalValue, expr);
+        expr = new ES_AstIntegerConstantExpression (new (ESC_Constness.Mutable, lhsType), finalValue, expr);
     }
 
     private static void FoldExpression_Binary_IntInt_Arithmetic (
         ref ES_AstExpression expr, SimpleBinaryExprType op,
         ES_AstIntegerConstantExpression lhs, ES_AstIntegerConstantExpression rhs
     ) {
+        Debug.Assert (lhs.IntType.Type is ESC_TypeInt);
+        Debug.Assert (rhs.IntType.Type is ESC_TypeInt);
         Debug.Assert (!op.IsComparison () && !op.IsBitShift ());
 
-        var lhsType = (ES_IntTypeData*) lhs.IntType;
-        var rhsType = (ES_IntTypeData*) rhs.IntType;
+        var lhsType = (ESC_TypeInt) lhs.IntType.Type;
+        var rhsType = (ESC_TypeInt) rhs.IntType.Type;
 
         if (lhsType != rhsType)
             return;
 
-        ES_TypeInfo* finalType;
+        ESC_TypeRef finalType;
         ulong finalValue;
         switch (op) {
             // Add/sub
@@ -483,14 +496,14 @@ internal unsafe static partial class Compiler_ConstantFolding {
                 finalType = lhs.IntType;
                 break;
             case SimpleBinaryExprType.Divide:
-                if (!lhsType->Unsigned)
+                if (!lhsType.Unsigned)
                     finalValue = (ulong) ((long) lhs.Value / (long) rhs.Value);
                 else
                     finalValue = lhs.Value / lhs.Value;
                 finalType = lhs.IntType;
                 break;
             case SimpleBinaryExprType.Modulo:
-                if (!lhsType->Unsigned)
+                if (!lhsType.Unsigned)
                     finalValue = (ulong) ((long) lhs.Value % (long) rhs.Value);
                 else
                     finalValue = lhs.Value % rhs.Value;

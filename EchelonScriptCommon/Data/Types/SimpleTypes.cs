@@ -26,7 +26,7 @@ public enum ES_FloatSize : int {
 
 [StructLayout (LayoutKind.Sequential, Pack = 1)]
 [ES_ExportAggregate (new [] { "EchelonScript", "Reflection" }, "IntData", ES_ExportAttributeBase.AggregateType.Struct)]
-public unsafe struct ES_IntTypeData {
+public unsafe struct ES_IntData {
     #region ================== Instance fields
 
     public ES_TypeInfo TypeInfo;
@@ -35,13 +35,11 @@ public unsafe struct ES_IntTypeData {
 
     #endregion
 
-    #region ================== Constructors
-
-    public ES_IntTypeData (
-        ES_AccessModifier accessMod, ES_Identifier sourceUnit, ES_FullyQualifiedName fullyQualifiedName,
+    public ES_IntData (
+        ES_FullyQualifiedName fullyQualifiedName,
         ES_IntSize size, bool unsigned
     ) {
-        TypeInfo = new ES_TypeInfo (ES_TypeTag.Int, accessMod, ES_TypeFlag.NoRefs, sourceUnit, fullyQualifiedName);
+        TypeInfo = new ES_TypeInfo (ES_TypeTag.Int, ES_AccessModifier.Public, ES_TypeFlag.NoRefs, ES_Identifier.Empty, fullyQualifiedName);
 
         IntSize = size;
         Unsigned = unsigned;
@@ -55,13 +53,11 @@ public unsafe struct ES_IntTypeData {
             _ => throw new NotImplementedException ("Size not implemented."),
         };
     }
-
-    #endregion
 }
 
 [StructLayout (LayoutKind.Sequential, Pack = 1)]
 [ES_ExportAggregate (new [] { "EchelonScript", "Reflection" }, "FloatData", ES_ExportAttributeBase.AggregateType.Struct)]
-public unsafe struct ES_FloatTypeData {
+public unsafe struct ES_FloatData {
     #region ================== Instance fields
 
     public ES_TypeInfo TypeInfo;
@@ -69,13 +65,11 @@ public unsafe struct ES_FloatTypeData {
 
     #endregion
 
-    #region ================== Constructors
-
-    public ES_FloatTypeData (
-        ES_AccessModifier accessMod, ES_Identifier sourceUnit, ES_FullyQualifiedName fullyQualifiedName,
+    public ES_FloatData (
+        ES_FullyQualifiedName fullyQualifiedName,
         ES_FloatSize size
     ) {
-        TypeInfo = new ES_TypeInfo (ES_TypeTag.Float, accessMod, ES_TypeFlag.NoRefs, sourceUnit, fullyQualifiedName);
+        TypeInfo = new ES_TypeInfo (ES_TypeTag.Float, ES_AccessModifier.Public, ES_TypeFlag.NoRefs, ES_Identifier.Empty, fullyQualifiedName);
 
         FloatSize = size;
 
@@ -86,8 +80,6 @@ public unsafe struct ES_FloatTypeData {
             _ => throw new NotImplementedException ("Size not implemented."),
         };
     }
-
-    #endregion
 }
 
 [StructLayout (LayoutKind.Sequential, Pack = 1)]
@@ -100,8 +92,6 @@ public unsafe struct ES_ReferenceData {
 
     #endregion
 
-    #region ================== Constructors
-
     public ES_ReferenceData (ES_FullyQualifiedName fullyQualifiedName, ES_TypeInfo* pointedType) {
         TypeInfo = new (ES_TypeTag.Reference, ES_AccessModifier.Public, ES_TypeFlag.None, ES_Identifier.Empty, fullyQualifiedName) {
             RuntimeSize = sizeof (void*)
@@ -109,8 +99,6 @@ public unsafe struct ES_ReferenceData {
 
         PointedType = pointedType;
     }
-
-    #endregion
 }
 [StructLayout (LayoutKind.Sequential, Pack = 1)]
 [ES_ExportAggregate (new [] { "EchelonScript", "Reflection" }, "ConstTypeData", ES_ExportAttributeBase.AggregateType.Struct)]
@@ -122,14 +110,10 @@ public unsafe struct ES_ConstData {
 
     #endregion
 
-    #region ================== Constructors
-
     public ES_ConstData (ES_FullyQualifiedName fullyQualifiedName, ES_TypeInfo* innerType, bool immutable) {
         var tag = immutable ? ES_TypeTag.Immutable : ES_TypeTag.Const;
         TypeInfo = new ES_TypeInfo (tag, ES_AccessModifier.Public, ES_TypeFlag.None, ES_Identifier.Empty, fullyQualifiedName);
 
         InnerType = innerType;
     }
-
-    #endregion
 }

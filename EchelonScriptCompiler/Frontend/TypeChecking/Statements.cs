@@ -10,10 +10,8 @@
 using System;
 using System.Diagnostics;
 using ChronosLib.Pooled;
-using EchelonScriptCommon.Data.Types;
-using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.CompilerCommon.IR;
-
+using EchelonScriptCompiler.Frontend.Data;
 using static EchelonScriptCompiler.CompilerCommon.IR.ESIR_Factory;
 
 namespace EchelonScriptCompiler.Frontend;
@@ -24,11 +22,11 @@ internal unsafe static partial class Compiler_TypeChecking {
     }
 
     private static StatementData CheckStatement (
-        ref PassData passData, TypeData retType,
+        ref CompileData compileData, ref PassData passData, ESC_TypeRef retType,
         ES_AstStatement stmt
     ) {
-        var idPool = passData.Env.IdPool;
-        var typeUnknMut = passData.GetUnknownType (Constness.Mutable);
+        var idPool = compileData.IdPool;
+        var typeUnknMut = compileData.GetUnknownType (ESC_Constness.Mutable);
 
         switch (stmt) {
             case ES_AstEmptyStatement:
@@ -38,27 +36,27 @@ internal unsafe static partial class Compiler_TypeChecking {
                 throw new NotImplementedException ("[TODO] Labels not implemented yet.");
 
             case ES_AstBlockStatement blockStmt:
-                return CheckStatement_Block (ref passData, retType, blockStmt);
+                return CheckStatement_Block (ref compileData, ref passData, retType, blockStmt);
 
             #region Symbol definition
 
             case ES_AstImportStatement importStmt:
-                HandleImport (ref passData, importStmt);
+                compileData.HandleImport (importStmt);
                 return new StatementData { AlwaysReturns = false };
 
             case ES_AstTypeAlias aliasStmt:
-                HandleAlias (ref passData, aliasStmt);
+                compileData.HandleAlias (aliasStmt);
                 return new StatementData { AlwaysReturns = false };
 
             case ES_AstLocalVarDefinition varDef:
-                return CheckStatement_LocalVarDef (ref passData, retType, varDef);
+                return CheckStatement_LocalVarDef (ref compileData, ref passData, retType, varDef);
 
             #endregion
 
             #region Jumps
 
             case ES_AstConditionalStatement condStmt:
-                return CheckStatement_Conditional (ref passData, retType, condStmt);
+                return CheckStatement_Conditional (ref compileData, ref passData, retType, condStmt);
 
             case ES_AstSwitchStatement: {
                 throw new NotImplementedException ("[TODO] Switches not implemented yet.");
@@ -126,15 +124,15 @@ internal unsafe static partial class Compiler_TypeChecking {
                 throw new NotImplementedException ("[TODO] 'goto case' not implemented yet.");
 
             case ES_AstReturnStatement retStmt:
-                return CheckStatement_Return (ref passData, retType, retStmt);
+                return CheckStatement_Return (ref compileData, ref passData, retType, retStmt);
 
             #endregion
 
             case ES_AstLoopStatement loopStmt:
-                return CheckStatement_Loop (ref passData, retType, loopStmt);
+                return CheckStatement_Loop (ref compileData, ref passData, retType, loopStmt);
 
             case ES_AstExpressionStatement exprStmt: {
-                var exprData = CheckExpression (ref passData, exprStmt.Expression, typeUnknMut);
+                var exprData = CheckExpression (ref compileData, ref passData, exprStmt.Expression, typeUnknMut);
                 FinishExpression (ref passData, ref exprData);
 
                 return new StatementData { AlwaysReturns = false };
@@ -142,7 +140,7 @@ internal unsafe static partial class Compiler_TypeChecking {
 
             case ES_AstExpressionListStatement exprListStmt: {
                 foreach (var expr in exprListStmt.Expressions) {
-                    var exprData = CheckExpression (ref passData, expr, passData.GetUnknownType (Constness.Mutable));
+                    var exprData = CheckExpression (ref compileData, ref passData, expr, typeUnknMut);
                     FinishExpression (ref passData, ref exprData);
                 }
 
@@ -155,10 +153,10 @@ internal unsafe static partial class Compiler_TypeChecking {
     }
 
     private static StatementData CheckStatement_Block (
-        ref PassData passData, TypeData retType,
+        ref CompileData compileData, ref PassData passData, ESC_TypeRef retType,
         ES_AstBlockStatement blockStmt
     ) {
-        var symbols = passData.Symbols;
+        var symbols = compileData.Symbols;
         var irWriter = passData.IRWriter;
 
         symbols.Push ();
@@ -172,14 +170,14 @@ internal unsafe static partial class Compiler_TypeChecking {
             Debug.Assert (subStmt is not null);
 
             if (alwaysReturns && !reportedUnreachable) {
-                passData.WarnList.Add (new (
+                compileData.WarnList.Add (new (
                     passData.Source, subStmt.NodeBounds, ES_FrontendWarnings.UnreachableCode
                 ));
 
                 reportedUnreachable = true;
             }
 
-            var subStmtData = CheckStatement (ref passData, retType, subStmt);
+            var subStmtData = CheckStatement (ref compileData, ref passData, retType, subStmt);
 
             alwaysReturns |= subStmtData.AlwaysReturns;
 
@@ -194,22 +192,22 @@ internal unsafe static partial class Compiler_TypeChecking {
     }
 
     private static StatementData CheckStatement_LocalVarDef (
-        ref PassData passData, TypeData retType,
-        ES_AstLocalVarDefinition varDef
+        ref CompileData compileData, ref PassData passData,
+        ESC_TypeRef retType, ES_AstLocalVarDefinition varDef
     ) {
-        var idPool = passData.Env.IdPool;
-        var symbols = passData.Symbols;
+        var idPool = compileData.IdPool;
+        var symbols = compileData.Symbols;
         var irWriter = passData.IRWriter;
 
-        var typeUnknMut = passData.GetUnknownType (Constness.Mutable);
+        var typeUnknMut = compileData.GetUnknownType (ESC_Constness.Mutable);
 
         var implicitType = varDef.ValueType is null;
 
-        var varType = !implicitType ? UnpackFirstConst (GetTypeRef (varDef.ValueType)) : TypeData.Null;
-        var allVarsFlags = (SymbolFlags) 0;
+        var varType = !implicitType ? GetTypeRef (varDef.ValueType) : ESC_TypeRef.Null (ESC_Constness.Mutable);
+        var allVarsFlags = (FrontendSymbolFlags) 0;
 
         if (varDef.UsingVar)
-            allVarsFlags |= SymbolFlags.UsingVar;
+            allVarsFlags |= FrontendSymbolFlags.UsingVar;
 
         foreach (var variable in varDef.Variables) {
             var varName = variable.Name.Text.Span;
@@ -224,8 +222,8 @@ internal unsafe static partial class Compiler_TypeChecking {
 
             if (!implicitType) {
                 if (variable.InitializationExpression is not null) {
-                    varExprData = CheckExpression (ref passData, variable.InitializationExpression, varType);
-                    EnsureCompat (ref varExprData, varType, ref passData, varExprData.Expr.NodeBounds);
+                    varExprData = CheckExpression (ref compileData, ref passData, variable.InitializationExpression, varType);
+                    EnsureCompat (ref compileData, ref passData, ref varExprData, varType, varExprData.Expr.NodeBounds);
 
                     exprList.Merge (ref varExprData.Expressions);
 
@@ -238,7 +236,7 @@ internal unsafe static partial class Compiler_TypeChecking {
                 }
             } else {
                 Debug.Assert (variable.InitializationExpression is not null);
-                varExprData = CheckExpression (ref passData, variable.InitializationExpression, typeUnknMut);
+                varExprData = CheckExpression (ref compileData, ref passData, variable.InitializationExpression, typeUnknMut);
 
                 exprList.Merge (ref varExprData.Expressions);
 
@@ -246,12 +244,12 @@ internal unsafe static partial class Compiler_TypeChecking {
                 valueExpr = varExprData.Value;
                 valueReg = varExprData.ValueRegister;
 
-                if (varType.Type is not null && varType.Type->TypeTag == ES_TypeTag.Null) {
-                    passData.ErrorList.Add (new (passData.Source, varExprData.Expr.NodeBounds, ES_FrontendErrors.NoImplicitNullVars));
+                if (varType.Type is not null && varType.Type is ESC_TypeNull) {
+                    compileData.ErrorList.Add (new (passData.Source, varExprData.Expr.NodeBounds, ES_FrontendErrors.NoImplicitNullVars));
 
                     varType = typeUnknMut;
                 } else if (varExprData.Type.Type is null) {
-                    passData.ErrorList.Add (new (passData.Source, varExprData.Expr.NodeBounds, ES_FrontendErrors.NotValueExpression));
+                    compileData.ErrorList.Add (new (passData.Source, varExprData.Expr.NodeBounds, ES_FrontendErrors.NotValueExpression));
 
                     varType = typeUnknMut;
                     varExprData = default;
@@ -261,15 +259,15 @@ internal unsafe static partial class Compiler_TypeChecking {
             }
 
             // TODO: Handle constants.
-            if (varType.IsWritable)
-                varFlags |= SymbolFlags.Writable;
-            if (varType.Constness != Constness.Mutable && varExprData.CompileTimeConst)
-                varFlags |= SymbolFlags.CompileTimeConstant;
+            if (varType.IsWritable ())
+                varFlags |= FrontendSymbolFlags.Writable;
+            if (varType.Constness != ESC_Constness.Mutable && varExprData.CompileTimeConst)
+                varFlags |= FrontendSymbolFlags.CompileTimeConstant;
 
             foreach (var expr in exprList.Expressions)
                 irWriter.AddStatement (ExpressionStatement (expr));
 
-            var varReg = irWriter.RentRegister (TypeNode (ref passData, varType));
+            var varReg = irWriter.RentRegister (TypeNode (ref compileData, varType));
             irWriter.AddScopeRegister (varReg);
             var value = LocalValueExpression (varReg);
             if (valueExpr is not null)
@@ -278,8 +276,8 @@ internal unsafe static partial class Compiler_TypeChecking {
             exprList.ReturnRegisters (irWriter);
             irWriter.ReturnRegister (valueReg);
 
-            if (!symbols.AddSymbol (varNameId, TCSymbol.NewVariable (varType, value, varFlags))) {
-                passData.ErrorList.Add (ES_FrontendErrors.GenDuplicateSymbolDef (
+            if (!symbols.AddSymbol (varNameId, FrontendSymbol.NewVariable (new (varType, value), varFlags))) {
+                compileData.ErrorList.Add (ES_FrontendErrors.GenDuplicateSymbolDef (
                     varName.GetPooledString (), variable.Name
                 ));
             }
@@ -289,16 +287,15 @@ internal unsafe static partial class Compiler_TypeChecking {
     }
 
     private static StatementData CheckStatement_Conditional (
-        ref PassData passData, TypeData retType,
+        ref CompileData compileData, ref PassData passData, ESC_TypeRef retType,
         ES_AstConditionalStatement condStmt
     ) {
         var irWriter = passData.IRWriter;
-
-        var typeBoolConst = passData.GetBoolType (Constness.Const);
+        var typeBoolConst = compileData.GetBoolType (ESC_Constness.Const);
 
         // Emit the condition expression.
-        var condExprData = CheckExpression (ref passData, condStmt.ConditionExpression, typeBoolConst);
-        EnsureCompat (ref condExprData, typeBoolConst, ref passData, condExprData.Expr.NodeBounds);
+        var condExprData = CheckExpression (ref compileData, ref passData, condStmt.ConditionExpression, typeBoolConst);
+        EnsureCompat (ref compileData, ref passData, ref condExprData, typeBoolConst, condExprData.Expr.NodeBounds);
 
         foreach (var expr in condExprData.Expressions.Expressions)
             irWriter.AddStatement (ExpressionStatement (expr));
@@ -311,7 +308,7 @@ internal unsafe static partial class Compiler_TypeChecking {
 
         // Emit the "then" part.
         irWriter.PushScope ();
-        var thenStmtData = CheckStatement (ref passData, retType, condStmt.ThenStatement);
+        var thenStmtData = CheckStatement (ref compileData, ref passData, retType, condStmt.ThenStatement);
         using var thenStmtsList = irWriter.PopScope ();
         var thenStmt = OptionalBlockStatement (thenStmtsList.Span);
 
@@ -320,7 +317,7 @@ internal unsafe static partial class Compiler_TypeChecking {
         if (condStmt.ElseStatement is not null) {
             irWriter.PushScope ();
 
-            var elseStmtData = CheckStatement (ref passData, retType, condStmt.ElseStatement);
+            var elseStmtData = CheckStatement (ref compileData, ref passData, retType, condStmt.ElseStatement);
 
             using var elseStmtsList = irWriter.PopScope ();
             elseStmt = OptionalBlockStatement (elseStmtsList.Span);
@@ -335,14 +332,14 @@ internal unsafe static partial class Compiler_TypeChecking {
     }
 
     private static StatementData CheckStatement_Return (
-        ref PassData passData, TypeData retType,
+        ref CompileData compileData, ref PassData passData, ESC_TypeRef retType,
         ES_AstReturnStatement retStmt
     ) {
         var irWriter = passData.IRWriter;
 
         if (retStmt.ReturnExpression is not null) {
-            var exprData = CheckExpression (ref passData, retStmt.ReturnExpression, retType);
-            EnsureCompat (ref exprData, retType, ref passData, exprData.Expr.NodeBounds);
+            var exprData = CheckExpression (ref compileData, ref passData, retStmt.ReturnExpression, retType);
+            EnsureCompat (ref compileData, ref passData, ref exprData, retType, exprData.Expr.NodeBounds);
 
             using var exprList = exprData.Expressions;
 
@@ -352,15 +349,15 @@ internal unsafe static partial class Compiler_TypeChecking {
             exprList.ReturnRegisters (irWriter);
             irWriter.ReturnRegister (exprData.ValueRegister);
 
-            if (exprData.Type.Type->TypeTag != ES_TypeTag.Void)
+            if (exprData.Type.Type is not ESC_TypeVoid)
                 irWriter.AddStatement (ReturnStatement (exprData.Value));
             else {
                 irWriter.AddStatement (ExpressionStatement (exprData.Value));
                 irWriter.AddStatement (ReturnStatement ());
             }
-        } else if (retType.Type->TypeTag != ES_TypeTag.Void) {
-            passData.ErrorList.Add (ES_FrontendErrors.GenMissingReturnValue (
-                passData.Env.GetNiceTypeNameString (retType.ToType (ref passData), true),
+        } else if (retType.Type is not ESC_TypeVoid) {
+            compileData.ErrorList.Add (ES_FrontendErrors.GenMissingReturnValue (
+                compileData.GetNiceNameString (retType, true),
                 passData.Source, retStmt.NodeBounds
             ));
         } else
@@ -370,27 +367,27 @@ internal unsafe static partial class Compiler_TypeChecking {
     }
 
     private static StatementData CheckStatement_Loop (
-        ref PassData passData, TypeData retType,
+        ref CompileData compileData, ref PassData passData, ESC_TypeRef retType,
         ES_AstLoopStatement loopStmt
     ) {
-        var symbols = passData.Symbols;
+        var symbols = compileData.Symbols;
         var irWriter = passData.IRWriter;
 
-        var typeUnknMut = passData.GetUnknownType (Constness.Mutable);
-        var typeBoolConst = passData.GetBoolType (Constness.Const);
+        var typeUnknMut = compileData.GetUnknownType (ESC_Constness.Mutable);
+        var typeBoolConst = compileData.GetBoolType (ESC_Constness.Const);
 
         symbols.Push ();
         irWriter.PushScope ();
 
         // Emit the initialization statements.
         if (loopStmt.InitializationStatement is not null)
-            CheckStatement (ref passData, retType, loopStmt.InitializationStatement);
+            CheckStatement (ref compileData, ref passData, retType, loopStmt.InitializationStatement);
 
         // Emit the condition expression.
         ESIR_List<ESIR_Expression> condExprs;
         if (loopStmt.ConditionExpression is not null) {
-            var condExprData = CheckExpression (ref passData, loopStmt.ConditionExpression, typeBoolConst);
-            EnsureCompat (ref condExprData, typeBoolConst, ref passData, condExprData.Expr.NodeBounds);
+            var condExprData = CheckExpression (ref compileData, ref passData, loopStmt.ConditionExpression, typeBoolConst);
+            EnsureCompat (ref compileData, ref passData, ref condExprData, typeBoolConst, condExprData.Expr.NodeBounds);
 
             using var condExprList = condExprData.Expressions;
 
@@ -411,7 +408,7 @@ internal unsafe static partial class Compiler_TypeChecking {
             foreach (var expr in loopStmt.IterationExpressions) {
                 Debug.Assert (expr is not null);
 
-                var iterExprData = CheckExpression (ref passData, expr, typeUnknMut);
+                var iterExprData = CheckExpression (ref compileData, ref passData, expr, typeUnknMut);
 
                 exprList.Merge (ref iterExprData.Expressions);
                 exprList.AddExpression (iterExprData.Value);
@@ -435,7 +432,7 @@ internal unsafe static partial class Compiler_TypeChecking {
         irWriter.PushScope ();
 
         for (var expr = loopBody; expr is not null; expr = expr.Endpoint)
-            CheckStatement (ref passData, retType, expr);
+            CheckStatement (ref compileData, ref passData, retType, expr);
 
         // Pop the scopes and get the statements.
         using var bodyStmts = irWriter.PopScope ();

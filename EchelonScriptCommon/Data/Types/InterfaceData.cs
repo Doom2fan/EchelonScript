@@ -7,38 +7,18 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-using System.Diagnostics.CodeAnalysis;
-
 namespace EchelonScriptCommon.Data.Types;
 
 public unsafe struct ES_InterfaceData {
-    public unsafe sealed class Builder {
-        #region ================== Instance properties
-
-        /// <summary>The pointer to the interface this builder is for.</summary>
-        public ES_InterfaceData* InterfaceData { get; }
-
-        #endregion
-
-        #region ================== Constructors
-
-        internal Builder ([DisallowNull] ES_InterfaceData* data, ES_AccessModifier accessMod,
-            ES_FullyQualifiedName fullyQualifiedName, ES_Identifier sourceUnit
-        ) {
-            InterfaceData = data;
-            data->TypeInfo = new ES_TypeInfo (ES_TypeTag.Interface, accessMod, ES_TypeFlag.NoNew, sourceUnit, fullyQualifiedName);
-        }
-
-        #endregion
-    }
-
     #region ================== Instance fields
 
     public ES_TypeInfo TypeInfo;
 
     #endregion
 
-    #region ================== Instance properties
-
-    #endregion
+    internal ES_InterfaceData (
+        ES_FullyQualifiedName fullyQualifiedName, ES_AccessModifier accessMod, ES_Identifier sourceUnit
+    ) {
+        TypeInfo = new ES_TypeInfo (ES_TypeTag.Interface, accessMod, ES_TypeFlag.NoNew, sourceUnit, fullyQualifiedName);
+    }
 }
