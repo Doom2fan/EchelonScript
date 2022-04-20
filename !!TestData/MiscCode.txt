@@ -1,0 +1,9 @@
+namespace XorShift {
+    uint32 xorshift32 (ref uint32 state) {
+        var x = state;
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        return state = x;
+    }
+}
