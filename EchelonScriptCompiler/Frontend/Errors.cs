@@ -43,6 +43,7 @@ public static class ES_FrontendErrors {
     public const string GotXExpectedY = "Unexpected {0}. Expected {1}.";
     public const string UnexpectedX = "Unexpected {0} \"{1}\"";
     public const string UnrecognizedX = "Unrecognized {0} \"{1}\"";
+    public const string MissingSemicolon = "Missing semicolon.";
 
     public const string UnexpectedEOF = "Unexpected end of file.";
     public const string UnexpectedDocComment = "Unexpected documentation comment.";
