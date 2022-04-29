@@ -363,7 +363,7 @@ public class EchelonScriptTokenizer : IDisposable {
         }
 
         public override int MinimumStartPeek => tokenStringsMinLength;
-        public override int RequestedStartPeek => tokenParsersMaxLength;
+        public override int RequestedStartPeek => tokenStringsMaxLength;
 
         public override bool IsStartValid (EchelonScriptTokenizer tokenizer, ReadOnlySpan<char> peekedChars) => true;
 
