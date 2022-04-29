@@ -21,3 +21,13 @@ namespace ConstructorParserTests {
         }
     }
 }
+
+namespace MissingSemicolonTests {
+    void Asd () {
+        Foo ()
+        for (a d c) {
+            asd:
+                a
+        }
+    }
+}
