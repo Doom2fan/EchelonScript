@@ -8,7 +8,6 @@
  */
 
 using System.Diagnostics;
-using EchelonScriptCompiler.CompilerCommon;
 
 namespace EchelonScriptCompiler.Frontend;
 

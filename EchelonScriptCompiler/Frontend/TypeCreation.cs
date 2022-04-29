@@ -8,185 +8,149 @@
  */
 
 using System;
-using System.Diagnostics;
 using ChronosLib.Pooled;
 using EchelonScriptCommon.Data;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.Utilities;
-using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.Data;
+using EchelonScriptCompiler.Frontend.Data;
 
 namespace EchelonScriptCompiler.Frontend;
 
-public unsafe partial class CompilerFrontend {
-    private void CreateTypes (ref TranslationUnitData transUnit) {
-        var idPool = Environment!.IdPool;
+internal unsafe static class Compiler_TypeCreation {
+    private ref struct PassData {
+        public ES_Identifier TransUnitName;
+        public SourceData Source;
+    }
 
-        foreach (ref var astUnit in transUnit.AstUnits.Span) {
-            foreach (var nm in astUnit.Ast.Namespaces) {
-                ES_Identifier namespaceName;
-                using (var nameArr = nm.NamespaceName.ToPooledChars ())
-                    namespaceName = idPool.GetIdentifier (nameArr);
+    public static void CreateTypes (ref CompileData compileData) {
+        GenerateBuiltinTypes (ref compileData);
 
-                var namespaceBuilder = EnvironmentBuilder!.GetOrCreateNamespace (namespaceName);
+        foreach (ref var transUnit in compileData.TranslationUnits) {
+            foreach (ref var astUnit in transUnit.AstUnits.Span) {
+                var passData = new PassData {
+                    TransUnitName = transUnit.Name,
+                    Source = astUnit.SourceData,
+                };
 
-                foreach (var type in nm.Contents) {
-                    switch (type) {
-                        case ES_AstClassDefinition classDef:
-                            CreateTypes_Aggregate (ref transUnit, namespaceBuilder, ES_TypeTag.Class, classDef);
-                            break;
+                CheckAst (ref compileData, ref passData, astUnit.Ast);
+            }
+        }
+    }
 
-                        case ES_AstStructDefinition structDef:
-                            CreateTypes_Aggregate (ref transUnit, namespaceBuilder, ES_TypeTag.Struct, structDef);
-                            break;
+    private static void CheckAst (ref CompileData compileData, ref PassData passData, ES_AbstractSyntaxTree ast) {
+        foreach (var nm in ast.Namespaces) {
+            var nsName = nm.NamespaceName.ToIdentifier (compileData.IdPool);
+            var nsData = compileData.GetOrCreateNamespace (nsName);
 
-                        case ES_AstEnumDefinition enumDef: {
-                            var typeName = Environment!.IdPool.GetIdentifier (enumDef.Name.Text.Span);
+            foreach (var type in nm.Contents) {
+                switch (type) {
+                    case ES_AstClassDefinition classDef:
+                        CreateTypes_Aggregate (ref compileData, ref passData, nsData, ES_TypeTag.Class, classDef);
+                        break;
 
-                            if (namespaceBuilder.CheckTypeExists (typeName, null) != null) {
-                                errorList.Add (ES_FrontendErrors.GenTypeAlreadyDefined (
-                                    namespaceBuilder.NamespaceData.NamespaceName.GetCharsSpan ().GetPooledString (),
-                                    enumDef.Name.Text.Span.GetPooledString (),
-                                    enumDef.Name
-                                ));
-                                break;
-                            }
+                    case ES_AstStructDefinition structDef:
+                        CreateTypes_Aggregate (ref compileData, ref passData, nsData, ES_TypeTag.Struct, structDef);
+                        break;
 
-                            var builder = namespaceBuilder.GetOrCreateEnum (enumDef.AccessModifier, typeName, transUnit.Name);
-                            EnvironmentBuilder!.PointerAstMap.Add ((IntPtr) builder.EnumData, enumDef);
+                    case ES_AstEnumDefinition enumDef: {
+                        var typeName = compileData.IdPool.GetIdentifier (enumDef.Name.Text.Span);
 
+                        if (nsData.CheckTypeExists (typeName, null, out _) != null) {
+                            compileData.ErrorList.Add (ES_FrontendErrors.GenTypeAlreadyDefined (
+                                nsData.NamespaceName.GetCharsSpan ().GetPooledString (),
+                                enumDef.Name.Text.Span.GetPooledString (),
+                                enumDef.Name
+                            ));
                             break;
                         }
 
-                        case ES_AstFunctionDefinition:
-                            // Functions are handled in a pass of their own.
-                            break;
+                        var enumData = nsData.GetOrCreateEnum (enumDef.AccessModifier, typeName, passData.TransUnitName);
+                        enumData.AccessModifier = enumDef.AccessModifier;
 
-                        default:
-                            throw new NotImplementedException ("Node type not implemented yet.");
+                        break;
                     }
+
+                    case ES_AstFunctionDefinition:
+                        // Functions are handled in a pass of their own.
+                        break;
+
+                    default:
+                        throw new NotImplementedException ("Node type not implemented yet.");
                 }
             }
         }
     }
 
-    private void CreateTypes_Aggregate (
-        ref TranslationUnitData transUnit, ES_NamespaceData.Builder namespaceBuilder,
+    private static void CreateTypes_Aggregate (
+        ref CompileData compileData, ref PassData passData, ESC_Namespace nsData,
         ES_TypeTag type, ES_AstAggregateDefinition typeDef
     ) {
-        var namespaceName = namespaceBuilder.NamespaceData.NamespaceName;
-        var typeName = Environment!.IdPool.GetIdentifier (typeDef.Name.Text.Span);
+        var typeName = compileData.IdPool.GetIdentifier (typeDef.Name.Text.Span);
 
-        if (namespaceBuilder.CheckTypeExists (typeName, null) != null) {
-            errorList.Add (ES_FrontendErrors.GenTypeAlreadyDefined (
-                namespaceBuilder.NamespaceData.NamespaceName.GetCharsSpan ().GetPooledString (),
+        if (nsData.CheckTypeExists (typeName, null, out _) != null) {
+            compileData.ErrorList.Add (ES_FrontendErrors.GenTypeAlreadyDefined (
+                nsData.NamespaceName.GetCharsSpan ().GetPooledString (),
                 typeDef.Name.Text.Span.GetPooledString (),
                 typeDef.Name
             ));
             return;
         }
 
-        ES_TypeInfo* typeData = null;
-        if (type == ES_TypeTag.Class) {
-            var classBuilder = namespaceBuilder.GetOrCreateClass (typeDef.AccessModifier, typeName, transUnit.Name);
-            typeData = &classBuilder.ClassData->TypeInfo;
-        } else if (type == ES_TypeTag.Struct) {
-            var structBuilder = namespaceBuilder.GetOrCreateStruct (typeDef.AccessModifier, typeName, transUnit.Name);
-            typeData = &structBuilder.StructData->TypeInfo;
-        } else
-            Debug.Fail ("Not implemented/supported.");
+        ESC_TypeAggregate typeData;
+        switch (type) {
+            case ES_TypeTag.Class:
+                typeData = nsData.GetOrCreateClass (typeDef.AccessModifier, typeName, passData.TransUnitName);
+                break;
+            case ES_TypeTag.Struct:
+                typeData = nsData.GetOrCreateStruct (typeDef.AccessModifier, typeName, passData.TransUnitName);
+                break;
 
-        EnvironmentBuilder!.PointerAstMap.Add ((IntPtr) typeData, typeDef);
+            default:
+                throw new NotImplementedException ("Not implemented/supported.");
+        };
+
+        typeData.AccessModifier = typeDef.AccessModifier;
     }
 
-    private void GenerateTypesList () {
-        foreach (var nmKVP in EnvironmentBuilder!.NamespaceBuilders) {
-            var namespaceName = nmKVP.Key;
-            var namespaceBuilder = nmKVP.Value;
-            var namespaceData = namespaceBuilder.NamespaceData;
+    private static void GenerateBuiltinTypes (ref CompileData compileData) {
+        var idPool = compileData.IdPool;
+        var globalNSId = compileData.Env.GlobalsNamespace;
+        var globalNS = compileData.GetOrCreateNamespace (globalNSId);
 
-            using var newTypesList = new StructPooledList<Pointer<ES_TypeInfo>> (CL_ClearMode.Auto);
+        globalNS.AddType (GenerateBuiltinTypes_Int (ref compileData, ES_IntSize.Int8, false));
+        globalNS.AddType (GenerateBuiltinTypes_Int (ref compileData, ES_IntSize.Int16, false));
+        globalNS.AddType (GenerateBuiltinTypes_Int (ref compileData, ES_IntSize.Int32, false));
+        globalNS.AddType (GenerateBuiltinTypes_Int (ref compileData, ES_IntSize.Int64, false));
 
-            newTypesList.EnsureCapacity (
-                namespaceBuilder.ClassBuilders.Count +
-                namespaceBuilder.StructBuilders.Count +
-                namespaceBuilder.EnumBuilders.Count
-            );
+        globalNS.AddType (GenerateBuiltinTypes_Int (ref compileData, ES_IntSize.Int8, true));
+        globalNS.AddType (GenerateBuiltinTypes_Int (ref compileData, ES_IntSize.Int16, true));
+        globalNS.AddType (GenerateBuiltinTypes_Int (ref compileData, ES_IntSize.Int32, true));
+        globalNS.AddType (GenerateBuiltinTypes_Int (ref compileData, ES_IntSize.Int64, true));
 
-            foreach (var classKVP in namespaceBuilder.ClassBuilders) {
-                var classBuilder = classKVP.Value;
-                newTypesList.Add (&classBuilder.ClassData->TypeInfo);
-            }
-            foreach (var structKVP in namespaceBuilder.StructBuilders) {
-                var structBuilder = structKVP.Value;
-                newTypesList.Add (&structBuilder.StructData->TypeInfo);
-            }
-            foreach (var enumKVP in namespaceBuilder.EnumBuilders) {
-                var enumBuilder = enumKVP.Value;
-                newTypesList.Add (&enumBuilder.EnumData->TypeInfo);
-            }
-        }
+        var floatType = GenerateBuiltinTypes_Float (ref compileData, ES_FloatSize.Single);
+        var doubleType = GenerateBuiltinTypes_Float (ref compileData, ES_FloatSize.Double);
+        globalNS.AddType (floatType);
+        globalNS.AddType (doubleType);
+
+        globalNS.AddType (new ESC_TypeVoid (new (globalNSId, idPool.GetIdentifier (ES_PrimitiveTypes.Void))));
+        globalNS.AddType (new ESC_TypeBool (new (globalNSId, idPool.GetIdentifier (ES_PrimitiveTypes.Bool))));
+
+        compileData.EnvBuilder.TypeUnknown = compileData.ToTypeInfo (compileData.TypeUnknown);
+        compileData.EnvBuilder.TypeNull = compileData.ToTypeInfo (compileData.TypeNull);
+        compileData.EnvBuilder.TypeVoid = compileData.ToTypeInfo (compileData.GetVoidType (ESC_Constness.Mutable));
+        compileData.EnvBuilder.TypeBool = compileData.ToTypeInfo (compileData.GetBoolType (ESC_Constness.Mutable));
+        compileData.EnvBuilder.TypeFloat32 = compileData.ToTypeInfo (compileData.GetFloat32Type (ESC_Constness.Mutable));
+        compileData.EnvBuilder.TypeFloat64 = compileData.ToTypeInfo (compileData.GetFloat64Type (ESC_Constness.Mutable));
     }
 
-    private void GenerateBuiltinTypes () {
-        Debug.Assert (Environment is not null);
-        Debug.Assert (EnvironmentBuilder is not null);
-
-        var globalList = EnvironmentBuilder.GetOrCreateNamespace (Environment.GlobalsNamespace).NamespaceData.Types;
-
-        globalList.Add (GenerateBuiltinTypes_Int (ES_IntSize.Int8, false));
-        globalList.Add (GenerateBuiltinTypes_Int (ES_IntSize.Int16, false));
-        globalList.Add (GenerateBuiltinTypes_Int (ES_IntSize.Int32, false));
-        globalList.Add (GenerateBuiltinTypes_Int (ES_IntSize.Int64, false));
-
-        globalList.Add (GenerateBuiltinTypes_Int (ES_IntSize.Int8, true));
-        globalList.Add (GenerateBuiltinTypes_Int (ES_IntSize.Int16, true));
-        globalList.Add (GenerateBuiltinTypes_Int (ES_IntSize.Int32, true));
-        globalList.Add (GenerateBuiltinTypes_Int (ES_IntSize.Int64, true));
-
-        var floatType = GenerateBuiltinTypes_Float (ES_FloatSize.Single);
-        var doubleType = GenerateBuiltinTypes_Float (ES_FloatSize.Double);
-        EnvironmentBuilder.TypeFloat32 = floatType;
-        EnvironmentBuilder.TypeFloat64 = doubleType;
-        globalList.Add (floatType);
-        globalList.Add (doubleType);
-
-        var voidType = GenerateBuiltinTypes_Simple (ES_PrimitiveTypes.Void, ES_TypeTag.Void, 0);
-        var boolType = GenerateBuiltinTypes_Simple (ES_PrimitiveTypes.Bool, ES_TypeTag.Bool, 1);
-        EnvironmentBuilder.TypeVoid = voidType;
-        EnvironmentBuilder.TypeBool = boolType;
-        globalList.Add (voidType);
-        globalList.Add (boolType);
+    private static ESC_TypeInt GenerateBuiltinTypes_Int (ref CompileData compileData, ES_IntSize size, bool unsigned)  {
+        var nameId = compileData.IdPool.GetIdentifier (ES_PrimitiveTypes.GetIntName (size, unsigned));
+        return new (new (compileData.Env.GlobalsNamespace, nameId), size, unsigned);
     }
 
-    private Pointer<ES_TypeInfo> GenerateBuiltinTypes_Int (ES_IntSize size, bool unsigned) {
-        var intDataPtr = EnvironmentBuilder!.MemoryManager.GetMemory<ES_IntTypeData> ();
-        var namePtr = Environment!.IdPool.GetIdentifier (ES_PrimitiveTypes.GetIntName (size, unsigned));
-        var fqn = new ES_FullyQualifiedName (Environment.GlobalsNamespace, namePtr);
-
-        *intDataPtr = new ES_IntTypeData (ES_AccessModifier.Public, ES_Identifier.Empty, fqn, size, unsigned);
-
-        return new Pointer<ES_TypeInfo> (&intDataPtr->TypeInfo);
-    }
-
-    private Pointer<ES_TypeInfo> GenerateBuiltinTypes_Float (ES_FloatSize size) {
-        var floatDataPtr = EnvironmentBuilder!.MemoryManager.GetMemory<ES_FloatTypeData> ();
-        var namePtr = Environment!.IdPool.GetIdentifier (ES_PrimitiveTypes.GetFloatName (size));
-        var fqn = new ES_FullyQualifiedName (Environment.GlobalsNamespace, namePtr);
-
-        *floatDataPtr = new ES_FloatTypeData (ES_AccessModifier.Public, ES_Identifier.Empty, fqn, size);
-
-        return new Pointer<ES_TypeInfo> (&floatDataPtr->TypeInfo);
-    }
-
-    private Pointer<ES_TypeInfo> GenerateBuiltinTypes_Simple (ReadOnlySpan<char> name, ES_TypeTag tag, int runtimeSize) {
-        var voidDataPtr = EnvironmentBuilder!.MemoryManager.GetMemory<ES_TypeInfo> ();
-        var namePtr = Environment!.IdPool.GetIdentifier (name);
-        var fqn = new ES_FullyQualifiedName (Environment.GlobalsNamespace, namePtr);
-
-        *voidDataPtr = new ES_TypeInfo (tag, ES_AccessModifier.Public, ES_TypeFlag.NoRefs | ES_TypeFlag.NoNew, ES_Identifier.Empty, fqn);
-        voidDataPtr->RuntimeSize = runtimeSize;
-
-        return new Pointer<ES_TypeInfo> (voidDataPtr);
+    private static ESC_TypeFloat GenerateBuiltinTypes_Float (ref CompileData compileData, ES_FloatSize size) {
+        var nameId = compileData.IdPool.GetIdentifier (ES_PrimitiveTypes.GetFloatName (size));
+        return new (new (compileData.Env.GlobalsNamespace, nameId), size);
     }
 }

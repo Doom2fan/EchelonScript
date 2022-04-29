@@ -12,7 +12,6 @@ using System.Collections.Generic;
 using ChronosLib.Pooled;
 using EchelonScriptCommon.Data;
 using EchelonScriptCompiler.Backends;
-using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.CompilerCommon.IR;
 using EchelonScriptCompiler.Data;
 using EchelonScriptCompiler.Frontend;
@@ -20,20 +19,20 @@ using EchelonScriptCompiler.Frontend.Parser;
 
 namespace EchelonScriptCompiler;
 
-public class EchelonScript_Compiler : IDisposable {
+public sealed class EchelonScript_Compiler : IDisposable {
     #region ================== Instance fields
 
-    protected List<EchelonScriptErrorMessage> errorsList;
-    protected List<EchelonScriptErrorMessage> warningsList;
-    protected List<EchelonScriptErrorMessage> infoList;
-    protected EchelonScriptParser parser;
-    protected CompilerFrontend frontend;
-    protected ICompilerBackend? backend;
+    private List<EchelonScriptErrorMessage> errorsList;
+    private List<EchelonScriptErrorMessage> warningsList;
+    private List<EchelonScriptErrorMessage> infoList;
+    private EchelonScriptParser parser;
+    private CompilerFrontend frontend;
+    private ICompilerBackend? backend;
 
-    protected bool disposeBackend;
+    private bool disposeBackend;
 
-    protected EchelonScriptEnvironment? environment;
-    protected EchelonScriptEnvironment.Builder? environmentBuilder;
+    private EchelonScriptEnvironment? environment;
+    private EchelonScriptEnvironment.Builder? environmentBuilder;
 
     #endregion
 
@@ -49,7 +48,7 @@ public class EchelonScript_Compiler : IDisposable {
 
     #region ================== Constructors
 
-    protected EchelonScript_Compiler () {
+    private EchelonScript_Compiler () {
         errorsList = new List<EchelonScriptErrorMessage> ();
         warningsList = new List<EchelonScriptErrorMessage> ();
         infoList = new List<EchelonScriptErrorMessage> ();
@@ -152,12 +151,12 @@ public class EchelonScript_Compiler : IDisposable {
         environment = null;
     }
 
-    protected void CheckDisposed () {
-        if (disposedValue)
+    private void CheckDisposed () {
+        if (IsDisposed)
             throw new ObjectDisposedException (nameof (EchelonScript_Compiler));
     }
 
-    protected void CheckSetUp () {
+    private void CheckSetUp () {
         if (environment == null | environmentBuilder == null)
             throw new CompilationException ("The compiler is not set up.");
     }
@@ -166,15 +165,15 @@ public class EchelonScript_Compiler : IDisposable {
 
     #region ================== IDisposable support
 
-    private bool disposedValue = false;
+    public bool IsDisposed { get; private set; }
 
     ~EchelonScript_Compiler () {
-        if (!disposedValue)
+        if (!IsDisposed)
             DoDispose ();
     }
 
-    protected virtual void DoDispose () {
-        if (disposedValue)
+    private void DoDispose () {
+        if (IsDisposed)
             return;
 
         parser?.Dispose ();
@@ -184,7 +183,7 @@ public class EchelonScript_Compiler : IDisposable {
 
         environmentBuilder?.Dispose ();
 
-        disposedValue = true;
+        IsDisposed = true;
     }
 
     public void Dispose () {

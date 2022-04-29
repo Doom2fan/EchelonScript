@@ -61,15 +61,11 @@ public unsafe sealed partial class ES_GarbageCollector : IDisposable {
 
     #endregion
 
-    #region ================== Constructors
-
     internal ES_GarbageCollector () {
         immixGC = new ImmixGC ();
 
         gcRoots = new List<RootCollectionPair> ();
     }
-
-    #endregion
 
     #region ================== Static methods
 
@@ -127,9 +123,9 @@ public unsafe sealed partial class ES_GarbageCollector : IDisposable {
     }
 
     [UnmanagedCallersOnly (CallConvs = new [] { typeof (CallConvCdecl) })]
-    public static void* AllocArrayUnmanaged (ES_ArrayTypeData* arrayType, ES_ArrayIndex* dimSizesPtr, int dimsCount, byte pinned) {
+    public static void* AllocArrayUnmanaged (ES_ArrayData* arrayType, ES_ArrayIndex* dimSizesPtr, int rank, byte pinned) {
         EnsureInitialized ();
-        return garbageCollector!.AllocateArray (arrayType, new Span<ES_ArrayIndex> (dimSizesPtr, dimsCount), pinned != 0, true);
+        return garbageCollector!.AllocateArray (arrayType, new Span<ES_ArrayIndex> (dimSizesPtr, rank), pinned != 0, true);
     }
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
@@ -143,7 +139,7 @@ public unsafe sealed partial class ES_GarbageCollector : IDisposable {
     }
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
-    public static ES_ArrayHeader* AllocArray<T> (ES_ArrayTypeData* arrayType, ReadOnlySpan<ES_ArrayIndex> dimSizes, bool pinned, T defaultElemVal = default) where T : unmanaged {
+    public static ES_ArrayHeader* AllocArray<T> (ES_ArrayData* arrayType, ReadOnlySpan<ES_ArrayIndex> dimSizes, bool pinned, T defaultElemVal = default) where T : unmanaged {
         EnsureInitialized ();
 
         var ptr = garbageCollector!.AllocateArray (arrayType, dimSizes, pinned, false);
@@ -161,7 +157,7 @@ public unsafe sealed partial class ES_GarbageCollector : IDisposable {
     }
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
-    public static ES_ArrayHeader* AllocArray (ES_ArrayTypeData* arrayType, ReadOnlySpan<ES_ArrayIndex> dimSizes, bool pinned) {
+    public static ES_ArrayHeader* AllocArray (ES_ArrayData* arrayType, ReadOnlySpan<ES_ArrayIndex> dimSizes, bool pinned) {
         EnsureInitialized ();
         return garbageCollector!.AllocateArray (arrayType, dimSizes, pinned, true);
     }
@@ -333,7 +329,7 @@ public unsafe sealed partial class ES_GarbageCollector : IDisposable {
     }
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
-    private ES_ArrayHeader* AllocateArray (ES_ArrayTypeData* arrayType, ReadOnlySpan<ES_ArrayIndex> dimSizes, bool pinned, bool clearElems) {
+    private ES_ArrayHeader* AllocateArray (ES_ArrayData* arrayType, ReadOnlySpan<ES_ArrayIndex> dimSizes, bool pinned, bool clearElems) {
         CheckDisposed ();
 
         Debug.Assert (dimSizes.Length > 0 && dimSizes.Length <= byte.MaxValue);

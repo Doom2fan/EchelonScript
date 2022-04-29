@@ -71,7 +71,7 @@ public static partial class ES_Utils {
     public unsafe static ArrayPointer<T> GetArray<T> (this IMemoryManager manager, int count)
         where T : unmanaged {
         if (count < 1)
-            throw new ArgumentOutOfRangeException (nameof (count), "Count must be greater than zero.");
+            return ArrayPointer<T>.Null;
 
         var mem = manager.GetMemory<T> (count);
         return new ArrayPointer<T> (mem, count);
@@ -80,7 +80,7 @@ public static partial class ES_Utils {
     public unsafe static ArrayPointer<T> GetArrayAligned<T> (this IMemoryManager manager, int count, int alignment)
         where T : unmanaged {
         if (count < 1)
-            throw new ArgumentOutOfRangeException (nameof (count), "Count must be greater than zero.");
+            return ArrayPointer<T>.Null;
 
         var mem = manager.GetMemoryAligned<T> (alignment, count);
         return new ArrayPointer<T> (mem, count);

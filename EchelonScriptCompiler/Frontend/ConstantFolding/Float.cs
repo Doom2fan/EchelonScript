@@ -10,23 +10,22 @@
 using System;
 using System.Diagnostics;
 using EchelonScriptCommon.Data.Types;
-using EchelonScriptCompiler.CompilerCommon;
+using EchelonScriptCompiler.Frontend.Data;
 
 namespace EchelonScriptCompiler.Frontend;
 
 internal unsafe static partial class Compiler_ConstantFolding {
-    private static void FoldConstants_ExplicitCast_ToFloat (ES_TypeInfo* dstType, in ES_AstExpression innerExpr, ref ES_AstExpression expr, out bool isRedundant) {
-        Debug.Assert (dstType is not null);
-        Debug.Assert (dstType->TypeTag == ES_TypeTag.Float);
-
-        var dstFloatType = (ES_FloatTypeData*) dstType;
+    private static void FoldConstants_ExplicitCast_ToFloat (ref ES_AstExpression expr, ESC_TypeRef dstType, in ES_AstExpression innerExpr, out bool isRedundant) {
+        var dstFloatType = dstType.Type as ESC_TypeFloat;
+        Debug.Assert (dstFloatType is not null);
 
         if (innerExpr is ES_AstIntegerConstantExpression intExpr) {
-            var srcIntType = (ES_IntTypeData*) intExpr.IntType;
+            var srcIntType = intExpr.IntType.Type as ESC_TypeInt;
+            Debug.Assert (srcIntType is not null);
 
             isRedundant = false;
-            if (srcIntType->Unsigned) {
-                switch (dstFloatType->FloatSize) {
+            if (srcIntType.Unsigned) {
+                switch (dstFloatType.Size) {
                     case ES_FloatSize.Single:
                         expr = new ES_AstFloat32ConstantExpression ((long) intExpr.SignExtend (), expr);
                         break;
@@ -36,7 +35,7 @@ internal unsafe static partial class Compiler_ConstantFolding {
                         break;
                 }
             } else {
-                switch (dstFloatType->FloatSize) {
+                switch (dstFloatType.Size) {
                     case ES_FloatSize.Single:
                         expr = new ES_AstFloat32ConstantExpression (intExpr.Value, expr);
                         break;
@@ -47,9 +46,9 @@ internal unsafe static partial class Compiler_ConstantFolding {
                 }
             }
         } else if (innerExpr is ES_AstFloat32ConstantExpression f32Expr) {
-            isRedundant = dstFloatType->FloatSize == ES_FloatSize.Single;
+            isRedundant = dstFloatType.Size == ES_FloatSize.Single;
 
-            switch (dstFloatType->FloatSize) {
+            switch (dstFloatType.Size) {
                 case ES_FloatSize.Single:
                     expr = new ES_AstFloat32ConstantExpression (f32Expr.Value, expr);
                     break;
@@ -59,9 +58,9 @@ internal unsafe static partial class Compiler_ConstantFolding {
                     break;
             }
         } else if (innerExpr is ES_AstFloat64ConstantExpression f64Expr) {
-            isRedundant = dstFloatType->FloatSize == ES_FloatSize.Double;
+            isRedundant = dstFloatType.Size == ES_FloatSize.Double;
 
-            switch (dstFloatType->FloatSize) {
+            switch (dstFloatType.Size) {
                 case ES_FloatSize.Single:
                     expr = new ES_AstFloat32ConstantExpression ((float) f64Expr.Value, expr);
                     break;

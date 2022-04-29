@@ -22,12 +22,12 @@ public unsafe sealed partial class RoslynCompilerBackend {
 
             case ES_TypeTag.Bool: return PredefinedType (Token (SyntaxKind.BoolKeyword));
             case ES_TypeTag.Int: {
-                var intType = (ES_IntTypeData*) type;
+                var intType = (ES_IntData*) type;
                 return GetIntType (intType->IntSize, intType->Unsigned);
             }
 
             case ES_TypeTag.Float: {
-                var floatType = (ES_FloatTypeData*) type;
+                var floatType = (ES_FloatData*) type;
                 return GetFloatType (floatType->FloatSize);
             }
 

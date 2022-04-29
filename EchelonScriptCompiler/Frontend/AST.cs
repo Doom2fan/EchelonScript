@@ -10,9 +10,12 @@
 using System;
 using System.Diagnostics;
 using ChronosLib.Pooled;
+using EchelonScriptCommon.Data;
 using EchelonScriptCommon.Data.Types;
+using EchelonScriptCompiler.CompilerCommon;
+using EchelonScriptCompiler.Frontend.Data;
 
-namespace EchelonScriptCompiler.CompilerCommon;
+namespace EchelonScriptCompiler.Frontend;
 
 public struct ES_AstNodeBounds {
     public int StartPos;
@@ -124,6 +127,11 @@ public class ES_AstDottableIdentifier : ES_AstNode {
         return str.Span.GetPooledString ();
     }
 
+    public ES_Identifier ToIdentifier (ES_IdentifierPool idPool) {
+        using var chars = ToPooledChars ();
+        return idPool.GetIdentifier (chars);
+    }
+
     public override string ToString () {
         Span<char> idText = stackalloc char [GetStringLength ()];
 
@@ -171,13 +179,31 @@ public abstract class ES_AstTypeDeclaration : ES_AstNode {
     }
 }
 
-public unsafe class ES_AstTypeDeclaration_TypeReference : ES_AstTypeDeclaration {
+internal unsafe class ES_AstTypeDeclaration_TypeReference : ES_AstTypeDeclaration {
     public override ES_AstNodeBounds NodeBounds => Declaration.NodeBounds;
 
     public ES_AstTypeDeclaration Declaration;
-    public ES_TypeInfo* Reference;
+    public ESC_TypeRef Reference;
 
-    public ES_AstTypeDeclaration_TypeReference (ES_AstTypeDeclaration decl, ES_TypeInfo* typeRef) : base (1) {
+    public ES_AstTypeDeclaration_TypeReference (ES_AstTypeDeclaration decl, ESC_TypeRef typeRef) : base (1) {
+        Declaration = decl;
+        Reference = typeRef;
+    }
+
+    public override int GetStringLength ()
+        => Declaration.GetStringLength ();
+
+    public override void ToString (Span<char> chars)
+        => Declaration.ToString (chars);
+}
+
+internal unsafe class ES_AstTypeDeclaration_FunctionReference : ES_AstTypeDeclaration {
+    public override ES_AstNodeBounds NodeBounds => Declaration.NodeBounds;
+
+    public ES_AstTypeDeclaration Declaration;
+    public ESC_Function Reference;
+
+    public ES_AstTypeDeclaration_FunctionReference (ES_AstTypeDeclaration decl, ESC_Function typeRef) : base (1) {
         Declaration = decl;
         Reference = typeRef;
     }
@@ -1208,18 +1234,17 @@ public class ES_AstNullLiteralExpression : ES_AstExpression {
     public ES_AstNullLiteralExpression (EchelonScriptToken tk) : base (1) => Token = tk;
 }
 
-public unsafe class ES_AstIntegerConstantExpression : ES_AstExpression {
+internal unsafe class ES_AstIntegerConstantExpression : ES_AstExpression {
     public override ES_AstNodeBounds NodeBounds => OriginalExpression.NodeBounds;
 
     public readonly ES_AstExpression OriginalExpression;
-    public readonly ES_TypeInfo* IntType;
+    public readonly ESC_TypeRef IntType;
     public readonly ulong Value;
 
-    public ES_AstIntegerConstantExpression (ES_TypeInfo* intType, ulong value, ES_AstExpression origExpr) : base (1) {
-        Debug.Assert (intType is not null);
-        Debug.Assert (intType->TypeTag == ES_TypeTag.Int);
+    public ES_AstIntegerConstantExpression (ESC_TypeRef intType, ulong value, ES_AstExpression origExpr) : base (1) {
+        Debug.Assert (intType.Type is ESC_TypeInt);
 
-        value = ((ES_IntTypeData*) intType)->IntSize switch {
+        value = (intType.Type as ESC_TypeInt)!.Size switch {
             ES_IntSize.Int8 => value &= 0x00000000_000000FF,
             ES_IntSize.Int16 => value &= 0x00000000_0000FFFF,
             ES_IntSize.Int32 => value &= 0x00000000_FFFFFFFF,
@@ -1234,12 +1259,12 @@ public unsafe class ES_AstIntegerConstantExpression : ES_AstExpression {
     }
 
     public ulong SignExtend () {
-        var intType = (ES_IntTypeData*) IntType;
+        var intType = (IntType.Type as ESC_TypeInt)!;
 
-        if (intType->Unsigned)
+        if (intType.Unsigned)
             return Value;
 
-        return intType->IntSize switch {
+        return intType.Size switch {
             ES_IntSize.Int8 => (ulong) (sbyte) Value,
             ES_IntSize.Int16 => (ulong) (short) Value,
             ES_IntSize.Int32 => (ulong) (int) Value,
@@ -1356,13 +1381,13 @@ public class ES_AstIndexingExpression : ES_AstExpression {
     protected ES_AstNodeBounds bounds;
 
     public ES_AstExpression IndexedExpression;
-    public ES_AstExpression? [] RankExpressions;
+    public ES_AstExpression? [] DimensionExpressions;
 
     public ES_AstIndexingExpression (
-        ES_AstExpression indexedExpr, ES_AstExpression? [] ranks, int endPos
+        ES_AstExpression indexedExpr, ES_AstExpression? [] dims, int endPos
     ) : base (1) {
         IndexedExpression = indexedExpr;
-        RankExpressions = ranks;
+        DimensionExpressions = dims;
 
         bounds = new ES_AstNodeBounds (indexedExpr.NodeBounds.StartPos, endPos);
     }
@@ -1391,14 +1416,14 @@ public class ES_AstNewArrayExpression : ES_AstExpression {
     protected ES_AstNodeBounds bounds;
 
     public ES_AstTypeDeclaration? ElementType;
-    public ES_AstExpression? [] Ranks;
+    public ES_AstExpression? [] Dimensions;
 
     public ES_AstNewArrayExpression (
-        ES_AstTypeDeclaration? typeDecl, ES_AstExpression? [] ranks,
+        ES_AstTypeDeclaration? typeDecl, ES_AstExpression? [] dims,
         EchelonScriptToken newStartTk, int endPos
     ) : base (1) {
         ElementType = typeDecl;
-        Ranks = ranks;
+        Dimensions = dims;
 
         bounds = new ES_AstNodeBounds (newStartTk.TextStartPos, endPos);
     }

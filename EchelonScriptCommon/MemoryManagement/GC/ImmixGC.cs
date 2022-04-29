@@ -377,8 +377,6 @@ internal unsafe sealed class ImmixGC : IDisposable {
 
     #endregion
 
-    #region ================== Constructors
-
     public ImmixGC () {
         allocData = new ();
         overflowAllocData = new ();
@@ -386,8 +384,6 @@ internal unsafe sealed class ImmixGC : IDisposable {
         allocData.Initialize ();
         overflowAllocData.Initialize ();
     }
-
-    #endregion
 
     #region ================== Instance methods
 

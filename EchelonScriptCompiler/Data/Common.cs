@@ -10,6 +10,7 @@
 using System;
 using ChronosLib.Pooled;
 using EchelonScriptCompiler.CompilerCommon;
+using EchelonScriptCompiler.Frontend;
 using EchelonScriptCompiler.Frontend.Parser;
 
 namespace EchelonScriptCompiler.Data;
@@ -66,4 +67,17 @@ public struct EchelonScriptErrorMessage {
         Line = line;
         Column = column;
     }
+
+    public EchelonScriptErrorMessage (string message, ReadOnlySpan<char> fileName) {
+        Message = message;
+
+        StartPos = -1;
+        Length = -1;
+
+        FileName = fileName.GetPooledString ();
+        Line = -1;
+        Column = -1;
+    }
+
+    public EchelonScriptErrorMessage (string message, ReadOnlyMemory<char> fileName) : this (message, fileName.Span) { }
 }

@@ -12,7 +12,6 @@ using System.Diagnostics;
 using ChronosLib.Pooled;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.GarbageCollection;
-using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.CompilerCommon.IR;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -23,7 +22,6 @@ namespace EchelonScriptCompiler.Backends.RoslynBackend;
 
 public unsafe sealed partial class RoslynCompilerBackend {
     public struct ExpressionData {
-        public ES_AstExpression Expr;
         public ES_TypeInfo* Type;
         public ES_TypeInfo* TypeInfo;
         public ES_FunctionData* Function;
@@ -99,8 +97,8 @@ public unsafe sealed partial class RoslynCompilerBackend {
         return ret;
     }
 
-    private static ExpressionSyntax CompileCode_NewArray (ES_ArrayTypeData* arrayType, ReadOnlySpan<ExpressionData> ranks, ExpressionSyntax? elemAssignValue) {
-        Debug.Assert (arrayType->DimensionsCount == ranks.Length);
+    private static ExpressionSyntax CompileCode_NewArray (ES_ArrayData* arrayType, ReadOnlySpan<ExpressionData> dims, ExpressionSyntax? elemAssignValue) {
+        Debug.Assert (arrayType->Rank == dims.Length);
 
         // Get the roslyn type.
         var roslynArrType = GetRoslynType (&arrayType->TypeInfo);
@@ -108,17 +106,17 @@ public unsafe sealed partial class RoslynCompilerBackend {
 
         /** Construct the args list **/
         using var argsList = new StructPooledList<SyntaxNodeOrToken> (CL_ClearMode.Auto);
-        argsList.EnsureCapacity (1 + ranks.Length * 2 + (elemAssignValue is not null ? 2 : 0));
+        argsList.EnsureCapacity (1 + dims.Length * 2 + (elemAssignValue is not null ? 2 : 0));
 
         // Add the "pinned" bool.
         argsList.Add (Argument (BoolLiteral (false)));
 
-        // Add the ranks.
-        foreach (var rank in ranks) {
-            Debug.Assert (rank.Value is not null);
+        // Add the dimensions.
+        foreach (var dim in dims) {
+            Debug.Assert (dim.Value is not null);
 
             argsList.Add (Token (SyntaxKind.CommaToken));
-            argsList.Add (Argument (rank.Value!));
+            argsList.Add (Argument (dim.Value!));
         }
 
         // Add the value to assign, if any.
@@ -345,7 +343,7 @@ public unsafe sealed partial class RoslynCompilerBackend {
         ref FunctionData funcData,
         ESIR_IndexingExpression expr
     ) {
-        var typeUnkn = passData.Env.TypeUnknownValue;
+        var typeUnkn = passData.Env.TypeUnknown;
         var typeIndex = passData.Env.GetArrayIndexType ();
 
         var indexedExpr = CompileExpression (ref passData, ref funcData, expr.IndexedExpr);
@@ -354,11 +352,11 @@ public unsafe sealed partial class RoslynCompilerBackend {
         using var idxExprs = new StructPooledList<ExpressionData> (CL_ClearMode.Auto);
         idxExprs.EnsureCapacity (indices.Length);
         foreach (var idxExpr in indices) {
-            var rankExprData = CompileExpression (ref passData, ref funcData, idxExpr);
-            if (rankExprData.Type != typeIndex)
+            var idxExprData = CompileExpression (ref passData, ref funcData, idxExpr);
+            if (idxExprData.Type != typeIndex)
                 throw new CompilationException ("Index expression must be of the index type.");
 
-            idxExprs.Add (rankExprData);
+            idxExprs.Add (idxExprData);
         }
 
         if (indexedExpr.Type is not null) {
@@ -378,18 +376,18 @@ public unsafe sealed partial class RoslynCompilerBackend {
         ExpressionData indexedExpr,
         ReadOnlySpan<ExpressionData> indices
     ) {
-        var arrayType = (ES_ArrayTypeData*) indexedExpr.Type;
+        var arrayType = (ES_ArrayData*) indexedExpr.Type;
         var elemType = StripFirstConst (arrayType->ElementType);
-        var dimCount = arrayType->DimensionsCount;
+        var rank = arrayType->Rank;
 
-        Debug.Assert (dimCount == indices.Length);
+        Debug.Assert (rank == indices.Length);
 
         var arrayPtr = indexedExpr.Value!;
 
         using var argsList = new StructPooledList<ArgumentSyntax> (CL_ClearMode.Auto);
         argsList.Add (Argument (arrayPtr));
 
-        for (var i = 0; i < dimCount; i++)
+        for (var i = 0; i < rank; i++)
             argsList.Add (Argument (indices [i].Value!));
 
         var value = InvocationExpression (MemberAccessExpression (
@@ -408,13 +406,13 @@ public unsafe sealed partial class RoslynCompilerBackend {
         ref FunctionData funcData,
         ESIR_NewObjectExpression expr
     ) {
-        var objType = expr.Type.Pointer;
-        var ptrType = passData.EnvBuilder.CreateReferenceType (objType);
+        var ptrType = expr.PointerType;
+        var objType = ptrType->PointedType;
 
         var value = CompileCode_NewObject (objType, GetDefaultValue (objType));
 
         // Default-initialize the object.
-        return new ExpressionData { Type = ptrType, Value = value, };
+        return new ExpressionData { Type = &ptrType->TypeInfo, Value = value, };
     }
 
     private static ExpressionData CompileExpression_NewArray (
@@ -424,21 +422,21 @@ public unsafe sealed partial class RoslynCompilerBackend {
     ) {
         var typeIndex = passData.Env.GetArrayIndexType ();
 
-        var elemType = expr.ElementType.Pointer;
-        var ranksExprs = expr.Ranks.Elements;
-        var arrType = (ES_ArrayTypeData*) passData.EnvBuilder.CreateArrayType (elemType, ranksExprs.Length);
+        var arrType = expr.ArrayType;
+        var elemType = arrType->ElementType;
+        var dimsExprs = expr.Dimensions.Elements;
 
-        // Evaluate the ranks.
-        using var ranks = PooledArray<ExpressionData>.GetArray (ranksExprs.Length);
+        // Evaluate the dimensions.
+        using var dims = PooledArray<ExpressionData>.GetArray (dimsExprs.Length);
 
-        var rankCount = 0;
-        foreach (var rank in ranksExprs)
-            ranks.Span [rankCount++] = CompileExpression (ref passData, ref funcData, rank);
+        var rank = 0;
+        foreach (var dim in dimsExprs)
+            dims.Span [rank++] = CompileExpression (ref passData, ref funcData, dim);
 
         // Get default values.
         var defaultElemValue = GetDefaultValue (elemType);
 
-        var value = CompileCode_NewArray (arrType, ranks.Span, defaultElemValue);
+        var value = CompileCode_NewArray (arrType, dims.Span, defaultElemValue);
 
         return new ExpressionData { Type = &arrType->TypeInfo, Value = value, };
     }

@@ -14,96 +14,18 @@ using ChronosLib.Pooled;
 using EchelonScriptCommon.Data;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.Utilities;
-using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.CompilerCommon.IR;
-
+using EchelonScriptCompiler.Frontend.Data;
 using static EchelonScriptCompiler.CompilerCommon.IR.ESIR_Factory;
 
 namespace EchelonScriptCompiler.Frontend;
 
 internal unsafe static partial class Compiler_TypeChecking {
-    private enum Constness {
-        Mutable,
-        Const,
-        Immutable,
-    }
-
-    private struct TypeData {
-        #region ================== Static properties
-
-        public static TypeData Null => new (Constness.Mutable, null);
-
-        #endregion
-
-        #region ================== Instance properties
-
-        public Constness Constness { get; private init; }
-        public ES_TypeInfo* Type { get; private init; }
-
-        public bool IsWritable => (Type is not null && Type->IsWritable ()) & Constness.IsWritable ();
-
-        #endregion
-
-        public TypeData (Constness constness, ES_TypeInfo* type) {
-            Debug.Assert (
-                type is null ||
-                (type->TypeTag != ES_TypeTag.Const && type->TypeTag != ES_TypeTag.Immutable)
-            );
-
-            Constness = constness;
-            Type = type;
-        }
-
-        #region ================== Instance methods
-
-        public TypeData WithType (ES_TypeInfo* type) => new (Constness, type);
-        public TypeData WithConst (Constness constness) => new (constness, Type);
-        public TypeData WithInheritedConst (Constness constness)
-            => WithConst (InheritConstness (constness, Constness));
-
-        public ES_TypeInfo* ToType (ref PassData passData) {
-            if (Type is null)
-                return null;
-
-            return Constness switch {
-                Constness.Mutable => Type,
-                Constness.Const => passData.EnvBuilder.CreateConstType (Type),
-                Constness.Immutable => passData.EnvBuilder.CreateImmutableType (Type),
-
-                _ => throw new NotImplementedException ("Constness type not implemented yet."),
-            };
-        }
-
-        #region Equality
-
-        public bool Equals (TypeData other) => Type == other.Type && Constness == other.Constness;
-
-        public override bool Equals (object? obj) {
-            if (obj is TypeData other)
-                return Equals (other);
-
-            return false;
-        }
-
-        public override int GetHashCode () => HashCode.Combine (Constness, (nint) Type);
-
-        #endregion
-
-        #endregion
-
-        #region ================== Operators
-
-        public static bool operator == (TypeData lhs, TypeData rhs) => lhs.Equals (rhs);
-        public static bool operator != (TypeData lhs, TypeData rhs) => !lhs.Equals (rhs);
-
-        #endregion
-    }
-
     private struct ExpressionData {
         public ES_AstExpression Expr;
-        public TypeData Type;
-        public ES_TypeInfo* TypeInfo;
-        public ES_FunctionData* Function;
+        public ESC_TypeRef Type;
+        public ESC_TypeRef TypeInfo;
+        public ESC_Function? Function;
 
         public ExpressionList Expressions;
         public ESIR_Expression Value;
@@ -114,14 +36,14 @@ internal unsafe static partial class Compiler_TypeChecking {
 
         public static ExpressionData NewValue (
             ES_AstExpression expr,
-            TypeData type, ExpressionList exprs, ESIR_Expression value, int? reg,
+            ESC_TypeRef type, ExpressionList exprs, ESIR_Expression value, int? reg,
             bool writable, bool compTimeConst
         ) {
             return new ExpressionData {
                 Expr = expr,
                 Type = type,
 
-                TypeInfo = null,
+                TypeInfo = ESC_TypeRef.Null (),
                 Function = null,
 
                 Expressions = exprs,
@@ -135,14 +57,14 @@ internal unsafe static partial class Compiler_TypeChecking {
 
         public static ExpressionData NewValue (
             ES_AstExpression expr,
-            TypeData type, ESIR_Expression value, int? reg,
+            ESC_TypeRef type, ESIR_Expression value, int? reg,
             bool writable, bool compTimeConst
         ) {
             return new ExpressionData {
                 Expr = expr,
                 Type = type,
 
-                TypeInfo = null,
+                TypeInfo = ESC_TypeRef.Null (),
                 Function = null,
 
                 Expressions = new ExpressionList (null, null),
@@ -154,12 +76,14 @@ internal unsafe static partial class Compiler_TypeChecking {
             };
         }
 
-        public static ExpressionData NewType (ES_AstExpression expr, ES_TypeInfo* typeInfo) {
+        public static ExpressionData NewType (ES_AstExpression expr, ESC_TypeRef typeInfo) {
+            Debug.Assert (typeInfo.Type is not null);
+
             var ret = new ExpressionData {
                 Expr = expr,
                 TypeInfo = typeInfo,
 
-                Type = TypeData.Null,
+                Type = ESC_TypeRef.Null (),
                 Function = null,
 
                 Value = null!,
@@ -176,14 +100,14 @@ internal unsafe static partial class Compiler_TypeChecking {
 
         public static ExpressionData NewFunction (
             ES_AstExpression expr,
-            ES_FunctionData* func, ES_TypeInfo* funcType
+            ESC_Function func, ESC_TypeRef funcType
         ) {
             var ret = new ExpressionData {
                 Expr = expr,
                 Function = func,
                 TypeInfo = funcType,
 
-                Type = TypeData.Null,
+                Type = ESC_TypeRef.Null (),
 
                 Value = null!,
                 ValueRegister = null,
@@ -199,14 +123,14 @@ internal unsafe static partial class Compiler_TypeChecking {
 
         public static ExpressionData NewFunction (
             ES_AstExpression expr,
-            ES_FunctionData* func, ES_TypeInfo* funcType, ExpressionList values, ESIR_Expression value, int? reg
+            ESC_Function func, ESC_TypeRef funcType, ExpressionList values, ESIR_Expression value, int? reg
         ) {
             return new ExpressionData {
                 Expr = expr,
                 Function = func,
                 TypeInfo = funcType,
 
-                Type = TypeData.Null,
+                Type = ESC_TypeRef.Null (),
 
                 Expressions = values,
                 Value = value,
@@ -219,7 +143,7 @@ internal unsafe static partial class Compiler_TypeChecking {
 
         public static ExpressionData NewFunction (
             ES_AstExpression expr,
-            ES_FunctionData* func, ES_TypeInfo* funcType, ESIR_Expression value, int? reg
+            ESC_Function func, ESC_TypeRef funcType, ESIR_Expression value, int? reg
         ) => NewFunction (expr, func, funcType, new ExpressionList (null, null), value, reg);
     }
 
@@ -306,74 +230,54 @@ internal unsafe static partial class Compiler_TypeChecking {
         }
     }
 
-    private static ES_FunctionData* FindConstructor (
-        ES_TypeInfo* objType, ReadOnlySpan<ES_FunctionPrototypeArgData> arguments
+    private static ESC_Function? FindConstructor (
+        ESC_TypeData objType, ReadOnlySpan<ESC_PrototypeArg> arguments
     ) {
         return null;
     }
 
     private static ExpressionData ExpressionError (
-        ref PassData passData, ES_AstExpression expr, Constness constness = Constness.Mutable, bool writable = false
-    ) => ExpressionData.NewValue (expr, passData.GetUnknownType (constness), ErrorExpression (), null, writable, false);
+        ref CompileData compileData, ES_AstExpression expr, ESC_Constness constness = ESC_Constness.Mutable, bool writable = false
+    ) => ExpressionData.NewValue (expr, compileData.GetUnknownType (constness), ErrorExpression (), null, writable, false);
 
-    private static Constness InheritConstness (Constness baseConst, Constness thisConst) {
-        return baseConst switch {
-            Constness.Mutable => thisConst,
-            Constness.Const => (thisConst == Constness.Immutable) ? thisConst : baseConst,
-            Constness.Immutable => Constness.Immutable,
-
-            _ => throw new NotImplementedException ("Constness type not implemented."),
-        };
-    }
-
-    private static PooledArray<TypeData> DeconstructType (ref PassData passData, TypeData typeData) {
-        using var typeList = new StructPooledList<TypeData> (CL_ClearMode.Auto);
+    private static PooledArray<ESC_TypeRef> DeconstructType (ref CompileData compileData, ESC_TypeRef typeData) {
+        using var typeList = new StructPooledList<ESC_TypeRef> (CL_ClearMode.Auto);
 
         // Deconstruct the type.
         var type = typeData.Type;
         var constness = typeData.Constness;
         while (type is not null) {
-            switch (type->TypeTag) {
-                case ES_TypeTag.UNKNOWN:
-                case ES_TypeTag.Null:
-                case ES_TypeTag.Void:
-                case ES_TypeTag.Bool:
-                case ES_TypeTag.Int:
-                case ES_TypeTag.Float:
-                case ES_TypeTag.FuncPrototype:
-                case ES_TypeTag.Struct:
-                case ES_TypeTag.Class:
-                case ES_TypeTag.Enum:
-                case ES_TypeTag.Interface:
+            switch (type) {
+                case ESC_TypeUnknown:
+                case ESC_TypeNull:
+                case ESC_TypeVoid:
+                case ESC_TypeBool:
+                case ESC_TypeInt:
+                case ESC_TypeFloat:
+                case ESC_TypePrototype:
+                case ESC_TypeStruct:
+                case ESC_TypeClass:
+                case ESC_TypeEnum:
+                case ESC_TypeInterface:
                     typeList.Add (new (constness, type));
                     type = null;
                     break;
 
-                case ES_TypeTag.Reference: {
-                    var refData = (ES_ReferenceData*) type;
-
+                case ESC_TypeReference typeRef: {
                     typeList.Add (new (constness, type));
-                    type = refData->PointedType;
+
+                    type = typeRef.PointedType.Type;
+                    constness = typeRef.PointedType.Constness;
+
                     break;
                 }
 
-                case ES_TypeTag.Const:
-                case ES_TypeTag.Immutable: {
-                    var constData = (ES_ConstData*) type;
-
-                    if (type->TypeTag == ES_TypeTag.Immutable)
-                        constness = Constness.Immutable;
-                    else if (constness != Constness.Immutable)
-                        constness = Constness.Const;
-                    type = constData->InnerType;
-                    break;
-                }
-
-                case ES_TypeTag.Array: {
-                    var arrData = (ES_ArrayTypeData*) type;
-
+                case ESC_TypeArray typeArray: {
                     typeList.Add (new (constness, type));
-                    type = arrData->ElementType;
+
+                    type = typeArray.ElementType.Type;
+                    constness = typeArray.ElementType.Constness;
+
                     break;
                 }
 
@@ -387,43 +291,32 @@ internal unsafe static partial class Compiler_TypeChecking {
         for (var i = typeSpan.Length - 1; i >= 0; i--) {
             ref var listType = ref typeSpan [i];
 
-            switch (listType.Type->TypeTag) {
-                case ES_TypeTag.UNKNOWN:
-                case ES_TypeTag.Null:
-                case ES_TypeTag.Void:
-                case ES_TypeTag.Bool:
-                case ES_TypeTag.Int:
-                case ES_TypeTag.Float:
-                case ES_TypeTag.FuncPrototype:
-                case ES_TypeTag.Struct:
-                case ES_TypeTag.Class:
-                case ES_TypeTag.Enum:
-                case ES_TypeTag.Interface:
+            switch (listType.Type) {
+                case ESC_TypeUnknown:
+                case ESC_TypeNull:
+                case ESC_TypeVoid:
+                case ESC_TypeBool:
+                case ESC_TypeInt:
+                case ESC_TypeFloat:
+                case ESC_TypePrototype:
+                case ESC_TypeStruct:
+                case ESC_TypeClass:
+                case ESC_TypeEnum:
+                case ESC_TypeInterface:
                     break;
 
-                case ES_TypeTag.Reference: {
-                    var refData = (ES_ReferenceData*) listType.Type;
-
+                case ESC_TypeReference: {
                     Debug.Assert (i + 1 < typeSpan.Length);
-                    var innerType = typeSpan [i + 1].Type;
-                    var newRefType = passData.EnvBuilder.CreateReferenceType (innerType);
-                    listType = listType.WithType (newRefType);
+                    var innerType = typeSpan [i + 1].WithConst (ESC_Constness.Mutable);
+                    listType = compileData.GetReferenceType (innerType, ESC_Constness.Mutable);
 
                     break;
                 }
 
-                case ES_TypeTag.Const:
-                case ES_TypeTag.Immutable:
-                    Debug.Fail ("This shouldn't happen.");
-                    break;
-
-                case ES_TypeTag.Array: {
-                    var arrData = (ES_ArrayTypeData*) listType.Type;
-
+                case ESC_TypeArray typeArray: {
                     Debug.Assert (i + 1 < typeSpan.Length);
-                    var innerType = typeSpan [i + 1].Type;
-                    var newArrType = passData.EnvBuilder.CreateArrayType (innerType, arrData->DimensionsCount);
-                    listType = listType.WithType (newArrType);
+                    var innerType = typeSpan [i + 1].WithConst (ESC_Constness.Mutable);
+                    listType = compileData.GetArrayType (innerType, typeArray.Rank, ESC_Constness.Mutable);
 
                     break;
                 }
@@ -436,25 +329,25 @@ internal unsafe static partial class Compiler_TypeChecking {
         return typeList.MoveToArray ();
     }
 
-    private static bool IsConstIgnorantType (TypeData type) {
-        return type.Type->TypeTag switch {
-            ES_TypeTag.Null => true,
-            ES_TypeTag.Void => true,
-            ES_TypeTag.Bool => true,
-            ES_TypeTag.Int => true,
-            ES_TypeTag.Float => true,
-            ES_TypeTag.Enum => true,
+    private static bool IsConstIgnorantType (ESC_TypeRef type) {
+        return type.Type switch {
+            ESC_TypeNull => true,
+            ESC_TypeVoid => true,
+            ESC_TypeBool => true,
+            ESC_TypeInt => true,
+            ESC_TypeFloat => true,
+            ESC_TypeEnum => true,
 
             _ => false,
         };
     }
 
-    private static bool CanConvertConstness (Constness thisConst, Constness destConst)
-        => thisConst == destConst || destConst == Constness.Const;
+    private static bool CanConvertConstness (ESC_Constness thisConst, ESC_Constness destConst)
+        => thisConst == destConst || destConst == ESC_Constness.Const;
 
-    private static bool CanConvertConstness (ref PassData passData, TypeData origType, TypeData newType) {
-        using var origDeconsArr = DeconstructType (ref passData, origType);
-        using var newDeconsArr = DeconstructType (ref passData, newType);
+    private static bool CanConvertConstness (ref CompileData compileData, ESC_TypeRef origType, ESC_TypeRef newType) {
+        using var origDeconsArr = DeconstructType (ref compileData, origType);
+        using var newDeconsArr = DeconstructType (ref compileData, newType);
         var origData = origDeconsArr.Span;
         var newData = newDeconsArr.Span;
 
@@ -484,9 +377,12 @@ internal unsafe static partial class Compiler_TypeChecking {
         return true;
     }
 
-    private static bool CanMatchConstness (ref PassData passData, TypeData lhs, TypeData rhs, out TypeData finalType) {
-        using var lhsDeconsArr = DeconstructType (ref passData, lhs);
-        using var rhsDeconsArr = DeconstructType (ref passData, rhs);
+    private static bool CanMatchConstness (
+        ref CompileData compileData,
+        ESC_TypeRef lhs, ESC_TypeRef rhs, out ESC_TypeRef finalType
+    ) {
+        using var lhsDeconsArr = DeconstructType (ref compileData, lhs);
+        using var rhsDeconsArr = DeconstructType (ref compileData, rhs);
         var lhsData = lhsDeconsArr.Span;
         var rhsData = rhsDeconsArr.Span;
 
@@ -494,12 +390,12 @@ internal unsafe static partial class Compiler_TypeChecking {
         Debug.Assert (rhsData.Length > 0);
 
         if (lhsData.Length != rhsData.Length || lhsData [0].Type != rhsData [0].Type) {
-            finalType = TypeData.Null;
+            finalType = ESC_TypeRef.Null ();
             return false;
         }
 
         var typeLen = lhsData.Length;
-        using var finalDeconsArr = PooledArray<TypeData>.GetArray (typeLen);
+        using var finalDeconsArr = PooledArray<ESC_TypeRef>.GetArray (typeLen);
         var finalDecons = finalDeconsArr.Span;
 
         for (var i = 0; i < typeLen; i++) {
@@ -509,67 +405,47 @@ internal unsafe static partial class Compiler_TypeChecking {
 
             Debug.Assert (lhsConst.Type == rhsConst.Type);
 
-            var finalConstness = Constness.Const;
-            if ((lhsConst.Constness, rhsConst.Constness) == (Constness.Mutable, Constness.Mutable))
-                finalConstness = Constness.Mutable;
-            else if ((lhsConst.Constness, rhsConst.Constness) == (Constness.Immutable, Constness.Immutable))
-                finalConstness = Constness.Immutable;
+            var finalConstness = ESC_Constness.Const;
+            if ((lhsConst.Constness, rhsConst.Constness) == (ESC_Constness.Mutable, ESC_Constness.Mutable))
+                finalConstness = ESC_Constness.Mutable;
+            else if ((lhsConst.Constness, rhsConst.Constness) == (ESC_Constness.Immutable, ESC_Constness.Immutable))
+                finalConstness = ESC_Constness.Immutable;
 
             finalConst = lhsConst.WithConst (finalConstness);
         }
 
-        var innerType = TypeData.Null;
+        var innerType = ESC_TypeRef.Null ();
         for (var i = finalDecons.Length - 1; i >= 0; i--) {
             ref var listType = ref finalDecons [i];
 
-            if (innerType.Type is not null && listType.Constness != innerType.Constness) {
-                var innerTypePtr = innerType.Type;
-
-                if (innerType.Constness == Constness.Const)
-                    innerTypePtr = passData.EnvBuilder.CreateConstType (innerType.Type);
-                else if (innerType.Constness == Constness.Immutable)
-                    innerTypePtr = passData.EnvBuilder.CreateImmutableType (innerType.Type);
-
-                innerType = listType.WithType (innerTypePtr);
-            }
-
-            switch (listType.Type->TypeTag) {
-                case ES_TypeTag.Null:
-                case ES_TypeTag.Void:
-                case ES_TypeTag.Bool:
-                case ES_TypeTag.Int:
-                case ES_TypeTag.Float:
-                case ES_TypeTag.FuncPrototype:
-                case ES_TypeTag.Struct:
-                case ES_TypeTag.Class:
-                case ES_TypeTag.Enum:
-                case ES_TypeTag.Interface:
+            switch (listType.Type) {
+                case ESC_TypeNull:
+                case ESC_TypeVoid:
+                case ESC_TypeBool:
+                case ESC_TypeInt:
+                case ESC_TypeFloat:
+                case ESC_TypePrototype:
+                case ESC_TypeStruct:
+                case ESC_TypeClass:
+                case ESC_TypeEnum:
+                case ESC_TypeInterface:
                     Debug.Assert (innerType.Type is null);
                     innerType = listType;
                     break;
 
-                case ES_TypeTag.Reference: {
+                case ESC_TypeReference: {
                     Debug.Assert (innerType.Type is not null);
                     Debug.Assert (i + 1 < finalDecons.Length);
 
-                    var refData = (ES_ReferenceData*) listType.Type;
-                    innerType = innerType.WithType (passData.EnvBuilder.CreateReferenceType (innerType.Type));
-
+                    innerType = compileData.GetReferenceType (innerType, innerType.Constness);
                     break;
                 }
 
-                case ES_TypeTag.Const:
-                case ES_TypeTag.Immutable:
-                    Debug.Fail ("This shouldn't happen.");
-                    break;
-
-                case ES_TypeTag.Array: {
+                case ESC_TypeArray typeArray: {
                     Debug.Assert (innerType.Type is not null);
                     Debug.Assert (i + 1 < finalDecons.Length);
 
-                    var arrData = (ES_ArrayTypeData*) listType.Type;
-                    innerType = innerType.WithType (passData.EnvBuilder.CreateArrayType (innerType.Type, arrData->DimensionsCount));
-
+                    innerType = compileData.GetArrayType (innerType, typeArray.Rank, innerType.Constness);
                     break;
                 }
 
@@ -582,112 +458,78 @@ internal unsafe static partial class Compiler_TypeChecking {
         return true;
     }
 
-    private static bool IsWritable (this Constness constness) => constness == Constness.Mutable;
-
-    private static ES_TypeInfo* StripFirstConst (ES_TypeInfo* type, out Constness constness) {
-        switch (type->TypeTag) {
-            case ES_TypeTag.Const:
-            case ES_TypeTag.Immutable: {
-                var constType = (ES_ConstData*) type;
-
-                constness = (type->TypeTag == ES_TypeTag.Immutable) ? Constness.Immutable : Constness.Const;
-
-                Debug.Assert (constType->InnerType->TypeTag != ES_TypeTag.Const);
-                Debug.Assert (constType->InnerType->TypeTag != ES_TypeTag.Immutable);
-
-                return constType->InnerType;
-            }
-
-            default:
-                constness = Constness.Mutable;
-                return type;
-        }
-    }
-
-    private static TypeData UnpackFirstConst (ES_TypeInfo* type) {
-        var retType = StripFirstConst (type, out var retConst);
-        return new (retConst, retType);
-    }
+    private static bool IsWritable (this ESC_Constness constness) => constness == ESC_Constness.Mutable;
 
     private static bool MustBeCompat (
-        ref PassData passData, ref ExpressionData exprData, TypeData destType, bool noModify = false
+        ref CompileData compileData, ref PassData passData, ref ExpressionData exprData, ESC_TypeRef destType, bool noModify = false
     ) {
         // We don't need to do any checks here if they're *literally* the same type.
         if (destType == exprData.Type)
             return true;
 
-        if (CanConvertConstness (ref passData, exprData.Type, destType)) {
+        if (CanConvertConstness (ref compileData, exprData.Type, destType)) {
             if (!noModify)
-                exprData.Value = CastExpression (exprData.Value, TypeNode (ref passData, destType));
-        } else if (destType.Type->TypeTag == ES_TypeTag.UNKNOWN || exprData.Type.Type->TypeTag == ES_TypeTag.UNKNOWN)
+                exprData.Value = CastExpression (exprData.Value, TypeNode (ref compileData, destType));
+        } else if (destType.Type is ESC_TypeUnknown || exprData.Type.Type is ESC_TypeUnknown)
             return true;
         else if (exprData.Type == destType) {
             // Do nothing
-        } else if (exprData.Type.Type->TypeTag == ES_TypeTag.Null) {
-            if (!IsNullable (ref passData, destType, out _))
+        } else if (exprData.Type.Type is ESC_TypeNull) {
+            if (!IsNullable (ref compileData, destType, out _))
                 return false;
 
             if (!noModify) {
-                exprData.Value = NullLiteralExpression (TypeNode (ref passData, destType));
+                exprData.Value = NullLiteralExpression (TypeNode (ref compileData, destType));
                 exprData.Writable = false;
             }
-        } else if (destType.Type->TypeTag == ES_TypeTag.Int && exprData.Type.Type->TypeTag == ES_TypeTag.Int) {
-            var destIntType = (ES_IntTypeData*) destType.Type;
-            var givenIntType = (ES_IntTypeData*) exprData.Type.Type;
-
-            if (givenIntType->Unsigned != destIntType->Unsigned || givenIntType->IntSize > destIntType->IntSize)
+        } else if (destType.Type is ESC_TypeInt destIntType && exprData.Type.Type is ESC_TypeInt givenIntType) {
+            if (givenIntType.Unsigned != destIntType.Unsigned || givenIntType.Size > destIntType.Size)
                 return false;
 
             if (!noModify) {
-                exprData.Value = CastExpression (exprData.Value, TypeNode (ref passData, destType));
+                exprData.Value = CastExpression (exprData.Value, TypeNode (ref compileData, destType));
                 exprData.Writable = false;
             }
         } else
             return false;
 
         exprData.Type = destType;
-        exprData.Writable &= destType.IsWritable;
+        exprData.Writable &= destType.IsWritable ();
 
         return true;
     }
 
     private static bool ExplicitCast (
-        ref PassData passData, ref ExpressionData exprData, TypeData castType,
+        ref CompileData compileData, ref PassData passData, ref ExpressionData exprData, ESC_TypeRef castType,
         out bool castRedundant, bool noModify = false
     ) {
-        if (MustBeCompat (ref passData, ref exprData, castType, noModify)) {
+        if (MustBeCompat (ref compileData, ref passData, ref exprData, castType, noModify)) {
             castRedundant = true;
             return true;
         }
 
-        if (exprData.Type == castType && exprData.Type.Constness != castType.Constness)
-            castRedundant = false;
-
-        if (castType.Type->TypeTag == ES_TypeTag.Int && exprData.Type.Type->TypeTag == ES_TypeTag.Int) {
-            var castIntType = (ES_IntTypeData*) castType.Type;
-            var exprIntType = (ES_IntTypeData*) exprData.Type.Type;
-
+        if (castType.Type is ESC_TypeInt castIntType && exprData.Type.Type is ESC_TypeInt exprIntType) {
             castRedundant = (
-                castIntType->IntSize == exprIntType->IntSize &&
-                castIntType->Unsigned == exprIntType->Unsigned
+                castIntType.Size == exprIntType.Size &&
+                castIntType.Unsigned == exprIntType.Unsigned
             );
-        } else if (castType.Type->TypeTag == ES_TypeTag.Float && exprData.Type.Type->TypeTag == ES_TypeTag.Int) {
+        } else if (castType.Type is ESC_TypeFloat && exprData.Type.Type is ESC_TypeInt) {
             castRedundant = false;
-        } else if (castType.Type->TypeTag == ES_TypeTag.Int && exprData.Type.Type->TypeTag == ES_TypeTag.Float) {
+        } else if (castType.Type is ESC_TypeInt && exprData.Type.Type is ESC_TypeFloat) {
             castRedundant = false;
-        } else if (castType.Type->TypeTag == ES_TypeTag.Float && exprData.Type.Type->TypeTag == ES_TypeTag.Float) {
-            var castFloatType = (ES_FloatTypeData*) castType.Type;
-            var exprFloatType = (ES_FloatTypeData*) exprData.Type.Type;
-
-            castRedundant = castFloatType->FloatSize == exprFloatType->FloatSize;
+        } else if (castType.Type is ESC_TypeFloat castFloatType && exprData.Type.Type is ESC_TypeFloat exprFloatType) {
+            castRedundant = castFloatType.Size == exprFloatType.Size;
         } else {
             castRedundant = false;
             return false;
         }
 
+        if (exprData.Type == castType && exprData.Type.Constness != castType.Constness)
+            castRedundant = false;
+
         if (!noModify) {
             exprData.Type = castType;
-            exprData.Value = CastExpression (exprData.Value, TypeNode (ref passData, castType));
+            exprData.Value = CastExpression (exprData.Value, TypeNode (ref compileData, castType));
             exprData.Writable = false;
         }
 
@@ -695,35 +537,36 @@ internal unsafe static partial class Compiler_TypeChecking {
     }
 
     private static bool EnsureCompat (
-        ref ExpressionData exprData, TypeData destType,
-        ref PassData passData, ES_AstNodeBounds bounds
+        ref CompileData compileData, ref PassData passData,
+        ref ExpressionData exprData, ESC_TypeRef destType,
+        ES_AstNodeBounds bounds
     ) {
-        if (exprData.Type.Type->TypeTag == ES_TypeTag.Null) {
-            if (!IsNullable (ref passData, destType, out var retType)) {
-                passData.ErrorList.Add (ES_FrontendErrors.GenTypeNotNullable (
-                    passData.Env.GetNiceTypeNameString (destType.ToType (ref passData), true),
+        if (exprData.Type.Type is ESC_TypeNull) {
+            if (!IsNullable (ref compileData, destType, out var retType)) {
+                compileData.ErrorList.Add (ES_FrontendErrors.GenTypeNotNullable (
+                    compileData.GetNiceNameString (destType, true),
                     passData.Source, bounds
                 ));
 
-                exprData.Type = exprData.Type.WithType (passData.Env.TypeUnknownValue);
+                exprData.Type = compileData.GetUnknownType (exprData.Type.Constness);
                 exprData.Value = ErrorExpression ();
                 return false;
             }
 
             exprData.Type = retType;
-            exprData.Value = NullLiteralExpression (TypeNode (ref passData, retType));
+            exprData.Value = NullLiteralExpression (TypeNode (ref compileData, retType));
             return true;
-        } else if (!MustBeCompat (ref passData, ref exprData, destType)) {
-            if (ExplicitCast (ref passData, ref exprData, destType, out _, true)) {
-                passData.ErrorList.Add (ES_FrontendErrors.GenNoImplicitCast (
-                    passData.Env.GetNiceTypeNameString (destType.ToType (ref passData), true),
-                    passData.Env.GetNiceTypeNameString (exprData.Type.ToType (ref passData), true),
+        } else if (!MustBeCompat (ref compileData, ref passData, ref exprData, destType)) {
+            if (ExplicitCast (ref compileData, ref passData, ref exprData, destType, out _, true)) {
+                compileData.ErrorList.Add (ES_FrontendErrors.GenNoImplicitCast (
+                    compileData.GetNiceNameString (destType, true),
+                    compileData.GetNiceNameString (exprData.Type, true),
                     passData.Source, bounds
                 ));
             } else {
-                passData.ErrorList.Add (ES_FrontendErrors.GenNoCast (
-                    passData.Env.GetNiceTypeNameString (destType.ToType (ref passData), true),
-                    passData.Env.GetNiceTypeNameString (exprData.Type.ToType (ref passData), true),
+                compileData.ErrorList.Add (ES_FrontendErrors.GenNoCast (
+                    compileData.GetNiceNameString (destType, true),
+                    compileData.GetNiceNameString (exprData.Type, true),
                     passData.Source, bounds
                 ));
             }
@@ -735,49 +578,39 @@ internal unsafe static partial class Compiler_TypeChecking {
     }
 
     private static void CheckExpression_Dereference (ref ExpressionData exprData) {
-        if (exprData.Type.Type->TypeTag != ES_TypeTag.Reference)
+        if (exprData.Type.Type is not ESC_TypeReference refTypeData)
             return;
 
-        var refTypeData = (ES_ReferenceData*) exprData.Type.Type;
-
-        var pointedType = StripFirstConst (refTypeData->PointedType, out var pointedConstness);
-        pointedConstness = InheritConstness (exprData.Type.Constness, pointedConstness);
-
-        exprData.Type = new (pointedConstness, pointedType);
+        exprData.Type = refTypeData.PointedType.WithInheritedConst (exprData.Type.Constness);
         exprData.Value = UnaryExpression (ESIR_NodeKind.UnaryDereference, exprData.Value);
     }
 
     private static ExpressionData CheckExpression (
-        ref PassData passData, ES_AstExpression expr,
-        TypeData expectedType
+        ref CompileData compileData, ref PassData passData,
+        ES_AstExpression expr,
+        ESC_TypeRef expectedType
     ) {
         Debug.Assert (expr is not null);
 
-        var idPool = passData.Env.IdPool;
-        var irWriter = passData.IRWriter;
-        var symbols = passData.Symbols;
-
-        var typeUnkn = passData.Env.TypeUnknownValue;
-        var typeBool = passData.Env.TypeBool;
-        var typeBoolConst = passData.GetBoolType (Constness.Const);
+        var typeBoolConst = compileData.GetBoolType (ESC_Constness.Const);
 
         switch (expr) {
             case ES_AstParenthesisExpression parenExpr:
-                return CheckExpression (ref passData, parenExpr.Inner, expectedType);
+                return CheckExpression (ref compileData, ref passData, parenExpr.Inner, expectedType);
 
             #region Primary expressions
 
             case ES_AstFunctionCallExpression funcCallExpr:
-                return CheckExpression_FunctionCall (ref passData, funcCallExpr, expectedType);
+                return CheckExpression_FunctionCall (ref compileData, ref passData, funcCallExpr);
 
             case ES_AstIndexingExpression indexExpr:
-                return CheckExpression_Indexing (ref passData, indexExpr, expectedType);
+                return CheckExpression_Indexing (ref compileData, ref passData, indexExpr);
 
             case ES_AstNewObjectExpression newObjExpr:
-                return CheckExpression_NewObject (ref passData, newObjExpr, expectedType);
+                return CheckExpression_NewObject (ref compileData, ref passData, newObjExpr);
 
             case ES_AstNewArrayExpression newArrayExpr:
-                return CheckExpression_NewArray (ref passData, newArrayExpr, expectedType);
+                return CheckExpression_NewArray (ref compileData, ref passData, newArrayExpr);
 
             case ES_AstIntegerLiteralExpression:
             case ES_AstBooleanLiteralExpression:
@@ -791,16 +624,16 @@ internal unsafe static partial class Compiler_TypeChecking {
                 throw new NotImplementedException ("[TODO] Character literals not implemented yet.");
 
             case ES_AstIntegerConstantExpression intConstExpr: {
-                Debug.Assert (intConstExpr.IntType->TypeTag == ES_TypeTag.Int);
-                var intType = (ES_IntTypeData*) intConstExpr.IntType;
+                var intType = intConstExpr.IntType.Type as ESC_TypeInt;
+                Debug.Assert (intType is not null);
 
-                var litVal = intType->Unsigned
+                var litVal = intType.Unsigned
                     ? ValueNode (intConstExpr.SignExtend ())
                     : ValueNode ((long) intConstExpr.SignExtend ());
                 var litExpr = LiteralExpression (ESIR_NodeKind.LiteralInt, litVal);
-                var value = CastExpression (litExpr, TypeNode (ref passData, intConstExpr.IntType));
+                var value = CastExpression (litExpr, TypeNode (ref compileData, intConstExpr.IntType));
 
-                return ExpressionData.NewValue (expr, new (Constness.Mutable, &intType->TypeInfo), value, null, false, true);
+                return ExpressionData.NewValue (expr, intConstExpr.IntType, value, null, false, true);
             }
 
             case ES_AstBooleanConstantExpression boolConstExpr: {
@@ -810,54 +643,54 @@ internal unsafe static partial class Compiler_TypeChecking {
 
             case ES_AstFloat32ConstantExpression float32ConstExpr: {
                 var value = LiteralExpression (ESIR_NodeKind.LiteralFloat, ValueNode (float32ConstExpr.Value));
-                return ExpressionData.NewValue (expr, passData.GetFloat32Type (Constness.Mutable), value, null, false, true);
+                return ExpressionData.NewValue (expr, compileData.GetFloat32Type (ESC_Constness.Mutable), value, null, false, true);
             }
 
             case ES_AstFloat64ConstantExpression float64ConstExpr: {
                 var value = LiteralExpression (ESIR_NodeKind.LiteralFloat, ValueNode (float64ConstExpr.Value));
-                return ExpressionData.NewValue (expr, passData.GetFloat64Type (Constness.Mutable), value, null, false, true);
+                return ExpressionData.NewValue (expr, compileData.GetFloat64Type (ESC_Constness.Mutable), value, null, false, true);
             }
 
-            case ES_AstNullLiteralExpression nullLitExpr:
-                return ExpressionData.NewValue (expr, new (Constness.Mutable, passData.Env.TypeNull), null!, null, false, true);
+            case ES_AstNullLiteralExpression:
+                return ExpressionData.NewValue (expr, compileData.GetNullType (ESC_Constness.Mutable), null!, null, false, true);
 
             case ES_AstNameExpression nameExpr:
-                return CheckExpression_Name (ref passData, nameExpr, expectedType);
+                return CheckExpression_Name (ref compileData, nameExpr, expectedType);
 
             case ES_AstMemberAccessExpression memberAccessExpr:
-                return CheckExpression_MemberAccess (ref passData, memberAccessExpr, expectedType);
+                return CheckExpression_MemberAccess (ref compileData, ref passData, memberAccessExpr);
 
             #endregion
 
             case ES_AstIncDecExpression incDecExpr:
-                return CheckExpression_IncDec (ref passData, incDecExpr, expectedType);
+                return CheckExpression_IncDec (ref compileData, ref passData, incDecExpr, expectedType);
 
             #region Unary expressions
 
             case ES_AstSimpleUnaryExpression unaryExpr:
-                return CheckExpression_Unary (ref passData, unaryExpr, expectedType);
+                return CheckExpression_Unary (ref compileData, ref passData, unaryExpr, expectedType);
 
             case ES_AstCastExpression castExpr:
-                return CheckExpression_Cast (ref passData, castExpr, expectedType);
+                return CheckExpression_Cast (ref compileData, ref passData, castExpr);
 
             #endregion
 
             case ES_AstSimpleBinaryExpression binaryExpr:
-                return CheckExpression_SimpleBinaryExpression (ref passData, binaryExpr, expectedType);
+                return CheckExpression_SimpleBinaryExpression (ref compileData, ref passData, binaryExpr);
 
             case ES_AstConditionalExpression condExpr: {
-                var condData = CheckExpression (ref passData, condExpr.Condition, typeBoolConst);
-                EnsureCompat (ref condData, typeBoolConst, ref passData, condData.Expr.NodeBounds);
+                var condData = CheckExpression (ref compileData, ref passData, condExpr.Condition, typeBoolConst);
+                EnsureCompat (ref compileData, ref passData, ref condData, typeBoolConst, condData.Expr.NodeBounds);
 
-                var leftExpr = CheckExpression (ref passData, condExpr.Then, expectedType);
-                var rightExpr = CheckExpression (ref passData, condExpr.Else, expectedType);
+                var leftExpr = CheckExpression (ref compileData, ref passData, condExpr.Then, expectedType);
+                var rightExpr = CheckExpression (ref compileData, ref passData, condExpr.Else, expectedType);
 
                 var isCompat = (
-                    EnsureCompat (ref leftExpr, expectedType, ref passData, leftExpr.Expr.NodeBounds) &
-                    EnsureCompat (ref rightExpr, expectedType, ref passData, rightExpr.Expr.NodeBounds)
+                    EnsureCompat (ref compileData, ref passData, ref leftExpr, expectedType, leftExpr.Expr.NodeBounds) &
+                    EnsureCompat (ref compileData, ref passData, ref rightExpr, expectedType, rightExpr.Expr.NodeBounds)
                 );
 
-                var finalType = isCompat ? expectedType : passData.GetUnknownType (Constness.Mutable);
+                var finalType = isCompat ? expectedType : compileData.GetUnknownType (ESC_Constness.Mutable);
 
                 // Emit IR.
                 var exprList = condData.Expressions;
@@ -876,29 +709,27 @@ internal unsafe static partial class Compiler_TypeChecking {
     }
 
     private static ExpressionData CheckExpression_NewObject (
-        ref PassData passData, ES_AstNewObjectExpression expr,
-        TypeData expectedType
+        ref CompileData compileData, ref PassData passData, ES_AstNewObjectExpression expr
     ) {
         var exprList = new ExpressionList (null, null);
 
         var irWriter = passData.IRWriter;
-        var typeUnkn = passData.Env.TypeUnknownValue;
-        var typeUnknMut = passData.GetUnknownType (Constness.Mutable);
+        var typeUnknMut = compileData.GetUnknownType (ESC_Constness.Mutable);
 
         var objType = GetTypeRef (expr.TypeDeclaration);
-        var retType = UnpackFirstConst (passData.EnvBuilder.CreateReferenceType (objType));
+        var retType = compileData.GetReferenceType (objType, ESC_Constness.Mutable);
 
-        // Ensure the non-const version of the type exists.
-        passData.EnvBuilder.RemoveConstness (retType.Type);
+        Debug.Assert (objType.Type is not null);
+        Debug.Assert (retType.Type is not null);
 
-        var irObjType = TypeNode (ref passData, objType);
-        var irRefType = TypeNode (ref passData, retType);
+        var irObjType = TypeNode (ref compileData, objType);
+        var irRefType = TypeNode (ref compileData, retType);
 
         var errorFound = false;
 
-        if (objType->Flags.HasFlag (ES_TypeFlag.NoNew)) {
-            passData.ErrorList.Add (ES_FrontendErrors.GenNoTypeNew (
-                passData.Env.GetNiceTypeNameString (objType, true), passData.Source, expr.NodeBounds
+        if (objType.Type.Flags.HasFlag (ESC_TypeFlag.NoNew)) {
+            compileData.ErrorList.Add (ES_FrontendErrors.GenNoTypeNew (
+                compileData.GetNiceNameString (objType, true), passData.Source, expr.NodeBounds
             ));
 
             errorFound = true;
@@ -907,22 +738,26 @@ internal unsafe static partial class Compiler_TypeChecking {
         // Get the arg types.
         var argIdx = 0;
         var argValues = new StructPooledList<ESIR_Expression> (CL_ClearMode.Auto);
-        Span<int> argRegisters = stackalloc int [expr.Arguments.Length];
-        Span<ES_FunctionPrototypeArgData> argsList = stackalloc ES_FunctionPrototypeArgData [expr.Arguments.Length];
+
+        using var argRegistersArr = PooledArray<int>.GetArray (expr.Arguments.Length);
+        using var argsListArr = PooledArray<ESC_PrototypeArg>.GetArray (expr.Arguments.Length);
+        var argRegisters = argRegistersArr.Span;
+        var argsList = argsListArr.Span;
+
         foreach (var arg in expr.Arguments) {
-            var argValueExpr = CheckExpression (ref passData, arg.ValueExpression, typeUnknMut);
+            var argValueExpr = CheckExpression (ref compileData, ref passData, arg.ValueExpression, typeUnknMut);
             exprList.Merge (ref argValueExpr.Expressions);
             exprList.AddRegister (argValueExpr.ValueRegister);
 
             var argType = arg.ArgType;
-            var argValueType = argValueExpr.Type.ToType (ref passData);
+            var argValueType = argValueExpr.Type;
 
-            if (argValueExpr.Type.Type is null || argValueExpr.Type.Type->TypeTag == ES_TypeTag.UNKNOWN)
+            if (argValueExpr.Type.Type is null || argValueExpr.Type.Type is ESC_TypeUnknown)
                 errorFound = true;
 
-            var argProtoData = new ES_FunctionPrototypeArgData (argType, argValueType);
+            var argProtoData = new ESC_PrototypeArg (argType, argValueType);
 
-            var regIdx = irWriter.RentRegister (TypeNode (ref passData, argValueType));
+            var regIdx = irWriter.RentRegister (TypeNode (ref compileData, argValueType));
             var thisArgIdx = argIdx++;
 
             exprList.AddExpression (AssignmentExpression (
@@ -936,17 +771,17 @@ internal unsafe static partial class Compiler_TypeChecking {
         if (errorFound) {
             irWriter.ReturnRegisters (argRegisters);
             exprList.Dispose ();
-            return ExpressionError (ref passData, expr);
+            return ExpressionError (ref compileData, expr);
         }
 
         // Get the constructor.
-        var constructor = FindConstructor (objType, argsList);
+        var constructor = FindConstructor (objType.Type, argsList);
 
         // Error out if the constructor is null.
         if (constructor is null && expr.Arguments.Length > 0) {
-            passData.ErrorList.Add (ES_FrontendErrors.GenNoSuchConstructor (
-                passData.Env.GetNiceTypeNameString (objType, true),
-                passData.Env.GetFunctionSignatureString (argsList),
+            compileData.ErrorList.Add (ES_FrontendErrors.GenNoSuchConstructor (
+                compileData.GetNiceNameString (objType, true),
+                compileData.GetFunctionSignatureString (argsList),
                 passData.Source, expr.NodeBounds
             ));
             retType = typeUnknMut;
@@ -959,9 +794,11 @@ internal unsafe static partial class Compiler_TypeChecking {
         var valueReg = irWriter.RentRegister (irRefType);
         var value = LocalValueExpression (valueReg);
 
+        var ptrTypeInfo = (ES_ReferenceData*) compileData.ToTypeInfo (retType);
+        Debug.Assert (ptrTypeInfo->TypeInfo.TypeTag == ES_TypeTag.Reference);
         exprList.AddExpression (AssignmentExpression (
             value,
-            NewObjectExpression (ESIR_Factory.TypeNode (objType))
+            NewObjectExpression (ptrTypeInfo)
         ));
         exprList.AddExpression (AssignmentExpression (
             UnaryExpression (ESIR_NodeKind.UnaryDereference, value),
@@ -975,172 +812,165 @@ internal unsafe static partial class Compiler_TypeChecking {
     }
 
     private static ExpressionData CheckExpression_NewArray (
-        ref PassData passData, ES_AstNewArrayExpression expr,
-        TypeData expectedType
+        ref CompileData compileData, ref PassData passData, ES_AstNewArrayExpression expr
     ) {
         var irWriter = passData.IRWriter;
         var exprList = new ExpressionList (null, null);
 
-        var indexTypeConst = passData.GetArrayIndexType ();
+        var indexType = compileData.GetArrayIndexType ();
         var elemType = GetTypeRef (expr.ElementType);
-        var arrType = passData.EnvBuilder.CreateArrayType (elemType, expr.Ranks.Length);
-        var retType = UnpackFirstConst (arrType);
+        var arrType = compileData.GetArrayType (elemType, expr.Dimensions.Length, ESC_Constness.Mutable);
 
-        var noNew = elemType->Flags.HasFlag (ES_TypeFlag.NoNew);
+        Debug.Assert (indexType.Type is not null);
+        Debug.Assert (elemType.Type is not null);
+        Debug.Assert (arrType.Type is not null);
+
+        var noNew = elemType.Type.Flags.HasFlag (ESC_TypeFlag.NoNew);
         if (noNew) {
-            passData.ErrorList.Add (ES_FrontendErrors.GenNoTypeNew (
-                passData.Env.GetNiceTypeNameString (elemType, true), passData.Source, expr.NodeBounds
+            compileData.ErrorList.Add (ES_FrontendErrors.GenNoTypeNew (
+                compileData.GetNiceNameString (elemType, true), passData.Source, expr.NodeBounds
             ));
         }
 
-        // Ensure the non-const version of the type exists.
-        passData.EnvBuilder.RemoveConstness (arrType);
+        using var dimValues = new StructPooledList<ESIR_Expression> (CL_ClearMode.Auto);
+        foreach (var dim in expr.Dimensions) {
+            Debug.Assert (dim is not null);
 
-        using var rankValues = new StructPooledList<ESIR_Expression> (CL_ClearMode.Auto);
-        foreach (var rank in expr.Ranks) {
-            Debug.Assert (rank is not null);
-
-            var rankExpr = CheckExpression (ref passData, rank, indexTypeConst);
-            if (!EnsureCompat (ref rankExpr, indexTypeConst, ref passData, rankExpr.Expr.NodeBounds)) {
-                rankExpr.Expressions.Dispose ();
+            var dimExpr = CheckExpression (ref compileData, ref passData, dim, indexType);
+            if (!EnsureCompat (ref compileData, ref passData, ref dimExpr, indexType, dimExpr.Expr.NodeBounds)) {
+                dimExpr.Expressions.Dispose ();
                 continue;
             }
 
-            exprList.Merge (ref rankExpr.Expressions);
-            exprList.AddRegister (rankExpr.ValueRegister);
-            rankValues.Add (rankExpr.Value);
+            exprList.Merge (ref dimExpr.Expressions);
+            exprList.AddRegister (dimExpr.ValueRegister);
+            dimValues.Add (dimExpr.Value);
         }
 
         if (noNew) {
             exprList.Dispose ();
-            return ExpressionError (ref passData, expr);
+            return ExpressionError (ref compileData, expr);
         }
 
-        var valueReg = irWriter.RentRegister (TypeNode (ref passData, arrType));
+        var valueReg = irWriter.RentRegister (TypeNode (ref compileData, arrType));
         var value = LocalValueExpression (valueReg);
+        var arrTypeInfo = (ES_ArrayData*) compileData.ToTypeInfo (arrType);
+        Debug.Assert (arrTypeInfo->TypeInfo.TypeTag == ES_TypeTag.Array);
         exprList.AddExpression (AssignmentExpression (
             value,
-            NewArrayExpression (ESIR_Factory.TypeNode (elemType), List (rankValues.Span))
+            NewArrayExpression (arrTypeInfo, List (dimValues.Span))
         ));
 
         exprList.ReturnRegisters (irWriter);
 
-        return ExpressionData.NewValue (expr, retType, exprList, value, valueReg, false, false);
+        return ExpressionData.NewValue (expr, arrType, exprList, value, valueReg, false, false);
     }
 
     private static ExpressionData CheckExpression_Indexing (
-        ref PassData passData, ES_AstIndexingExpression expr,
-        TypeData expectedType
+        ref CompileData compileData, ref PassData passData, ES_AstIndexingExpression expr
     ) {
         var irWriter = passData.IRWriter;
 
-        var typeUnkn = passData.Env.TypeUnknownValue;
-        var typeIndex = passData.GetArrayIndexType ();
-        var typeUnknMut = passData.GetUnknownType (Constness.Mutable);
+        var typeIndex = compileData.GetArrayIndexType ();
+        var typeUnknMut = compileData.GetUnknownType (ESC_Constness.Mutable);
 
-        var rankCount = expr.RankExpressions.Length;
-        var indexedExprData = CheckExpression (ref passData, expr.IndexedExpression, typeUnknMut);
+        var arrRank = expr.DimensionExpressions.Length;
+        var indexedExprData = CheckExpression (ref compileData, ref passData, expr.IndexedExpression, typeUnknMut);
 
         var exprList = indexedExprData.Expressions;
 
-        using var ranksList = new StructPooledList<ESIR_Expression> (CL_ClearMode.Auto);
-        foreach (var rank in expr.RankExpressions) {
-            Debug.Assert (rank is not null);
+        using var dimsList = new StructPooledList<ESIR_Expression> (CL_ClearMode.Auto);
+        foreach (var dim in expr.DimensionExpressions) {
+            Debug.Assert (dim is not null);
 
-            var rankExprData = CheckExpression (ref passData, rank, typeIndex);
-            EnsureCompat (ref rankExprData, typeIndex, ref passData, rank.NodeBounds);
+            var dimExprData = CheckExpression (ref compileData, ref passData, dim, typeIndex);
+            EnsureCompat (ref compileData, ref passData, ref dimExprData, typeIndex, dim.NodeBounds);
 
-            rankExprData.Expressions.ReturnRegisters (irWriter);
-            exprList.Merge (ref rankExprData.Expressions);
+            dimExprData.Expressions.ReturnRegisters (irWriter);
+            exprList.Merge (ref dimExprData.Expressions);
 
-            ranksList.Add (rankExprData.Value);
-            exprList.AddRegister (rankExprData.ValueRegister);
+            dimsList.Add (dimExprData.Value);
+            exprList.AddRegister (dimExprData.ValueRegister);
         }
 
-        var badRankCount = false;
+        var badRank = false;
         var elemType = typeUnknMut;
         var writable = false;
         if (indexedExprData.Type.Type is not null) {
             var indexedType = indexedExprData.Type;
-            var indexedTypeTag = indexedType.Type->TypeTag;
 
-            if (indexedTypeTag == ES_TypeTag.UNKNOWN) {
-                badRankCount = false;
+            if (indexedType.Type is ESC_TypeUnknown) {
+                badRank = false;
                 elemType = typeUnknMut;
                 writable = true;
-            } else if (indexedTypeTag == ES_TypeTag.Array) {
-                var arrayData = (ES_ArrayTypeData*) indexedExprData.Type.Type;
-
-                badRankCount = rankCount != arrayData->DimensionsCount;
-                elemType = UnpackFirstConst (arrayData->ElementType);
-                elemType = elemType.WithInheritedConst (indexedExprData.Type.Constness);
+            } else if (indexedType.Type is ESC_TypeArray typeArray) {
+                badRank = arrRank != typeArray.Rank;
+                elemType = typeArray.ElementType.WithInheritedConst (indexedExprData.Type.Constness);
 
                 writable = true;
             } else {
-                passData.ErrorList.Add (ES_FrontendErrors.GenCantApplyIndexingToType (
-                    passData.Env.GetNiceTypeNameString (indexedExprData.Type.ToType (ref passData), true),
+                compileData.ErrorList.Add (ES_FrontendErrors.GenCantApplyIndexingToType (
+                    compileData.GetNiceNameString (indexedType, true),
                     passData.Source, indexedExprData.Expr.NodeBounds
                 ));
             }
         } else {
-            passData.ErrorList.Add (new (
+            compileData.ErrorList.Add (new (
                 passData.Source, indexedExprData.Expr.NodeBounds, ES_FrontendErrors.CantApplyIndexing
             ));
         }
 
-        writable &= elemType.IsWritable;
+        writable &= elemType.IsWritable ();
 
-        if (badRankCount) {
-            passData.ErrorList.Add (new (
-                passData.Source, indexedExprData.Expr.NodeBounds, ES_FrontendErrors.IndexingBadRankCount
+        if (badRank) {
+            compileData.ErrorList.Add (new (
+                passData.Source, indexedExprData.Expr.NodeBounds, ES_FrontendErrors.IndexingBadRank
             ));
         }
 
-        var value = IndexingExpression (indexedExprData.Value, List (ranksList.Span));
+        var value = IndexingExpression (indexedExprData.Value, List (dimsList.Span));
 
         return ExpressionData.NewValue (expr, elemType, exprList, value, null, writable, false);
     }
 
     private static ExpressionData CheckExpression_Name (
-        ref PassData passData, ES_AstNameExpression expr,
-        TypeData expectedType
+        ref CompileData compileData, ES_AstNameExpression expr, ESC_TypeRef expectedType
     ) {
-        var id = passData.Env.IdPool.GetIdentifier (expr.Value.Text.Span);
-        var symbol = passData.Symbols.GetSymbol (id);
+        var id = compileData.IdPool.GetIdentifier (expr.Value.Text.Span);
+        var symbol = compileData.Symbols.GetSymbol (id);
 
-        var writable = symbol.Flags.HasFlag (SymbolFlags.Writable);
-        var compTimeConst = symbol.Flags.HasFlag (SymbolFlags.CompileTimeConstant);
+        var writable = symbol.Flags.HasFlag (FrontendSymbolFlags.Writable);
+        var compTimeConst = symbol.Flags.HasFlag (FrontendSymbolFlags.CompileTimeConstant);
 
         switch (symbol.Tag) {
-            case SymbolType.None: {
+            case FrontendSymbolType.None: {
                 var symbolName = expr.Value.Text.Span.GetPooledString ();
-                passData.ErrorList.Add (ES_FrontendErrors.GenCantFindSymbol (symbolName, expr.Value));
+                compileData.ErrorList.Add (ES_FrontendErrors.GenCantFindSymbol (symbolName, expr.Value));
 
-                return ExpressionError (ref passData, expr);
+                return ExpressionError (ref compileData, expr);
             }
 
-            case SymbolType.Variable: {
+            case FrontendSymbolType.Variable: {
                 var varData = symbol.MatchVar ();
                 return ExpressionData.NewValue (expr, varData.Type, varData.IRExpression, null, writable, compTimeConst);
             }
 
-            case SymbolType.Type: {
+            case FrontendSymbolType.Type: {
                 if (expectedType.Type is not null) {
-                    passData.ErrorList.Add (ES_FrontendErrors.GenInvalidExprTerm (
+                    compileData.ErrorList.Add (ES_FrontendErrors.GenInvalidExprTerm (
                         expr.Value.Text.Span.GetPooledString (),
                         expr.Value
                     ));
 
-                    return ExpressionError (ref passData, expr);
+                    return ExpressionError (ref compileData, expr);
                 }
 
                 return ExpressionData.NewType (expr, symbol.MatchType ());
             }
 
-            case SymbolType.Function: {
+            case FrontendSymbolType.Function: {
                 var func = symbol.MatchFunction ();
-                var type = (ES_TypeInfo*) func->FunctionType;
-                return ExpressionData.NewFunction (expr, func, type);
+                return ExpressionData.NewFunction (expr, func, new (ESC_Constness.Mutable, func.Prototype));
             }
 
             default:
@@ -1149,15 +979,13 @@ internal unsafe static partial class Compiler_TypeChecking {
     }
 
     private static ExpressionData CheckExpression_MemberAccess (
-        ref PassData passData, ES_AstMemberAccessExpression expr,
-        TypeData expectedType
+        ref CompileData compileData, ref PassData passData, ES_AstMemberAccessExpression expr
     ) {
         Debug.Assert (expr.Member is not null);
 
-        var idPool = passData.Env.IdPool;
-        var typeUnkn = passData.Env.TypeUnknownValue;
+        var idPool = compileData.IdPool;
 
-        var parentExpr = CheckExpression (ref passData, expr.Parent, TypeData.Null);
+        var parentExpr = CheckExpression (ref compileData, ref passData, expr.Parent, ESC_TypeRef.Null (ESC_Constness.Mutable));
         var memberId = idPool.GetIdentifier (expr.Member.Value.Text.Span);
 
         if (parentExpr.Type.Type is not null) {
@@ -1165,21 +993,21 @@ internal unsafe static partial class Compiler_TypeChecking {
 
             var type = parentExpr.Type;
 
-            switch (type.Type->TypeTag) {
-                case ES_TypeTag.UNKNOWN:
-                    return ExpressionError (ref passData, expr);
+            switch (type.Type) {
+                case ESC_TypeUnknown:
+                    return ExpressionError (ref compileData, expr);
 
-                case ES_TypeTag.Struct: {
+                case ESC_TypeStruct: {
                     return CheckExpression_MemberAccess_Basic (
-                        ref passData,
-                        expr, parentExpr, memberId, expectedType
+                        ref compileData, expr,
+                        parentExpr, memberId
                     );
                 }
 
-                case ES_TypeTag.Array: {
+                case ESC_TypeArray: {
                     var ret = CheckExpression_MemberAccess_Basic (
-                        ref passData,
-                        expr, parentExpr, memberId, expectedType
+                        ref compileData, expr,
+                        parentExpr, memberId
                     );
 
                     ret.Writable = false;
@@ -1190,28 +1018,28 @@ internal unsafe static partial class Compiler_TypeChecking {
                 default:
                     throw new NotImplementedException ("Type not implemented yet.");
             }
-        } else if (parentExpr.TypeInfo is not null) {
+        } else if (parentExpr.TypeInfo.Type is not null) {
             var type = parentExpr.TypeInfo;
 
-            switch (type->TypeTag) {
-                case ES_TypeTag.UNKNOWN:
-                    return ExpressionError (ref passData, expr);
+            switch (type.Type) {
+                case ESC_TypeUnknown:
+                    return ExpressionError (ref compileData, expr);
 
-                case ES_TypeTag.Struct: {
+                case ESC_TypeStruct: {
                     return CheckExpression_MemberAccessStatic_Aggregate (
-                        ref passData,
-                        expr, parentExpr, memberId, expectedType
+                        ref compileData, expr,
+                        parentExpr, memberId
                     );
                 }
 
-                case ES_TypeTag.Array: {
-                    passData.ErrorList.Add (ES_FrontendErrors.GenMemberDoesntExist (
-                        passData.Env.GetNiceTypeNameString (type, true),
+                case ESC_TypeArray: {
+                    compileData.ErrorList.Add (ES_FrontendErrors.GenMemberDoesntExist (
+                        compileData.GetNiceNameString (type, true),
                         expr.Member.Value.Text.Span.GetPooledString (),
                         expr.Member.Value
                     ));
 
-                    return ExpressionError (ref passData, expr);
+                    return ExpressionError (ref compileData, expr);
                 }
 
                 default:
@@ -1224,45 +1052,39 @@ internal unsafe static partial class Compiler_TypeChecking {
     }
 
     private static ExpressionData CheckExpression_MemberAccess_Basic (
-        ref PassData passData, ES_AstMemberAccessExpression expr,
-        ExpressionData parentExpr, ES_Identifier memberId,
-        TypeData expectedType
+        ref CompileData compileData, ES_AstMemberAccessExpression expr,
+        ExpressionData parentExpr, ES_Identifier memberId
     ) {
         Debug.Assert (expr.Member is not null);
-
-        var typeUnkn = passData.Env.TypeUnknownValue;
-        var membersArr = parentExpr.Type.Type->MembersList.MembersList;
+        Debug.Assert (parentExpr.Type.Type is not null);
 
         var exprList = parentExpr.Expressions;
         exprList.AddRegister (parentExpr.ValueRegister);
 
-        foreach (var memberAddr in membersArr.Span) {
-            var memberPtr = memberAddr.Address;
-
-            if (!memberPtr->Name.Equals (memberId))
+        foreach (var memberData in parentExpr.Type.Type.GetMembers ()) {
+            if (!memberData.Name.Equals (memberId))
                 continue;
 
-            switch (memberPtr->MemberType) {
-                case ES_MemberType.Field: {
-                    var memberVar = (ES_MemberData_Variable*) memberPtr;
-                    var varType = UnpackFirstConst (memberVar->Type).WithInheritedConst (parentExpr.Type.Constness);
+            switch (memberData) {
+                case ESC_TypeMember_Field memberField: {
+                    var varType = memberField.FieldType.WithInheritedConst (parentExpr.Type.Constness);
 
-                    if (memberVar->Info.Flags.HasFlag (ES_MemberFlags.Static)) {
-                        passData.ErrorList.Add (ES_FrontendErrors.GenStaticAccessOnInst (
-                            passData.Env.GetNiceTypeNameString (parentExpr.Type.ToType (ref passData), true),
+                    if (memberField.Flags.HasFlag (ESC_MemberFlags.Static)) {
+                        compileData.ErrorList.Add (ES_FrontendErrors.GenStaticAccessOnInst (
+                            compileData.GetNiceNameString (parentExpr.Type, true),
                             expr.Member.Value.Text.Span.GetPooledString (),
                             expr.Member.Value
                         ));
                         exprList.Dispose ();
                     }
 
-                    var writable = parentExpr.Writable & varType.IsWritable;
-                    var value = MemberAccessExpression (parentExpr.Value, memberPtr->Name);
+                    var writable = parentExpr.Writable & varType.IsWritable ();
+                    var value = MemberAccessExpression (parentExpr.Value, memberData.Name);
 
                     return ExpressionData.NewValue (expr, varType, exprList, value, null, writable, false);
                 }
 
-                case ES_MemberType.Function:
+                case ESC_TypeMember_Function:
                     throw new NotImplementedException ("[TODO] Member function access not implemented yet.");
 
                 default:
@@ -1270,59 +1092,53 @@ internal unsafe static partial class Compiler_TypeChecking {
             }
         }
 
-        passData.ErrorList.Add (ES_FrontendErrors.GenMemberDoesntExist (
-            passData.Env.GetNiceTypeNameString (parentExpr.Type.ToType (ref passData), true),
+        compileData.ErrorList.Add (ES_FrontendErrors.GenMemberDoesntExist (
+            compileData.GetNiceNameString (parentExpr.Type, true),
             expr.Member.Value.Text.Span.GetPooledString (),
             expr.Member.Value
         ));
 
         exprList.Dispose ();
-        return ExpressionError (ref passData, expr);
+        return ExpressionError (ref compileData, expr);
     }
 
     private static ExpressionData CheckExpression_MemberAccessStatic_Aggregate (
-        ref PassData passData, ES_AstMemberAccessExpression expr,
-        ExpressionData parentExpr, ES_Identifier memberId,
-        TypeData expectedType
+        ref CompileData compileData, ES_AstMemberAccessExpression expr,
+        ExpressionData parentExpr, ES_Identifier memberId
     ) {
         Debug.Assert (expr.Member is not null);
 
         var type = parentExpr.TypeInfo;
-        var typeUnkn = passData.Env.TypeUnknownValue;
-        var membersArr = type->MembersList.MembersList;
+        Debug.Assert (type.Type is not null);
 
         var exprList = parentExpr.Expressions;
         exprList.AddRegister (parentExpr.ValueRegister);
 
-        foreach (var memberAddr in membersArr.Span) {
-            var memberPtr = memberAddr.Address;
-
-            if (!memberPtr->Name.Equals (memberId))
+        foreach (var memberData in type.Type.GetMembers ()) {
+            if (!memberData.Name.Equals (memberId))
                 continue;
 
-            switch (memberPtr->MemberType) {
-                case ES_MemberType.Field: {
-                    var memberVar = (ES_MemberData_Variable*) memberPtr;
-
-                    if (!memberVar->Info.Flags.HasFlag (ES_MemberFlags.Static)) {
-                        passData.ErrorList.Add (ES_FrontendErrors.GenInstAccessOnStatic (
+            switch (memberData) {
+                case ESC_TypeMember_Field memberField: {
+                    if (!memberField.Flags.HasFlag (ESC_MemberFlags.Static)) {
+                        compileData.ErrorList.Add (ES_FrontendErrors.GenInstAccessOnStatic (
                             expr.Member.Value.Text.Span.GetPooledString (),
                             expr.Member.Value
                         ));
                         exprList.Dispose ();
-                        return ExpressionError (ref passData, expr);
+                        return ExpressionError (ref compileData, expr);
                     }
 
-                    var memberType = UnpackFirstConst (memberVar->Type);
-                    var writable = memberType.IsWritable;
+                    var memberType = memberField.FieldType;
+                    var writable = memberType.IsWritable ();
 
-                    var mangledName = MangleStaticVar (ref passData, type->Name, memberPtr->Name);
+                    var mangledName = MangleStaticVar (ref compileData, type.Type.Name, memberData.Name);
                     var value = StaticVariableExpression (mangledName);
                     // TODO: Handle constants.
                     return ExpressionData.NewValue (expr, memberType, exprList, value, null, writable, false);
                 }
 
-                case ES_MemberType.Function:
+                case ESC_TypeMember_Function:
                     throw new NotImplementedException ("[TODO] Static member function access not implemented yet.");
 
                 default:
@@ -1330,29 +1146,29 @@ internal unsafe static partial class Compiler_TypeChecking {
             }
         }
 
-        passData.ErrorList.Add (ES_FrontendErrors.GenMemberDoesntExist (
-            passData.Env.GetNiceTypeNameString (type, true),
+        compileData.ErrorList.Add (ES_FrontendErrors.GenMemberDoesntExist (
+            compileData.GetNiceNameString (type, true),
             expr.Member.Value.Text.Span.GetPooledString (),
             expr.Member.Value
         ));
 
         exprList.Dispose ();
-        return ExpressionError (ref passData, expr);
+        return ExpressionError (ref compileData, expr);
     }
 
     private static ExpressionData CheckExpression_IncDec (
-        ref PassData passData, ES_AstIncDecExpression expr,
-        TypeData expectedType
+        ref CompileData compileData, ref PassData passData, ES_AstIncDecExpression expr,
+        ESC_TypeRef expectedType
     ) {
-        var exprData = CheckExpression (ref passData, expr.Inner, expectedType);
+        var exprData = CheckExpression (ref compileData, ref passData, expr.Inner, expectedType);
 
-        if (exprData.Type.Type->TypeTag == ES_TypeTag.UNKNOWN) {
+        if (exprData.Type.Type is ESC_TypeUnknown) {
             exprData.Expressions.Dispose ();
-            return ExpressionError (ref passData, expr);
+            return ExpressionError (ref compileData, expr);
         }
 
-        if (!exprData.Writable || !exprData.Type.IsWritable) {
-            passData.ErrorList.Add (new (
+        if (!exprData.Writable || !exprData.Type.IsWritable ()) {
+            compileData.ErrorList.Add (new (
                 passData.Source, expr.Inner.NodeBounds, ES_FrontendErrors.TempValueInIncDecOp
             ));
         }
@@ -1367,34 +1183,31 @@ internal unsafe static partial class Compiler_TypeChecking {
         var exprList = exprData.Expressions;
         var value = UnaryExpression (op, exprData.Value);
 
-        if (exprData.Type.Type->TypeTag == ES_TypeTag.Int || exprData.Type.Type->TypeTag == ES_TypeTag.Float)
+        if (exprData.Type.Type is ESC_TypeInt || exprData.Type.Type is ESC_TypeFloat)
             return ExpressionData.NewValue (expr, exprData.Type, exprList, value, exprData.ValueRegister, false, false);
         else
             throw new NotImplementedException ("[TODO] ?");
     }
 
     private static ExpressionData CheckExpression_Unary (
-        ref PassData passData, ES_AstSimpleUnaryExpression expr,
-        TypeData expectedType
+        ref CompileData compileData, ref PassData passData, ES_AstSimpleUnaryExpression expr,
+        ESC_TypeRef expectedType
     ) {
-        var irWriter = passData.IRWriter;
-        var symbols = passData.Symbols;
+        var exprData = CheckExpression (ref compileData, ref passData, expr.Inner, expectedType);
 
-        var exprData = CheckExpression (ref passData, expr.Inner, expectedType);
-
-        if (!CompilerFrontend.UnaryOpCompat (passData.Env, exprData.Type.Type, expr.ExpressionType, out var finalType, out _)) {
-            passData.ErrorList.Add (ES_FrontendErrors.GenCantApplyUnaryOp (
+        if (!compileData.UnaryOpCompat (exprData.Type, expr.ExpressionType, out var finalType, out _)) {
+            compileData.ErrorList.Add (ES_FrontendErrors.GenCantApplyUnaryOp (
                 expr.OperatorToken.Text.Span.GetPooledString (),
-                passData.Env.GetNiceTypeNameString (exprData.Type.ToType (ref passData), true),
+                compileData.GetNiceNameString (exprData.Type, true),
                 passData.Source, exprData.Expr.NodeBounds
             ));
 
             exprData.Expressions.Dispose ();
-            return ExpressionError (ref passData, expr);
+            return ExpressionError (ref compileData, expr);
         }
 
-        var retType = UnpackFirstConst (finalType).WithInheritedConst (exprData.Type.Constness);
-        var writable = retType.IsWritable;
+        var retType = finalType.WithInheritedConst (exprData.Type.Constness);
+        var writable = retType.IsWritable ();
 
         var value = expr.ExpressionType switch {
             SimpleUnaryExprType.Positive => exprData.Value,
@@ -1412,27 +1225,26 @@ internal unsafe static partial class Compiler_TypeChecking {
     }
 
     private static ExpressionData CheckExpression_Cast (
-        ref PassData passData, ES_AstCastExpression expr,
-        TypeData expectedType
+        ref CompileData compileData, ref PassData passData, ES_AstCastExpression expr
     ) {
-        var destType = UnpackFirstConst (GetTypeRef (expr.DestinationType));
-        var exprData = CheckExpression (ref passData, expr.InnerExpression, passData.GetUnknownType (Constness.Mutable));
+        var destType = GetTypeRef (expr.DestinationType);
+        var exprData = CheckExpression (ref compileData, ref passData, expr.InnerExpression, compileData.GetUnknownType (ESC_Constness.Mutable));
 
-        if (!ExplicitCast (ref passData, ref exprData, destType, out var castRedundant)) {
-            passData.ErrorList.Add (ES_FrontendErrors.GenNoExplicitCast (
-                passData.Env.GetNiceTypeNameString (destType.ToType (ref passData), true),
-                passData.Env.GetNiceTypeNameString (exprData.Type.ToType (ref passData), true),
+        if (!ExplicitCast (ref compileData, ref passData, ref exprData, destType, out var castRedundant)) {
+            compileData.ErrorList.Add (ES_FrontendErrors.GenNoExplicitCast (
+                compileData.GetNiceNameString (destType, true),
+                compileData.GetNiceNameString (exprData.Type, true),
                 passData.Source, expr.NodeBounds
             ));
 
             exprData.Expressions.Dispose ();
-            return ExpressionError (ref passData, expr);
+            return ExpressionError (ref compileData, expr);
         }
 
         var exprlist = exprData.Expressions;
 
         if (castRedundant) {
-            passData.InfoList.Add (new (
+            compileData.InfoList.Add (new (
                 passData.Source, expr.CastBounds, ES_FrontendInfoMsg.RedundantCast
             ));
         }
@@ -1441,52 +1253,53 @@ internal unsafe static partial class Compiler_TypeChecking {
     }
 
     private static ExpressionData CheckExpression_FunctionCall (
-        ref PassData passData, ES_AstFunctionCallExpression expr,
-        TypeData expectedType
+        ref CompileData compileData, ref PassData passData, ES_AstFunctionCallExpression expr
     ) {
-        var funcExpr = CheckExpression (ref passData, expr.FunctionExpression, passData.GetUnknownType (Constness.Mutable));
+        var funcExpr = CheckExpression (ref compileData, ref passData, expr.FunctionExpression, compileData.GetUnknownType (ESC_Constness.Mutable));
 
         if (funcExpr.Function is not null)
-            return CheckExpression_SimpleFunctionCall (ref passData, expr, funcExpr);
-        else if (funcExpr.TypeInfo is not null) {
-            passData.ErrorList.Add (ES_FrontendErrors.GenCantInvokeType (
-                passData.Env.GetNiceTypeNameString (funcExpr.TypeInfo, true), passData.Source, funcExpr.Expr.NodeBounds
+            return CheckExpression_SimpleFunctionCall (ref compileData, ref passData, expr, funcExpr);
+        else if (funcExpr.TypeInfo.Type is not null) {
+            compileData.ErrorList.Add (ES_FrontendErrors.GenCantInvokeType (
+                compileData.GetNiceNameString (funcExpr.TypeInfo, true), passData.Source, funcExpr.Expr.NodeBounds
             ));
         } else if (funcExpr.Type.Type is not null) {
             // TODO: Some types might be allowed to have `()` overrides too in the future. But not now.
-            if (funcExpr.Type.Type->TypeTag != ES_TypeTag.UNKNOWN) {
-                passData.ErrorList.Add (new (
+            if (funcExpr.Type.Type is not ESC_TypeUnknown) {
+                compileData.ErrorList.Add (new (
                     passData.Source, funcExpr.Expr.NodeBounds, ES_FrontendErrors.CantInvokeExpr
                 ));
             }
         } else
             Debug.Fail ("???");
 
-        return ExpressionError (ref passData, expr);
+        return ExpressionError (ref compileData, expr);
     }
 
     private static ExpressionData CheckExpression_SimpleFunctionCall (
-        ref PassData passData, ES_AstFunctionCallExpression expr,
+        ref CompileData compileData, ref PassData passData, ES_AstFunctionCallExpression expr,
         ExpressionData funcExpr
     ) {
-        var typeUnknMut = passData.GetUnknownType (Constness.Mutable);
+        Debug.Assert (funcExpr.Function is not null);
+
+        var typeUnknMut = compileData.GetUnknownType (ESC_Constness.Mutable);
 
         var func = funcExpr.Function;
-        var funcType = func->FunctionType;
-        var mangledName = MangleFunctionName (ref passData, func);
+        var funcType = func.Prototype;
+        var mangledName = MangleFunctionName (ref compileData, func);
 
-        var funcArgCount = funcType->ArgumentsList.Length;
+        var funcArgCount = funcType.Arguments.Length;
         var callArgCount = expr.Arguments.Length;
-        var reqArgCount = funcArgCount - func->OptionalArgsCount;
+        var reqArgCount = funcArgCount - func.OptionalArgsCount;
         var ignoreDefArgs = false;
 
         if (callArgCount < reqArgCount) {
             var errBounds = expr.FunctionExpression.NodeBounds;
 
-            var arg = func->Arguments.Span [callArgCount];
-            passData.ErrorList.Add (ES_FrontendErrors.GenMissingFuncArg (
+            var arg = func.Arguments [callArgCount];
+            compileData.ErrorList.Add (ES_FrontendErrors.GenMissingFuncArg (
                 arg.Name.GetCharsSpan ().GetPooledString (),
-                func->Name.TypeName.GetCharsSpan ().GetPooledString (),
+                func.Name.GetCharsSpan ().GetPooledString (),
                 passData.Source, errBounds
             ));
             ignoreDefArgs = true;
@@ -1502,32 +1315,32 @@ internal unsafe static partial class Compiler_TypeChecking {
 
             if (argIdx >= funcArgCount) {
                 if (argIdx == funcArgCount) {
-                    passData.ErrorList.Add (ES_FrontendErrors.GenTooManyFuncArgs (
-                        func->Name.TypeName.GetCharsSpan ().GetPooledString (),
+                    compileData.ErrorList.Add (ES_FrontendErrors.GenTooManyFuncArgs (
+                        func.Name.GetCharsSpan ().GetPooledString (),
                         passData.Source, arg.ValueExpression.NodeBounds
                     ));
                     ignoreDefArgs = true;
                 }
 
-                var exprData = CheckExpression (ref passData, arg.ValueExpression, typeUnknMut);
+                var exprData = CheckExpression (ref compileData, ref passData, arg.ValueExpression, typeUnknMut);
                 exprData.Expressions.Dispose ();
                 passData.IRWriter.ReturnRegister (exprData.ValueRegister);
                 continue;
             }
 
-            var argData = func->Arguments.Elements + argIdx;
-            var argTypeData = funcType->ArgumentsList.Elements + argIdx;
+            var argData = func.Arguments [argIdx];
+            var argTypeData = funcType.Arguments [argIdx];
 
-            if (arg.ArgType != argTypeData->ArgType && argTypeData->ArgType != ES_ArgumentType.In) {
-                passData.ErrorList.Add (ES_FrontendErrors.GenWrongArgType (
-                    argData->Name.GetCharsSpan ().GetPooledString (),
+            if (arg.ArgType != argTypeData.ArgType && argTypeData.ArgType != ES_ArgumentType.In) {
+                compileData.ErrorList.Add (ES_FrontendErrors.GenWrongArgType (
+                    argData.Name.GetCharsSpan ().GetPooledString (),
                     arg.ArgType.ToString (), passData.Source, arg.ValueExpression.NodeBounds
                 ));
             }
 
-            var argValType = UnpackFirstConst (argTypeData->ValueType);
-            var argExprData = CheckExpression (ref passData, arg.ValueExpression, argValType);
-            EnsureCompat (ref argExprData, argValType, ref passData, argExprData.Expr.NodeBounds);
+            var argValType = argTypeData.ValueType;
+            var argExprData = CheckExpression (ref compileData, ref passData, arg.ValueExpression, argValType);
+            EnsureCompat (ref compileData, ref passData, ref argExprData, argValType, argExprData.Expr.NodeBounds);
 
             exprList.Merge (ref argExprData.Expressions);
             exprList.AddRegister (argExprData.ValueRegister);
@@ -1536,18 +1349,15 @@ internal unsafe static partial class Compiler_TypeChecking {
         }
 
         if (!ignoreDefArgs) {
-            if (!passData.EnvBuilder.PointerAstMap.TryGetValue ((IntPtr) func, out var funcASTNode))
-                argIdx = funcArgCount;
-
-            var funcDef = (ES_AstFunctionDefinition?) funcASTNode;
             for (; argIdx < funcArgCount; argIdx++) {
-                var argData = func->Arguments.Elements + argIdx;
-                var argTypeData = funcType->ArgumentsList.Elements + argIdx;
-                var argDef = funcDef!.ArgumentsList [argIdx];
+                var argData = func.Arguments [argIdx];
+                var argTypeData = funcType.Arguments [argIdx];
 
-                var argValType = UnpackFirstConst (argTypeData->ValueType);
-                var argExprData = CheckExpression (ref passData, argDef.DefaultExpression!, argValType);
-                EnsureCompat (ref argExprData, argValType, ref passData, argExprData.Expr.NodeBounds);
+                Debug.Assert (argData.DefaultValue is not null);
+
+                var argValType = argTypeData.ValueType;
+                var argExprData = CheckExpression (ref compileData, ref passData, argData.DefaultValue, argValType);
+                EnsureCompat (ref compileData, ref passData, ref argExprData, argValType, argExprData.Expr.NodeBounds);
 
                 exprList.Merge (ref argExprData.Expressions);
                 exprList.AddRegister (argExprData.ValueRegister);
@@ -1556,58 +1366,52 @@ internal unsafe static partial class Compiler_TypeChecking {
             }
         }
 
-        var retType = UnpackFirstConst (funcType->ReturnType);
         var value = FunctionCallExpression (mangledName, List (argsList.Span));
 
-        return ExpressionData.NewValue (expr, retType, exprList, value, null, false, false);
+        return ExpressionData.NewValue (expr, funcType.ReturnType, exprList, value, null, false, false);
     }
 
     private static bool CheckExpression_SimpleBinaryExpression_Compat (
-        ref PassData passData, ES_AstSimpleBinaryExpression expr,
+        ref CompileData compileData, ES_AstSimpleBinaryExpression expr,
         ref ExpressionData lhs, ref ExpressionData rhs,
-        out ES_TypeInfo* finalType
+        out ESC_TypeRef finalType
     ) {
         var op = expr.ExpressionType;
 
-        var lhsNull = lhs.Type.Type->TypeTag == ES_TypeTag.Null;
-        var rhsNull = rhs.Type.Type->TypeTag == ES_TypeTag.Null;
-        var lhsRef = lhs.Type.Type->IsReferenceType ();
-        var rhsRef = rhs.Type.Type->IsReferenceType ();
-        var lhsInt = lhs.Type.Type->TypeTag == ES_TypeTag.Int;
-        var rhsInt = rhs.Type.Type->TypeTag == ES_TypeTag.Int;
+        var lhsNull = lhs.Type.Type is ESC_TypeNull;
+        var rhsNull = rhs.Type.Type is ESC_TypeNull;
+        var lhsRef = lhs.Type.Type?.IsReferenceType () ?? false;
+        var rhsRef = rhs.Type.Type?.IsReferenceType () ?? false;
 
         Debug.Assert (!(lhsNull & rhsNull));
-        if (!CompilerFrontend.BinaryOpCompat (passData.Env, lhs.Type.Type, rhs.Type.Type, op, out finalType, out _))
+        if (!compileData.BinaryOpCompat (lhs.Type, rhs.Type, op, out finalType, out _))
             return false;
 
         if (lhsNull && rhsRef) {
             lhs.Type = rhs.Type;
-            lhs.Value = NullLiteralExpression (TypeNode (ref passData, rhs.Type));
+            lhs.Value = NullLiteralExpression (TypeNode (ref compileData, rhs.Type));
         } else if (rhsNull && lhsRef) {
             rhs.Type = lhs.Type;
-            rhs.Value = NullLiteralExpression (TypeNode (ref passData, lhs.Type));
-        } else if (lhsInt && rhsInt) {
-            var lhsTypeInt = (ES_IntTypeData*) lhs.Type.Type;
-            var rhsTypeInt = (ES_IntTypeData*) rhs.Type.Type;
-
+            rhs.Value = NullLiteralExpression (TypeNode (ref compileData, lhs.Type));
+        } else if (lhs.Type.Type is ESC_TypeInt lhsInt && rhs.Type.Type is ESC_TypeInt rhsInt) {
             if (op.IsBitShift ()) {
-                if (rhsTypeInt->IntSize < ES_IntSize.Int32) {
-                    rhs.Type = rhs.Type.WithType (passData.Env.GetIntType (ES_IntSize.Int32, false));
-                    rhs.Value = CastExpression (rhs.Value, TypeNode (ref passData, rhs.Type));
+                if (rhsInt.Size < ES_IntSize.Int32) {
+                    rhs.Type = compileData.GetIntType (ES_IntSize.Int32, false, rhs.Type.Constness);
+                    rhs.Value = CastExpression (rhs.Value, TypeNode (ref compileData, rhs.Type));
                 }
 
                 return true;
             }
 
-            if (lhsTypeInt->IntSize == rhsTypeInt->IntSize)
+            if (lhsInt.Size == rhsInt.Size)
                 return true;
 
-            if (lhsTypeInt->IntSize > rhsTypeInt->IntSize) {
+            if (lhsInt.Size > rhsInt.Size) {
                 rhs.Type = lhs.Type;
-                rhs.Value = CastExpression (rhs.Value, TypeNode (ref passData, lhs.Type));
+                rhs.Value = CastExpression (rhs.Value, TypeNode (ref compileData, lhs.Type));
             } else {
                 lhs.Type = rhs.Type;
-                lhs.Value = CastExpression (lhs.Value, TypeNode (ref passData, rhs.Type));
+                lhs.Value = CastExpression (lhs.Value, TypeNode (ref compileData, rhs.Type));
             }
         }
 
@@ -1676,46 +1480,47 @@ internal unsafe static partial class Compiler_TypeChecking {
     }
 
     private static ExpressionData CheckExpression_SimpleBinaryExpression (
-        ref PassData passData, ES_AstSimpleBinaryExpression expr,
-        TypeData expectedType
+        ref CompileData compileData, ref PassData passData,
+        ES_AstSimpleBinaryExpression expr
     ) {
-        var typeUnkn = passData.Env.TypeUnknownValue;
-        var typeUnknMut = passData.GetUnknownType (Constness.Mutable);
+        var typeUnkn = compileData.GetUnknownType (ESC_Constness.Mutable);
 
-        var leftExpr = CheckExpression (ref passData, expr.Left, typeUnknMut);
+        var leftExpr = CheckExpression (ref compileData, ref passData, expr.Left, typeUnkn);
 
-        var expectedRightType = typeUnknMut;
-        if (expr.ExpressionType.IsBitShift () && leftExpr.Type.Type->TypeTag == ES_TypeTag.Int)
-            expectedRightType = new (Constness.Const, passData.Env.GetIntType (((ES_IntTypeData*) expectedType.Type)->IntSize, true));
+        var expectedRightType = typeUnkn;
+        if (expr.ExpressionType.IsBitShift () && leftExpr.Type.Type is ESC_TypeInt)
+            expectedRightType = compileData.GetIntType (ES_IntSize.Int32, false, ESC_Constness.Const);
         else if (expr.ExpressionType.IsAssignment ())
-            expectedRightType = leftExpr.Type.Type is not null ? leftExpr.Type : typeUnknMut;
+            expectedRightType = leftExpr.Type.Type is not null ? leftExpr.Type : typeUnkn;
 
-        var rightExpr = CheckExpression (ref passData, expr.Right, expectedRightType);
+        var rightExpr = CheckExpression (ref compileData, ref passData, expr.Right, expectedRightType);
 
         if (leftExpr.Type.Type is null || rightExpr.Type.Type is null) {
             leftExpr.Expressions.Dispose ();
             rightExpr.Expressions.Dispose ();
-            return ExpressionError (ref passData, expr);
+            return ExpressionError (ref compileData, expr);
         }
 
-        if (!CheckExpression_SimpleBinaryExpression_Compat (ref passData, expr, ref leftExpr, ref rightExpr, out var finalType)) {
-            passData.ErrorList.Add (ES_FrontendErrors.GenCantApplyBinaryOp (
+        if (!CheckExpression_SimpleBinaryExpression_Compat (
+            ref compileData, expr,
+            ref leftExpr, ref rightExpr,
+            out var finalType
+        )) {
+            compileData.ErrorList.Add (ES_FrontendErrors.GenCantApplyBinaryOp (
                 expr.OperatorToken.Text.Span.GetPooledString (),
-                passData.Env.GetNiceTypeNameString (leftExpr.Type.ToType (ref passData), true),
-                passData.Env.GetNiceTypeNameString (rightExpr.Type.ToType (ref passData), true),
+                compileData.GetNiceNameString (leftExpr.Type, true),
+                compileData.GetNiceNameString (rightExpr.Type, true),
                 passData.Source, expr.NodeBounds
             ));
 
             leftExpr.Expressions.Dispose ();
             rightExpr.Expressions.Dispose ();
-            return ExpressionError (ref passData, expr);
+            return ExpressionError (ref compileData, expr);
         }
-
-        var retType = UnpackFirstConst (finalType);
 
         var isAssignment = expr.ExpressionType.IsAssignment ();
         if (isAssignment && !leftExpr.Writable) {
-            passData.ErrorList.Add (new (
+            compileData.ErrorList.Add (new (
                 passData.Source, leftExpr.Expr.NodeBounds, ES_FrontendErrors.CannotAssignExpr
             ));
         }
@@ -1728,7 +1533,7 @@ internal unsafe static partial class Compiler_TypeChecking {
 
         if (expr.ExpressionType == SimpleBinaryExprType.Assign) {
             var assignValue = AssignmentExpression (leftExpr.Value, rightExpr.Value);
-            return ExpressionData.NewValue (expr, retType, exprList, assignValue, null, false, false);
+            return ExpressionData.NewValue (expr, finalType, exprList, assignValue, null, false, false);
         }
 
         var opKind = CheckExpression_SimpleBinaryExpression_Expr (expr.ExpressionType);
@@ -1736,8 +1541,8 @@ internal unsafe static partial class Compiler_TypeChecking {
         if (opKind is null) {
             exprList.Dispose ();
 
-            passData.ErrorList.Add (new (expr.OperatorToken, "Binary expression not handled."));
-            return ExpressionError (ref passData, expr);
+            compileData.ErrorList.Add (new (expr.OperatorToken, "Binary expression not handled."));
+            return ExpressionError (ref compileData, expr);
         }
 
         ESIR_Expression value = SimpleBinaryExpression (opKind.Value, leftExpr.Value, rightExpr.Value);
@@ -1745,6 +1550,6 @@ internal unsafe static partial class Compiler_TypeChecking {
         if (isAssignment)
             value = AssignmentExpression (leftExpr.Value, value);
 
-        return ExpressionData.NewValue (expr, retType, exprList, value, null, false, false);
+        return ExpressionData.NewValue (expr, finalType, exprList, value, null, false, false);
     }
 }

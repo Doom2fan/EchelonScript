@@ -11,10 +11,8 @@ using System;
 using System.Diagnostics;
 using ChronosLib.Pooled;
 using EchelonScriptCommon.Data.Types;
-using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.CompilerCommon.IR;
-using EchelonScriptCompiler.Data;
-
+using EchelonScriptCompiler.Frontend.Data;
 using static EchelonScriptCompiler.CompilerCommon.IR.ESIR_Factory;
 
 namespace EchelonScriptCompiler.Frontend;
@@ -35,38 +33,36 @@ internal unsafe static partial class Compiler_TypeChecking {
     }
 
     private static void CheckFunction (
-        ref PassData passData,
-        ES_TypeInfo* parentType, ES_NamespaceData? namespaceData,
+        ref CompileData compileData, ref PassData passData,
+        ESC_TypeData? parentType, ESC_Namespace? nsData,
         ES_AstFunctionDefinition funcDef
     ) {
-        Debug.Assert (parentType is not null || namespaceData is not null);
+        Debug.Assert (parentType is not null || nsData is not null);
 
-        var idPool = passData.Env.IdPool;
-        var symbols = passData.Symbols;
+        var idPool = compileData.IdPool;
+        var symbols = compileData.Symbols;
         var irWriter = passData.IRWriter;
 
         var funcName = idPool.GetIdentifier (funcDef.Name.Text.Span);
-        var retType = UnpackFirstConst (GetTypeRef (funcDef.ReturnType));
+        var retType = GetTypeRef (funcDef.ReturnType);
         Debug.Assert (retType.Type is not null);
 
-        ES_FunctionData* funcData;
-        if (namespaceData is not null) {
-            if (!namespaceData.Functions.TryGetValue (funcName, out var funcDataPtr))
+        ESC_Function? funcData;
+        if (nsData is not null) {
+            if (!nsData.Functions.TryGetValue (funcName, out funcData))
                 Debug.Fail ("This shouldn't ever be reached.");
-
-            funcData = funcDataPtr.Address;
         } else
             throw new NotImplementedException ("[TODO] Member functions not implemented yet.");
 
         symbols.Push ();
 
-        irWriter.StartFunction (MangleFunctionName (ref passData, funcData), TypeNode (ref passData, retType));
+        irWriter.StartFunction (MangleFunctionName (ref compileData, funcData), TypeNode (ref compileData, retType));
 
         foreach (var arg in funcDef.ArgumentsList) {
             var argName = idPool.GetIdentifier (arg.Name.Text.Span);
-            var argValType = UnpackFirstConst (GetTypeRef (arg.ValueType));
+            var argValType = GetTypeRef (arg.ValueType);
 
-            var flags = (SymbolFlags) 0;
+            var flags = (FrontendSymbolFlags) 0;
 
             var argType = arg.ArgType;
             switch (argType) {
@@ -74,20 +70,20 @@ internal unsafe static partial class Compiler_TypeChecking {
                     break;
 
                 case ES_ArgumentType.Ref:
-                    flags |= SymbolFlags.RefVar;
+                    flags |= FrontendSymbolFlags.RefVar;
                     break;
 
                 case ES_ArgumentType.In:
-                    if (argValType.Constness != Constness.Mutable) {
-                        passData.ErrorList.Add (ES_FrontendErrors.GenTypeAlreadyConst (
-                            false, argValType.Constness == Constness.Immutable,
+                    if (argValType.Constness != ESC_Constness.Mutable) {
+                        compileData.ErrorList.Add (ES_FrontendErrors.GenTypeAlreadyConst (
+                            false, argValType.Constness == ESC_Constness.Immutable,
                             arg.Name
                         ));
                         break;
                     }
 
                     argType = ES_ArgumentType.Normal;
-                    argValType = argValType.WithConst (Constness.Const);
+                    argValType = argValType.WithConst (ESC_Constness.Const);
                     break;
 
                 case ES_ArgumentType.Out:
@@ -97,16 +93,16 @@ internal unsafe static partial class Compiler_TypeChecking {
                     throw new NotImplementedException ("Argument type not implemented yet.");
             }
 
-            if (argValType.IsWritable)
-                flags |= SymbolFlags.Writable;
+            if (argValType.IsWritable ())
+                flags |= FrontendSymbolFlags.Writable;
 
-            var argIdx = irWriter.AddArgument (ArgumentDefinition (argType, TypeNode (ref passData, argValType)));
-            if (!symbols.AddSymbol (argName, TCSymbol.NewVariable (argValType, ArgumentExpression (argIdx), flags)))
+            var argIdx = irWriter.AddArgument (ArgumentDefinition (argType, TypeNode (ref compileData, argValType)));
+            if (!symbols.AddSymbol (argName, FrontendSymbol.NewVariable (new (argValType, ArgumentExpression (argIdx)), flags)))
                 Debug.Fail ("This shouldn't be reachable.");
 
             if (arg.DefaultExpression is not null) {
-                var argDefExpr = CheckExpression (ref passData, arg.DefaultExpression, argValType);
-                EnsureCompat (ref argDefExpr, argValType, ref passData, arg.DefaultExpression.NodeBounds);
+                var argDefExpr = CheckExpression (ref compileData, ref passData, arg.DefaultExpression, argValType);
+                EnsureCompat (ref compileData, ref passData, ref argDefExpr, argValType, arg.DefaultExpression.NodeBounds);
             }
         }
 
@@ -116,13 +112,13 @@ internal unsafe static partial class Compiler_TypeChecking {
         if (funcDef.ExpressionBody) {
             Debug.Assert (funcDef.Statement is ES_AstExpressionStatement);
 
-            var exprExpType = retType.Type->TypeTag != ES_TypeTag.Void ? retType : passData.GetUnknownType (Constness.Mutable);
+            var exprExpType = retType.Type is not ESC_TypeVoid ? retType : compileData.GetUnknownType (ESC_Constness.Mutable);
             var exprStmt = (funcDef.Statement as ES_AstExpressionStatement)!;
-            var exprData = CheckExpression (ref passData, exprStmt.Expression, exprExpType);
+            var exprData = CheckExpression (ref compileData, ref passData, exprStmt.Expression, exprExpType);
 
-            if (retType.Type->TypeTag != ES_TypeTag.Void) {
-                if (!EnsureCompat (ref exprData, retType, ref passData, exprData.Expr.NodeBounds))
-                    passData.ErrorList.Add (new (funcDef.Name, ES_FrontendErrors.MissingReturnStatement));
+            if (retType.Type is not ESC_TypeVoid) {
+                if (!EnsureCompat (ref compileData, ref passData, ref exprData, retType, exprData.Expr.NodeBounds))
+                    compileData.ErrorList.Add (new (funcDef.Name, ES_FrontendErrors.MissingReturnStatement));
             }
 
             using var exprList = exprData.Expressions;
@@ -130,7 +126,7 @@ internal unsafe static partial class Compiler_TypeChecking {
             foreach (var expr in exprList.Expressions)
                 irWriter.AddStatement (ExpressionStatement (expr));
 
-            if (retType.Type->TypeTag != ES_TypeTag.Void)
+            if (retType.Type is not ESC_TypeVoid)
                 irWriter.AddStatement (ReturnStatement (exprData.Value));
             else
                 irWriter.AddStatement (ExpressionStatement (exprData.Value));
@@ -138,33 +134,35 @@ internal unsafe static partial class Compiler_TypeChecking {
             irWriter.AddScopeRegisters (exprList.Registers);
             irWriter.AddScopeRegister (exprData.ValueRegister);
         } else {
-            var stmtData = CheckStatement (ref passData, retType, funcDef.Statement);
+            var stmtData = CheckStatement (ref compileData, ref passData, retType, funcDef.Statement);
 
-            if (!stmtData.AlwaysReturns && retType.Type->TypeTag != ES_TypeTag.Void)
-                passData.ErrorList.Add (new (funcDef.Name, ES_FrontendErrors.MissingReturnStatement));
+            if (!stmtData.AlwaysReturns && retType.Type is not ESC_TypeVoid)
+                compileData.ErrorList.Add (new (funcDef.Name, ES_FrontendErrors.MissingReturnStatement));
         }
 
         symbols.Pop ();
+
+        var funcInfo = compileData.ToFunctionInfo (funcData);
 
         ESIR_TraceDataAttribute traceDataAttr;
         ESIR_FunctionDataAttribute funcDataAttr;
         if (parentType is not null) {
             traceDataAttr = TraceDataAttribute (
-                parentType->Name.NamespaceName,
+                parentType.Name.NamespaceName,
                 funcName,
-                parentType->Name.TypeName,
+                parentType.Name.TypeName,
                 funcDef.Name.FileName.Span.GetPooledString ()
             );
 
-            funcDataAttr = FunctionDataAttribute (funcData, parentType);
+            funcDataAttr = FunctionDataAttribute (funcInfo, compileData.ToTypeInfo (parentType));
         } else {
             traceDataAttr = TraceDataAttribute (
-                namespaceData.NamespaceName,
+                nsData.NamespaceName,
                 funcName,
                 funcDef.Name.FileName.Span.GetPooledString ()
             );
 
-            funcDataAttr = FunctionDataAttribute (funcData);
+            funcDataAttr = FunctionDataAttribute (funcInfo);
         }
 
         irWriter.EndFunction (List<ESIR_Attribute> (traceDataAttr, funcDataAttr));

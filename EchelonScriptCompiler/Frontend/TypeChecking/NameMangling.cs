@@ -7,15 +7,18 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+using System;
+using System.Diagnostics;
 using ChronosLib.Pooled;
 using EchelonScriptCommon.Data;
 using EchelonScriptCommon.Data.Types;
+using EchelonScriptCompiler.Frontend.Data;
 
 namespace EchelonScriptCompiler.Frontend;
 
 internal unsafe static partial class Compiler_TypeChecking {
-    private static ES_Identifier MangleTypeName (ref PassData passData, ES_FullyQualifiedName fqn) {
-        if (fqn.NamespaceName.Equals (passData.Env.GlobalsNamespace))
+    private static ES_Identifier MangleTypeName (ref CompileData compileData, ES_FullyQualifiedName fqn) {
+        if (fqn.NamespaceName.Equals (compileData.Env.GlobalsNamespace))
             return fqn.TypeName;
 
         using var charsArray = new StructPooledList<char> (CL_ClearMode.Auto);
@@ -23,31 +26,59 @@ internal unsafe static partial class Compiler_TypeChecking {
         charsArray.AddRange ("::");
         charsArray.AddRange (fqn.TypeName.GetCharsSpan ());
 
-        return passData.Env.IdPool.GetIdentifier (charsArray.Span);
+        return compileData.IdPool.GetIdentifier (charsArray.Span);
     }
 
-    private static ES_Identifier MangleTypeName (ref PassData passData, ES_TypeInfo* type)
-        => MangleTypeName (ref passData, type->Name);
+    private static ES_Identifier MangleTypeName (ref CompileData compileData, ESC_TypeData type)
+        => MangleTypeName (ref compileData, type.Name);
 
-    private static void MangleTypeName (ref PassData passData, ES_TypeInfo* type, ref StructPooledList<char> list) {
-        var fqn = type->Name;
+    private static void MangleTypeName (ref CompileData compileData, ESC_TypeRef type, ref StructPooledList<char> list) {
+        Debug.Assert (type.Type is not null);
+        var fqn = type.Type.Name;
 
-        if (!fqn.NamespaceName.Equals (passData.Env.GlobalsNamespace)) {
+        bool closingParens;
+        switch (type.Constness) {
+            case ESC_Constness.Const:
+                list.AddRange ("const(");
+                closingParens = true;
+                break;
+
+            case ESC_Constness.Immutable:
+                list.AddRange ("immutable(");
+                closingParens = true;
+                break;
+
+            case ESC_Constness.Mutable:
+                closingParens = false;
+                break;
+
+            default:
+                throw new NotImplementedException ("Constness not implemented.");
+        }
+
+        if (!fqn.NamespaceName.Equals (compileData.Env.GlobalsNamespace)) {
             list.AddRange (fqn.NamespaceName.GetCharsSpan ());
             list.AddRange ("::");
         }
         list.AddRange (fqn.TypeName.GetCharsSpan ());
+
+        if (closingParens)
+            list.Add (')');
     }
 
-    private static ES_Identifier MangleFunctionName (ref PassData passData, ES_FunctionData* func) {
+    private static ES_Identifier MangleFunctionName (ref CompileData compileData, ESC_Function func) {
         var charsList = new StructPooledList<char> (CL_ClearMode.Auto);
 
         try {
-            charsList.AddRange (func->Name.NamespaceName.GetCharsSpan ());
+            charsList.AddRange ((func.Parent.Type?.Name.NamespaceName ?? func.Parent.NamespaceName).GetCharsSpan ());
             charsList.AddRange ("::");
-            charsList.AddRange (func->Name.TypeName.GetCharsSpan ());
+            if (func.Parent.Type is not null) {
+                charsList.AddRange (func.Parent.Type.Name.TypeName.GetCharsSpan ());
+                charsList.Add ('.');
+            }
+            charsList.AddRange (func.Name.GetCharsSpan ());
 
-            var protoArgs = func->FunctionType->ArgumentsList.Span;
+            var protoArgs = func.Prototype.Arguments;
             if (protoArgs.Length > 0) {
                 charsList.Add ('$');
 
@@ -68,18 +99,18 @@ internal unsafe static partial class Compiler_TypeChecking {
                             break;
                     }
 
-                    MangleTypeName (ref passData, arg.ValueType, ref charsList);
+                    MangleTypeName (ref compileData, arg.ValueType, ref charsList);
                 }
             }
 
-            return passData.Env.IdPool.GetIdentifier (charsList.Span);
+            return compileData.IdPool.GetIdentifier (charsList.Span);
         } finally {
             charsList.Dispose ();
         }
     }
 
     private static ES_Identifier MangleStaticVar (
-        ref PassData passData, ES_FullyQualifiedName typeName, ES_Identifier varName
+        ref CompileData compileData, ES_FullyQualifiedName typeName, ES_Identifier varName
     ) {
         using var charsArr = new StructPooledList<char> (CL_ClearMode.Auto);
 
@@ -89,19 +120,19 @@ internal unsafe static partial class Compiler_TypeChecking {
         charsArr.Add ('.');
         charsArr.AddRange (varName.GetCharsSpan ());
 
-        return passData.IdPool.GetIdentifier (charsArr.Span);
+        return compileData.IdPool.GetIdentifier (charsArr.Span);
     }
 
-    private static ES_Identifier MangleDefStaticConstructor (ref PassData passData, ES_FullyQualifiedName typeFQN) {
+    private static ES_Identifier MangleDefStaticConstructor (ref CompileData compileData, ES_FullyQualifiedName typeFQN) {
         const string defConsName = ES_Constants.DefaultStaticConstructorName;
 
-        var fqnMangle = MangleTypeName (ref passData, typeFQN);
+        var fqnMangle = MangleTypeName (ref compileData, typeFQN);
         using var chars = new StructPooledList<char> (CL_ClearMode.Auto);
 
         chars.AddRange (fqnMangle.GetCharsSpan ());
         chars.AddRange ("$$");
         chars.AddRange (defConsName);
 
-        return passData.IdPool.GetIdentifier (chars.Span);
+        return compileData.IdPool.GetIdentifier (chars.Span);
     }
 }

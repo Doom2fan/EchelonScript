@@ -43,8 +43,6 @@ public class TextMarkerService : IBackgroundRenderer, IVisualLineTransformer {
 
     #endregion
 
-    #region ================== Constructors
-
     public TextMarkerService (TextEditor textEd) {
         textEditor = textEd;
         markers = new TextSegmentCollection<TextMarker> (textEd.Document);
@@ -54,8 +52,6 @@ public class TextMarkerService : IBackgroundRenderer, IVisualLineTransformer {
         textView.LineTransformers.Add (this);
         textView.Services.AddService (typeof (TextMarkerService), this);
     }
-
-    #endregion
 
     #region ================== Instance methods
 

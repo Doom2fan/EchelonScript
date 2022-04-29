@@ -93,11 +93,11 @@ public struct ES_ArrayIndex {
     [ES_ExcludeFromStackTrace]
     [DebuggerNonUserCode]
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
-    public static void CheckBounds (int dimCount, int maxBounds, int val) {
+    public static void CheckBounds (int rank, int maxBounds, int val) {
         if (val < 0)
-            throw new EchelonScriptOutOfBoundsException ($"Array access out of bounds. Negative index, index #{dimCount} = {val}.");
+            throw new EchelonScriptOutOfBoundsException ($"Array access out of bounds. Negative index, index #{rank} = {val}.");
         else if (val >= maxBounds)
-            throw new EchelonScriptOutOfBoundsException ($"Array access out of bounds. Index #{dimCount} = {val}, max = {maxBounds}.");
+            throw new EchelonScriptOutOfBoundsException ($"Array access out of bounds. Index #{rank} = {val}, max = {maxBounds}.");
     }
 }
 
@@ -122,7 +122,7 @@ public unsafe struct ES_ArrayHeader {
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     public static int GetArraySize ([NotNull] ES_ObjectAddress arrayPointer) {
-        var arrayType = (ES_ArrayTypeData*) arrayPointer.Header->TypeData;
+        var arrayType = (ES_ArrayData*) arrayPointer.Header->TypeData;
         var arrayHeader = (ES_ArrayHeader*) arrayPointer.Address;
 
         return (
@@ -133,6 +133,6 @@ public unsafe struct ES_ArrayHeader {
     }
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
-    public static int GetArrayHeaderSize (int dimsCount)
-        => sizeof (ES_ArrayHeader) + dimsCount * sizeof (ES_ArrayIndex);
+    public static int GetArrayHeaderSize (int rank)
+        => sizeof (ES_ArrayHeader) + rank * sizeof (ES_ArrayIndex);
 }

@@ -32,8 +32,6 @@ public partial class TokenizerTest : UserControl {
 
     #endregion
 
-    #region ================== Constructors
-
     public TokenizerTest () {
         InitializeComponent ();
 
@@ -41,8 +39,6 @@ public partial class TokenizerTest : UserControl {
         tokenizer = new EchelonScriptTokenizer (errors);
         textMarkerService = new TextMarkerService (codeText);
     }
-
-    #endregion
 
     #region ================== Instance methods
 

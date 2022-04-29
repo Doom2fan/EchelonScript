@@ -9,75 +9,55 @@
 
 using System;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using ChronosLib.Pooled;
-using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.Utilities;
-using EchelonScriptCompiler.CompilerCommon;
+using EchelonScriptCompiler.Frontend.Data;
 
 namespace EchelonScriptCompiler.Frontend;
 
-public unsafe partial class CompilerFrontend {
-    private void TypeSizing () {
-        Debug.Assert (Environment is not null);
-        Debug.Assert (EnvironmentBuilder is not null);
-
-        var refListRefType = EnvironmentBuilder.ReferenceTypeRefList;
-        foreach (var nmData in Environment.Namespaces.Values) {
-            foreach (var type in nmData.Types) {
-                if (TypeSizing_AnalyzeCycles (type))
+internal static partial class Compiler_TypeSizing {
+    public static void SizeTypes (ref CompileData compileData) {
+        foreach (var nmData in compileData.Namespaces.Values) {
+            foreach (var type in nmData.Types.Values) {
+                if (TypeSizing_AnalyzeCycles (ref compileData, type))
                     continue;
 
-                TypeSizing_SizeType (type, refListRefType);
+                TypeSizing_SizeType (ref compileData, type);
             }
         }
     }
 
-    private void TypeSizing_SizeType ([NotNull] ES_TypeInfo* type, ArrayPointer<nint> refListRefType) {
-        Debug.Assert (Environment is not null);
-        Debug.Assert (EnvironmentBuilder is not null);
-
-        if (type->Flags.HasFlag (ES_TypeFlag.Analyzed))
+    private static void TypeSizing_SizeType (ref CompileData compileData, ESC_TypeData type) {
+        if (type.Flags.HasFlag (ESC_TypeFlag.Analyzed))
             return;
 
-        var hasRefs = !type->Flags.HasFlag (ES_TypeFlag.NoRefs);
+        var hasRefs = !type.Flags.HasFlag (ESC_TypeFlag.NoRefs);
 
-        switch (type->TypeTag) {
-            case ES_TypeTag.Array:
-            case ES_TypeTag.Interface:
-            case ES_TypeTag.Reference: {
-                type->RuntimeSize = sizeof (void*);
-                type->RefsList = refListRefType;
-                type->Flags &= ~ES_TypeFlag.NoRefs;
-                type->Flags |= ES_TypeFlag.Analyzed;
+        switch (type) {
+            case ESC_TypeArray:
+            case ESC_TypeReference:
+            case ESC_TypeInterface: {
+                type.Flags &= ~ESC_TypeFlag.NoRefs;
+                type.Flags |= ESC_TypeFlag.Analyzed;
                 return;
             }
 
-            case ES_TypeTag.Void:
-            case ES_TypeTag.Bool:
-            case ES_TypeTag.Int:
-            case ES_TypeTag.Float:
-            case ES_TypeTag.FuncPrototype:
-            case ES_TypeTag.Enum:
-                type->Flags |= ES_TypeFlag.Analyzed;
+            case ESC_TypeVoid:
+            case ESC_TypeBool:
+            case ESC_TypeInt:
+            case ESC_TypeFloat:
+            case ESC_TypeEnum:
+                type.Flags |= ESC_TypeFlag.NoRefs;
+                type.Flags |= ESC_TypeFlag.Analyzed;
                 return;
 
-            case ES_TypeTag.Const:
-            case ES_TypeTag.Immutable: {
-                var constData = (ES_ConstData*) type;
-
-                TypeSizing_SizeType (constData->InnerType, refListRefType);
-
-                type->RuntimeSize = constData->InnerType->RuntimeSize;
-                type->RefsList = constData->InnerType->RefsList;
-
-                type->Flags = constData->InnerType->Flags | ES_TypeFlag.Analyzed;
-
+            case ESC_TypePrototype:
+                type.Flags |= ESC_TypeFlag.NoNew;
+                type.Flags |= ESC_TypeFlag.Analyzed;
                 return;
-            }
 
-            case ES_TypeTag.Struct:
-            case ES_TypeTag.Class:
+            case ESC_TypeStruct:
+            case ESC_TypeClass:
                 break;
 
             default:
@@ -86,60 +66,68 @@ public unsafe partial class CompilerFrontend {
 
         using var refsList = new StructPooledList<nint> (CL_ClearMode.Auto);
         var curOffs = 0;
-        foreach (var memberAddr in type->MembersList.MembersList.Span) {
-            var member = memberAddr.Address;
+        foreach (var member in type.GetMembers ()) {
+            switch (member) {
+                case ESC_TypeMember_Field memberField: {
+                    var fieldType = memberField.FieldType.Type;
+                    Debug.Assert (fieldType is not null);
 
-            if (member->MemberType != ES_MemberType.Field)
-                continue;
+                    TypeSizing_SizeType (ref compileData, fieldType);
 
-            if (member->Flags.HasFlag (ES_MemberFlags.Static))
-                continue;
+                    if (memberField.Flags.HasFlag (ESC_MemberFlags.Static))
+                        continue;
 
-            var field = (ES_MemberData_Variable*) member;
+                    memberField.Offset = curOffs;
+                    curOffs += fieldType.GetRuntimeSize ();
 
-            field->Offset = curOffs;
+                    foreach (var refOffs in fieldType.GetGCRefs ())
+                        refsList.Add (memberField.Offset + refOffs);
 
-            TypeSizing_SizeType (field->Type, refListRefType);
+                    hasRefs |= !fieldType.Flags.HasFlag (ESC_TypeFlag.NoRefs);
+                    break;
+                }
 
-            curOffs += field->Type->RuntimeSize;
+                case ESC_TypeMember_Function:
+                    break;
 
-            foreach (var refOffs in field->Type->RefsList.Span)
-                refsList.Add (field->Offset + refOffs);
-
-            hasRefs |= !field->Type->Flags.HasFlag (ES_TypeFlag.NoRefs);
+                default:
+                    throw new NotImplementedException ("Member type not implemented.");
+            }
         }
 
-        type->RuntimeSize = curOffs;
-        type->RefsList = ArrayPointer<nint>.Null;
-        if (refsList.Count > 0) {
-            type->RefsList = EnvironmentBuilder.MemoryManager.GetArrayAligned<nint> (refsList.Count, sizeof (nint));
-            refsList.Span.CopyTo (type->RefsList.Span);
+        switch (type) {
+            case ESC_TypeAggregate typeAggregate: {
+                typeAggregate.RuntimeSize = curOffs;
+                typeAggregate.GCRefs = refsList.ToArray ();
+                break;
+            }
+
+            default:
+                throw new NotImplementedException ("Type not implemented.");
         }
 
-        type->Flags &= ~ES_TypeFlag.NoRefs;
+        type.Flags &= ~ESC_TypeFlag.NoRefs;
         if (!hasRefs)
-            type->Flags |= ES_TypeFlag.NoRefs;
+            type.Flags |= ESC_TypeFlag.NoRefs;
 
-        type->Flags |= ES_TypeFlag.Analyzed;
+        type.Flags |= ESC_TypeFlag.Analyzed;
     }
 
-    private bool TypeSizing_AnalyzeCycles ([NotNull] ES_TypeInfo* type) {
-        switch (type->TypeTag) {
-            case ES_TypeTag.Struct:
-            case ES_TypeTag.Class:
+    private static bool TypeSizing_AnalyzeCycles (ref CompileData compileData, ESC_TypeData type) {
+        switch (type) {
+            case ESC_TypeStruct:
+            case ESC_TypeClass:
                 break;
 
-            case ES_TypeTag.Void:
-            case ES_TypeTag.Bool:
-            case ES_TypeTag.Int:
-            case ES_TypeTag.Float:
-            case ES_TypeTag.FuncPrototype:
-            case ES_TypeTag.Enum:
-            case ES_TypeTag.Interface:
-            case ES_TypeTag.Reference:
-            case ES_TypeTag.Const:
-            case ES_TypeTag.Immutable:
-            case ES_TypeTag.Array:
+            case ESC_TypeVoid:
+            case ESC_TypeBool:
+            case ESC_TypeInt:
+            case ESC_TypeFloat:
+            case ESC_TypePrototype:
+            case ESC_TypeEnum:
+            case ESC_TypeInterface:
+            case ESC_TypeReference:
+            case ESC_TypeArray:
                 return false;
 
             default:
@@ -147,80 +135,84 @@ public unsafe partial class CompilerFrontend {
         }
 
         var hasCycles = false;
-        foreach (var memberAddr in type->MembersList.MembersList.Span) {
-            var member = memberAddr.Address;
+        foreach (var member in type.GetMembers ()) {
+            switch (member) {
+                case ESC_TypeMember_Field memberField: {
+                    if (member.Flags.HasFlag (ESC_MemberFlags.Static))
+                        continue;
 
-            if (member->MemberType != ES_MemberType.Field)
-                continue;
+                    var fieldType = memberField.FieldType.Type;
+                    Debug.Assert (fieldType is not null);
 
-            if (member->Flags.HasFlag (ES_MemberFlags.Static))
-                continue;
+                    if (TypeSizing_AnalyzeCycles_Traverse (ref compileData, fieldType, type)) {
+                        compileData.ErrorList.Add (ES_FrontendErrors.GenFieldCausesCycle (
+                            member.Name.GetCharsSpan ().GetPooledString (),
+                            compileData.GetNiceNameString (new (ESC_Constness.Mutable, type), true),
+                            type.SourceUnit.GetCharsSpan ()
+                        ));
 
-            var field = (ES_MemberData_Variable*) member;
+                        hasCycles = true;
+                    }
 
-            if (TypeSizing_AnalyzeCycles_Traverse (field->Type, type)) {
-                if (!EnvironmentBuilder!.PointerAstMap.TryGetValue ((IntPtr) field, out var astNode))
-                    Debug.Fail ("PointerAstMap is missing field mappings.");
+                    break;
+                }
 
-                var fieldAstNode = astNode as ES_AstMemberVarDefinition;
-                Debug.Assert (fieldAstNode is not null);
+                case ESC_TypeMember_Function:
+                    break;
 
-                errorList.Add (ES_FrontendErrors.GenFieldCausesCycle (
-                    member->Name.GetCharsSpan ().GetPooledString (),
-                    Environment!.GetNiceTypeNameString (type, true),
-                    fieldAstNode.Name
-                ));
-
-                hasCycles = true;
+                default:
+                    throw new NotImplementedException ("Member type not implemented.");
             }
         }
 
         return hasCycles;
     }
 
-    private bool TypeSizing_AnalyzeCycles_Traverse ([NotNull] ES_TypeInfo* innerType, [NotNull] ES_TypeInfo* containingType) {
-        switch (innerType->TypeTag) {
-            case ES_TypeTag.Struct:
-            case ES_TypeTag.Class:
+    private static bool TypeSizing_AnalyzeCycles_Traverse (ref CompileData compileData, ESC_TypeData innerType, ESC_TypeData containingType) {
+        switch (innerType) {
+            case ESC_TypeStruct:
+            case ESC_TypeClass:
                 break;
 
-            case ES_TypeTag.Const:
-            case ES_TypeTag.Immutable: {
-                var constData = (ES_ConstData*) innerType;
-                return TypeSizing_AnalyzeCycles_Traverse (constData->InnerType, containingType);
-            }
-
-            case ES_TypeTag.Array:
-            case ES_TypeTag.Void:
-            case ES_TypeTag.Bool:
-            case ES_TypeTag.Int:
-            case ES_TypeTag.Float:
-            case ES_TypeTag.FuncPrototype:
-            case ES_TypeTag.Enum:
-            case ES_TypeTag.Interface:
-            case ES_TypeTag.Reference:
+            case ESC_TypeArray:
+            case ESC_TypeVoid:
+            case ESC_TypeBool:
+            case ESC_TypeInt:
+            case ESC_TypeFloat:
+            case ESC_TypePrototype:
+            case ESC_TypeEnum:
+            case ESC_TypeInterface:
+            case ESC_TypeReference:
                 return false;
 
             default:
                 throw new NotImplementedException ("Type not implemented yet.");
         }
 
-        foreach (var memberAddr in innerType->MembersList.MembersList.Span) {
-            var member = memberAddr.Address;
+        foreach (var member in innerType.GetMembers ()) {
+            switch (member) {
+                case ESC_TypeMember_Field memberField: {
+                    if (member.Flags.HasFlag (ESC_MemberFlags.Static))
+                        continue;
 
-            if (member->MemberType != ES_MemberType.Field)
-                continue;
+                    var fieldType = memberField.FieldType.Type;
+                    Debug.Assert (fieldType is not null);
 
-            if (member->Flags.HasFlag (ES_MemberFlags.Static))
-                continue;
+                    if (fieldType == containingType)
+                        return true;
 
-            var field = (ES_MemberData_Variable*) member;
+                    if (TypeSizing_AnalyzeCycles_Traverse (ref compileData, fieldType, containingType))
+                        return true;
 
-            if (field->Type == containingType)
-                return true;
+                    break;
+                }
 
-            if (TypeSizing_AnalyzeCycles_Traverse (field->Type, containingType))
-                return true;
+                case ESC_TypeMember_Function:
+                    break;
+
+                default:
+                    throw new NotImplementedException ("Member type not implemented.");
+            }
         }
 
         return false;

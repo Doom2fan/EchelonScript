@@ -86,7 +86,7 @@ unsafe partial class ES_GarbageCollector {
                             allocSize = sizeof (ES_ObjectHeader) + obj.Header->TypeData->RuntimeSize;
                         else {
                             var arrayHeader = (ES_ArrayHeader*) obj.Address;
-                            var arrayType = (ES_ArrayTypeData*) objHeader->TypeData;
+                            var arrayType = (ES_ArrayData*) objHeader->TypeData;
 
                             allocSize = ES_ArrayHeader.GetArraySize (obj);
                         }
@@ -112,7 +112,7 @@ unsafe partial class ES_GarbageCollector {
                         greySet.Add (objAddress);
                     }
                 } else {
-                    var arrayType = (ES_ArrayTypeData*) objHeader->TypeData;
+                    var arrayType = (ES_ArrayData*) objHeader->TypeData;
                     var arrayHeader = (ES_ArrayHeader*) obj.Address;
                     var arrayData = (byte*) ES_ArrayHeader.GetArrayDataPointer (arrayHeader);
 

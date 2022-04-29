@@ -55,7 +55,7 @@ public unsafe sealed partial class RoslynCompilerBackend {
         );
     }
 
-    private static void CompileCode_Array (ref PassData passData, ES_ArrayTypeData* arrayType) {
+    private static void CompileCode_Array (ref PassData passData, ES_ArrayData* arrayType) {
         using var memberTypes = new StructPooledList<SyntaxNode> (CL_ClearMode.Auto);
 
         var typeIndex = GetRoslynType (passData.Env.GetArrayIndexType ());
@@ -77,7 +77,7 @@ public unsafe sealed partial class RoslynCompilerBackend {
         );
 
         // Add the dimension lengths.
-        for (var i = 0; i < arrayType->DimensionsCount; i++) {
+        for (var i = 0; i < arrayType->Rank; i++) {
             var dimId = Identifier (GetArrayDimensionMember (i));
             memberTypes.Add (
                 SimpleFieldDeclaration (
@@ -87,7 +87,7 @@ public unsafe sealed partial class RoslynCompilerBackend {
         }
 
         // Add the total length.
-        var lengthName = arrayType->DimensionsCount < 2 ? "Length" : "TotalLength";
+        var lengthName = arrayType->Rank < 2 ? "Length" : "TotalLength";
         memberTypes.Add (
             PropertyDeclaration (typeIndex, lengthName).WithAccessorList (AccessorList (SingletonList (
                 basicGetter.WithExpressionBody (ArrowExpressionClause (
@@ -114,7 +114,7 @@ public unsafe sealed partial class RoslynCompilerBackend {
         memberTypes.Add (CompileCode_Array_IndexFunc (ref passData, arrayType));
 
         // Add the concat function.
-        if (arrayType->DimensionsCount == 1)
+        if (arrayType->Rank == 1)
             memberTypes.Add (CompileCode_Array_ConcatFunc (ref passData, arrayType));
 
         // Create the declaration.
@@ -138,7 +138,7 @@ public unsafe sealed partial class RoslynCompilerBackend {
 
     private static (MethodDeclarationSyntax, MethodDeclarationSyntax) CompileCode_Array_AllocFunc (
         ref PassData passData,
-        ES_ArrayTypeData* arrayType
+        ES_ArrayData* arrayType
     ) {
         var typeIndex = GetRoslynType (passData.Env.GetArrayIndexType ());
         var typeIntPtr = IdentifierName (nameof (IntPtr));
@@ -147,13 +147,13 @@ public unsafe sealed partial class RoslynCompilerBackend {
         var elemIsRef = arrayType->ElementType->TypeTag == ES_TypeTag.Reference;
         var elemRoslynType = GetRoslynType (arrayType->ElementType);
 
-        var dimsCount = arrayType->DimensionsCount;
+        var arrRank = arrayType->Rank;
 
-        using var dimSizesExpressions = PooledArray<SyntaxNodeOrToken>.GetArray (dimsCount * 2 - 1);
+        using var dimSizesExpressions = PooledArray<SyntaxNodeOrToken>.GetArray (arrRank * 2 - 1);
 
         /** Generate the parameters list **/
         using var parametersList = new StructPooledList<SyntaxNodeOrToken> (CL_ClearMode.Auto);
-        parametersList.EnsureCapacity (1 + dimsCount * 2 + 2);
+        parametersList.EnsureCapacity (1 + arrRank * 2 + 2);
 
         // [Params] "pinned" bool.
         const string paramNamePinBool = "pinned";
@@ -161,11 +161,11 @@ public unsafe sealed partial class RoslynCompilerBackend {
             .WithType (PredefinedType (Token (SyntaxKind.BoolKeyword)))
         );
 
-        // Add the rank size params.
+        // Add the dimension size params.
         const string paramNameDimSizePrefix = "dimSize";
         using var dimSizeNameArr = PooledArray<char>.GetArray (paramNameDimSizePrefix.Length + 3);
         paramNameDimSizePrefix.AsSpan ().CopyTo (dimSizeNameArr.Span);
-        for (var i = 0; i < dimsCount; i++) {
+        for (var i = 0; i < arrRank; i++) {
             if (!i.TryFormat (dimSizeNameArr.Span [^3..], out var charsWritten))
                 Debug.Fail ("Too many array dimensions.");
 
@@ -175,7 +175,7 @@ public unsafe sealed partial class RoslynCompilerBackend {
             parametersList.Add (Parameter (Identifier (dimSizeParamName)).WithType (typeIndex));
 
             dimSizesExpressions.Span [i * 2] = IdentifierName (dimSizeParamName);
-            if (i < dimsCount - 1)
+            if (i < arrRank - 1)
                 dimSizesExpressions.Span [i * 2 + 1] = Token (SyntaxKind.CommaToken);
         }
 
@@ -186,10 +186,10 @@ public unsafe sealed partial class RoslynCompilerBackend {
 
         /** Generate the args list **/
         using var argsList = new StructPooledList<SyntaxNodeOrToken> (CL_ClearMode.Auto);
-        argsList.EnsureCapacity (3 + dimsCount * 2 + 2);
+        argsList.EnsureCapacity (3 + arrRank * 2 + 2);
 
         // [Args] Type pointer.
-        var pointerTypeSyntax = PointerType (IdentifierName (nameof (ES_ArrayTypeData)));
+        var pointerTypeSyntax = PointerType (IdentifierName (nameof (ES_ArrayData)));
         argsList.Add (Argument (PointerLiteral (arrayType, pointerTypeSyntax)));
 
         // [Args] Dimensions.
@@ -265,7 +265,7 @@ public unsafe sealed partial class RoslynCompilerBackend {
         return (allocFuncDefBasic, allocFuncDefElemDefault);
     }
 
-    private static ExpressionSyntax CompileCode_GetArrayBaseExpr (ES_ArrayTypeData* arrayType, ExpressionSyntax arrayPtr) {
+    private static ExpressionSyntax CompileCode_GetArrayBaseExpr (ES_ArrayData* arrayType, ExpressionSyntax arrayPtr) {
         var arrayArgumentList = ArgumentList (SingletonSeparatedList (Argument (arrayPtr)));
 
         var elemPtrRoslynType = PointerType (GetRoslynType (arrayType->ElementType));
@@ -285,11 +285,11 @@ public unsafe sealed partial class RoslynCompilerBackend {
         );
     }
 
-    private static MethodDeclarationSyntax CompileCode_Array_IndexFunc (ref PassData passData, ES_ArrayTypeData* arrayType) {
+    private static MethodDeclarationSyntax CompileCode_Array_IndexFunc (ref PassData passData, ES_ArrayData* arrayType) {
         const string arrayArgName = "arrayPtr";
 
         var elemType = arrayType->ElementType;
-        var dimCount = arrayType->DimensionsCount;
+        var rank = arrayType->Rank;
 
         var elemRoslynType = GetRoslynType (elemType);
         var elemPtrRoslynType = PointerType (elemRoslynType);
@@ -304,12 +304,12 @@ public unsafe sealed partial class RoslynCompilerBackend {
         // Generate the null check.
         funcBody.Add (ExpressionStatement (CompileCode_NullCheck (IdentifierName (arrayArgName))));
 
-        // Calculate the rank sizes.
-        using var rankSizeExprs = PooledArray<ExpressionSyntax>.GetArray (dimCount);
-        var rankSizeExprsSpan = rankSizeExprs.Span;
+        // Calculate the dimension sizes.
+        using var dimSizeExprs = PooledArray<ExpressionSyntax>.GetArray (rank);
+        var dimSizeExprsSpan = dimSizeExprs.Span;
 
-        for (var i = 0; i < dimCount; i++) {
-            rankSizeExprsSpan [i] = MemberAccessExpression (
+        for (var i = 0; i < rank; i++) {
+            dimSizeExprsSpan [i] = MemberAccessExpression (
                 SyntaxKind.PointerMemberAccessExpression,
                 IdentifierName (arrayArgName),
                 IdentifierName (GetArrayDimensionMember (i))
@@ -322,9 +322,9 @@ public unsafe sealed partial class RoslynCompilerBackend {
         // Generate the parameters, dimension expressions and bounds checks.
         const string paramNameDimValuePrefix = "dimVal";
         using var dimValueNameArr = PooledArray<char>.GetArray (paramNameDimValuePrefix.Length + 3);
-        using var rankExprs = PooledArray<ExpressionSyntax>.GetArray (dimCount);
+        using var dimExprs = PooledArray<ExpressionSyntax>.GetArray (rank);
         paramNameDimValuePrefix.AsSpan ().CopyTo (dimValueNameArr.Span);
-        for (var i = 0; i < dimCount; i++) {
+        for (var i = 0; i < rank; i++) {
             if (!i.TryFormat (dimValueNameArr.Span [^3..], out var charsWritten))
                 Debug.Fail ("Too many array dimensions.");
 
@@ -332,24 +332,24 @@ public unsafe sealed partial class RoslynCompilerBackend {
 
             paramsList.Add (Parameter (Identifier (dimValueParamName)).WithType (typeIndex));
 
-            var rankExpr = IdentifierName (dimValueParamName);
-            rankExprs.Span [i] = rankExpr;
+            var dimExpr = IdentifierName (dimValueParamName);
+            dimExprs.Span [i] = dimExpr;
 
-            funcBody.Add (ExpressionStatement (CompileCode_BoundsCheck (i, rankSizeExprsSpan [i], rankExpr)));
+            funcBody.Add (ExpressionStatement (CompileCode_BoundsCheck (i, dimSizeExprsSpan [i], dimExpr)));
         }
 
         // Get the base address of the array's data.
         var baseAddrExpr = CompileCode_GetArrayBaseExpr (arrayType, IdentifierName (arrayArgName));
 
         // Calculate the flattened index.
-        var flattenedIndex = rankExprs.Span [0];
-        for (var i = 1; i < dimCount; i++) {
-            var rankIndex = rankExprs.Span [i];
+        var flattenedIndex = dimExprs.Span [0];
+        for (var i = 1; i < rank; i++) {
+            var dimIndex = dimExprs.Span [i];
 
             for (var j = 0; j < i; j++)
-                rankIndex = BinaryExpression (SyntaxKind.MultiplyExpression, rankIndex, rankSizeExprsSpan [j]);
+                dimIndex = BinaryExpression (SyntaxKind.MultiplyExpression, dimIndex, dimSizeExprsSpan [j]);
 
-            flattenedIndex = BinaryExpression (SyntaxKind.AddExpression, flattenedIndex, rankIndex);
+            flattenedIndex = BinaryExpression (SyntaxKind.AddExpression, flattenedIndex, dimIndex);
         }
 
         funcBody.Add (ReturnStatement (
@@ -382,7 +382,7 @@ public unsafe sealed partial class RoslynCompilerBackend {
             )
         );
     }
-    private static MethodDeclarationSyntax CompileCode_Array_ConcatFunc (ref PassData passData, ES_ArrayTypeData* arrayType) {
+    private static MethodDeclarationSyntax CompileCode_Array_ConcatFunc (ref PassData passData, ES_ArrayData* arrayType) {
         static ExpressionSyntax ArrayLength (ExpressionSyntax arr) {
             return MemberAccessExpression (
                 SyntaxKind.PointerMemberAccessExpression,
@@ -391,7 +391,7 @@ public unsafe sealed partial class RoslynCompilerBackend {
             );
         }
 
-        static ExpressionSyntax CreateSpan (ExpressionSyntax arr, ES_ArrayTypeData* arrType) {
+        static ExpressionSyntax CreateSpan (ExpressionSyntax arr, ES_ArrayData* arrType) {
             var baseAddrExpr = CompileCode_GetArrayBaseExpr (arrType, arr);
             return Roslyn_CreateSpan (GetRoslynType (arrType->ElementType), baseAddrExpr, ArrayLength (arr));
         }

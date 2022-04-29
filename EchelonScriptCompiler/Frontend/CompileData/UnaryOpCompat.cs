@@ -9,41 +9,37 @@
 
 using System;
 using System.Diagnostics;
-using EchelonScriptCommon.Data.Types;
-using EchelonScriptCompiler.CompilerCommon;
-using EchelonScriptCompiler.Data;
+using EchelonScriptCompiler.Frontend.Data;
 
 namespace EchelonScriptCompiler.Frontend;
 
-public unsafe sealed partial class CompilerFrontend {
-    internal static bool UnaryOpCompat (
-        EchelonScriptEnvironment env,
-        ES_TypeInfo* exprType,
+internal ref partial struct CompileData {
+    public bool UnaryOpCompat (
+        ESC_TypeRef exprType,
         SimpleUnaryExprType op,
-        out ES_TypeInfo* finalType,
+        out ESC_TypeRef finalType,
         out bool isConst
     ) {
-        finalType = env.TypeUnknownValue;
+        finalType = GetUnknownType (ESC_Constness.Mutable);
         isConst = false;
 
-        return exprType->TypeTag switch {
-            ES_TypeTag.Int => UnaryOpCompat_Int (env, exprType, op, out finalType, out isConst),
-            ES_TypeTag.Bool => UnaryOpCompat_Bool (env, exprType, op, out finalType, out isConst),
-            ES_TypeTag.Float => UnaryOpCompat_Float (env, exprType, op, out finalType, out isConst),
-            ES_TypeTag.Reference => UnaryOpCompat_Ref (env, exprType, op, out finalType, out isConst),
+        return exprType.Type switch {
+            ESC_TypeInt => UnaryOpCompat_Int (exprType, op, out finalType, out isConst),
+            ESC_TypeBool => UnaryOpCompat_Bool (exprType, op, out finalType, out isConst),
+            ESC_TypeFloat => UnaryOpCompat_Float (exprType, op, out finalType, out isConst),
+            ESC_TypeReference => UnaryOpCompat_Ref (exprType, op, out finalType, out isConst),
 
             _ => false,
         };
     }
 
-    private static bool UnaryOpCompat_Int (
-        EchelonScriptEnvironment env,
-        ES_TypeInfo* exprType,
+    private bool UnaryOpCompat_Int (
+        ESC_TypeRef exprType,
         SimpleUnaryExprType op,
-        out ES_TypeInfo* finalType,
+        out ESC_TypeRef finalType,
         out bool isConst
     ) {
-        Debug.Assert (exprType->TypeTag == ES_TypeTag.Int);
+        Debug.Assert (exprType.Type is ESC_TypeInt);
 
         switch (op) {
             case SimpleUnaryExprType.Positive:
@@ -53,14 +49,14 @@ public unsafe sealed partial class CompilerFrontend {
                 return true;
 
             case SimpleUnaryExprType.Negative: {
-                var intData = (ES_IntTypeData*) exprType;
+                var intData = (ESC_TypeInt) exprType.Type;
 
-                if (!intData->Unsigned) {
+                if (!intData.Unsigned) {
                     finalType = exprType;
                     isConst = true;
                     return true;
                 } else {
-                    finalType = env.TypeUnknownValue;
+                    finalType = GetUnknownType (ESC_Constness.Mutable);
                     isConst = false;
                     return false;
                 }
@@ -68,7 +64,7 @@ public unsafe sealed partial class CompilerFrontend {
 
             case SimpleUnaryExprType.Dereference:
             case SimpleUnaryExprType.LogicalNot:
-                finalType = env.TypeUnknownValue;
+                finalType = GetUnknownType (ESC_Constness.Mutable);
                 isConst = false;
                 return false;
 
@@ -77,14 +73,13 @@ public unsafe sealed partial class CompilerFrontend {
         }
     }
 
-    private static bool UnaryOpCompat_Bool (
-        EchelonScriptEnvironment env,
-        ES_TypeInfo* exprType,
+    private bool UnaryOpCompat_Bool (
+        ESC_TypeRef exprType,
         SimpleUnaryExprType op,
-        out ES_TypeInfo* finalType,
+        out ESC_TypeRef finalType,
         out bool isConst
     ) {
-        Debug.Assert (exprType->TypeTag == ES_TypeTag.Bool);
+        Debug.Assert (exprType.Type is ESC_TypeBool);
 
         switch (op) {
             case SimpleUnaryExprType.LogicalNot:
@@ -96,7 +91,7 @@ public unsafe sealed partial class CompilerFrontend {
             case SimpleUnaryExprType.Negative:
             case SimpleUnaryExprType.BitNot:
             case SimpleUnaryExprType.Dereference:
-                finalType = env.TypeUnknownValue;
+                finalType = GetUnknownType (ESC_Constness.Mutable);
                 isConst = false;
                 return false;
 
@@ -105,14 +100,13 @@ public unsafe sealed partial class CompilerFrontend {
         }
     }
 
-    private static bool UnaryOpCompat_Float (
-        EchelonScriptEnvironment env,
-        ES_TypeInfo* exprType,
+    private bool UnaryOpCompat_Float (
+        ESC_TypeRef exprType,
         SimpleUnaryExprType op,
-        out ES_TypeInfo* finalType,
+        out ESC_TypeRef finalType,
         out bool isConst
     ) {
-        Debug.Assert (exprType->TypeTag == ES_TypeTag.Float);
+        Debug.Assert (exprType.Type is ESC_TypeFloat);
 
         switch (op) {
             case SimpleUnaryExprType.Positive:
@@ -124,7 +118,7 @@ public unsafe sealed partial class CompilerFrontend {
             case SimpleUnaryExprType.LogicalNot:
             case SimpleUnaryExprType.BitNot:
             case SimpleUnaryExprType.Dereference:
-                finalType = env.TypeUnknownValue;
+                finalType = GetUnknownType (ESC_Constness.Mutable);
                 isConst = false;
                 return false;
 
@@ -133,20 +127,19 @@ public unsafe sealed partial class CompilerFrontend {
         }
     }
 
-    private static bool UnaryOpCompat_Ref (
-        EchelonScriptEnvironment env,
-        ES_TypeInfo* exprType,
+    private bool UnaryOpCompat_Ref (
+        ESC_TypeRef exprType,
         SimpleUnaryExprType op,
-        out ES_TypeInfo* finalType,
+        out ESC_TypeRef finalType,
         out bool isConst
     ) {
-        Debug.Assert (exprType->TypeTag == ES_TypeTag.Reference);
+        Debug.Assert (exprType.Type is ESC_TypeReference);
 
-        var refType = (ES_ReferenceData*) exprType;
+        var refType = (ESC_TypeReference) exprType.Type;
 
         switch (op) {
             case SimpleUnaryExprType.Dereference:
-                finalType = refType->PointedType;
+                finalType = refType.PointedType;
                 isConst = false;
                 return true;
 
@@ -154,7 +147,7 @@ public unsafe sealed partial class CompilerFrontend {
             case SimpleUnaryExprType.Negative:
             case SimpleUnaryExprType.LogicalNot:
             case SimpleUnaryExprType.BitNot:
-                finalType = env.TypeUnknownValue;
+                finalType = GetUnknownType (ESC_Constness.Mutable);
                 isConst = false;
                 return false;
 

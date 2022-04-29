@@ -16,7 +16,6 @@ using EchelonScriptCommon.Data;
 using EchelonScriptCommon.Data.Types;
 using EchelonScriptCommon.Utilities;
 using EchelonScriptCompiler.CompilerCommon.IR;
-using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
@@ -124,35 +123,11 @@ public unsafe sealed partial class RoslynCompilerBackend {
                 return LiteralExpression (SyntaxKind.NullLiteralExpression);
 
             case ES_TypeTag.Struct: {
-                using var initExprNodes = new StructPooledList<SyntaxNodeOrToken> (CL_ClearMode.Auto);
-
-                foreach (var memberAddr in varType->MembersList.MembersList.Span) {
-                    var memberPtr = memberAddr.Address;
-
-                    if (memberPtr->MemberType != ES_MemberType.Field)
-                        continue;
-
-                    if (memberPtr->Flags.HasFlag (ES_MemberFlags.Static))
-                        continue;
-
-                    var memberVarPtr = (ES_MemberData_Variable*) memberPtr;
-                    var memberVarType = memberVarPtr->Type;
-
-                    var varValue = GetDefaultValue (memberVarType);
-                    initExprNodes.Add (AssignmentExpression (
-                        SyntaxKind.SimpleAssignmentExpression,
-                        IdentifierName (memberPtr->Name.GetCharsSpan ().GetPooledString ()),
-                        varValue
-                    ));
-                    initExprNodes.Add (Token (SyntaxKind.CommaToken));
-                }
-
-                var structName = IdentifierName (MangleTypeName (varType));
-                var initExpr = InitializerExpression (
-                    SyntaxKind.ObjectInitializerExpression,
-                    SeparatedListSpan<ExpressionSyntax> (initExprNodes.ToArray ())
-                );
-                return ObjectCreationExpression (structName).WithInitializer (initExpr);
+                return InvocationExpression (MemberAccessExpression (
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    IdentifierName (MangleTypeName (varType)),
+                    IdentifierName (DefaultValueFuncName)
+                ));
             }
 
             case ES_TypeTag.Const:

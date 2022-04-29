@@ -8,131 +8,25 @@
  */
 
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using ChronosLib.Pooled;
 using EchelonScriptCommon.Data;
-using EchelonScriptCommon.Data.Types;
-using EchelonScriptCommon.Utilities;
-using EchelonScriptCompiler.CompilerCommon;
 using EchelonScriptCompiler.CompilerCommon.IR;
 using EchelonScriptCompiler.Data;
-
+using EchelonScriptCompiler.Frontend.Data;
 using static EchelonScriptCompiler.CompilerCommon.IR.ESIR_Factory;
 
 namespace EchelonScriptCompiler.Frontend;
 
 internal unsafe static partial class Compiler_TypeChecking {
     private ref struct PassData {
-        public EchelonScriptEnvironment Env { get; init; }
-        public EchelonScriptEnvironment.Builder EnvBuilder { get; init; }
-
-        public List<EchelonScriptErrorMessage> ErrorList { get; init; }
-        public List<EchelonScriptErrorMessage> WarnList { get; init; }
-        public List<EchelonScriptErrorMessage> InfoList { get; init; }
-
         public ES_Identifier TransUnitName { get; set; }
         public SourceData Source { get; set; }
 
-        public SymbolStack<TCSymbol> Symbols { get; set; }
         public ESIR_Writer IRWriter { get; init; }
-        public ES_IdentifierPool IdPool => Env.IdPool;
-
-        public TypeData GetArrayIndexType () => new (Constness.Const, Env.GetArrayIndexType ());
-        public TypeData GetUnknownType (Constness constness) => new (constness, Env.TypeUnknownValue);
-        public TypeData GetFloat32Type (Constness constness) => new (constness, Env.TypeFloat32);
-        public TypeData GetFloat64Type (Constness constness) => new (constness, Env.TypeFloat64);
-        public TypeData GetBoolType (Constness constness) => new (constness, Env.TypeBool);
     }
 
-    private enum SymbolType {
-        None,
-        Type,
-        Variable,
-        Function,
-    }
-
-    private enum SymbolFlags {
-        UsingVar            = 1,
-        RefVar              = 1 << 1,
-        OutVar              = 1 << 2,
-        CompileTimeConstant = 1 << 3,
-        Writable            = 1 << 4,
-    }
-
-    private unsafe struct TCSymbol {
-        #region ================== Instance fields
-
-        private readonly void* valuePtr;
-        private readonly TCVariable valueVar;
-
-        public readonly SymbolType Tag;
-        public readonly SymbolFlags Flags;
-
-        #endregion
-
-        #region ================== Constructors
-
-        internal TCSymbol (SymbolType tag, void* value, SymbolFlags flags) {
-            Tag = tag;
-            valuePtr = value;
-            valueVar = default;
-            Flags = flags;
-        }
-
-        internal TCSymbol (TCVariable value, SymbolFlags flags) {
-            Tag = SymbolType.Variable;
-            valueVar = value;
-            valuePtr = default;
-            Flags = flags;
-        }
-
-        #endregion
-
-        #region ================== Instance methods
-
-        public ES_TypeInfo* MatchType () {
-            if (Tag != SymbolType.Type)
-                throw new CompilationException ();
-
-            return (ES_TypeInfo*) valuePtr;
-        }
-
-        public TCVariable MatchVar () {
-            if (Tag != SymbolType.Variable)
-                throw new CompilationException ();
-
-            return valueVar;
-        }
-
-        public ES_FunctionData* MatchFunction () {
-            if (Tag != SymbolType.Function)
-                throw new CompilationException ();
-
-            return (ES_FunctionData*) valuePtr;
-        }
-
-        #endregion
-
-        public static TCSymbol NewVariable (TypeData type, ESIR_Expression expr, SymbolFlags flags = 0)
-            => new (new (type, expr), flags);
-
-        public static TCSymbol NewType (ES_TypeInfo* type) => new (SymbolType.Type, type, 0);
-
-        public static TCSymbol NewFunction (ES_FunctionData* data) => new (SymbolType.Function, data, 0);
-    }
-
-    private unsafe struct TCVariable {
-        public readonly TypeData Type;
-        public readonly ESIR_Expression IRExpression;
-
-        internal TCVariable (TypeData type, ESIR_Expression irExpr) {
-            Type = type;
-            IRExpression = irExpr;
-        }
-    }
-
-    private static ES_TypeInfo* GetTypeRef (ES_AstTypeDeclaration? typeDecl) {
+    private static ESC_TypeRef GetTypeRef (ES_AstTypeDeclaration? typeDecl) {
         Debug.Assert (typeDecl is not null);
 
         var typeRef = typeDecl as ES_AstTypeDeclaration_TypeReference;
@@ -141,118 +35,79 @@ internal unsafe static partial class Compiler_TypeChecking {
         return typeRef.Reference;
     }
 
-    public static ESIR_Tree CheckTypes (
-        EchelonScriptEnvironment env,
-        EchelonScriptEnvironment.Builder envBuilder,
-
-        List<EchelonScriptErrorMessage> errList,
-        List<EchelonScriptErrorMessage> warnList,
-        List<EchelonScriptErrorMessage> infoList,
-
-        Span<TranslationUnitData> transUnits
-    ) {
+    public static ESIR_Tree CheckTypes (ref CompileData compileData) {
         using var irWriter = new ESIR_Writer ();
-        using var symbols = new SymbolStack<TCSymbol> (new TCSymbol (SymbolType.None, null, 0));
         var passData = new PassData {
-            Env = env,
-            EnvBuilder = envBuilder,
-
-            ErrorList = errList,
-            WarnList = warnList,
-            InfoList = infoList,
-
-            Symbols = symbols,
             IRWriter = irWriter,
         };
 
-        passData.Symbols.Push ();
+        Debug.Assert (compileData.Symbols.ScopesCount == 0);
+        compileData.Symbols.Push ();
 
-        GatherGlobalImports (ref passData);
+        compileData.GatherGlobalImports ();
 
-        foreach (ref var transUnit in transUnits) {
+        foreach (ref var transUnit in compileData.TranslationUnits) {
             passData.TransUnitName = transUnit.Name;
 
             foreach (ref var astUnit in transUnit.AstUnits.Span)
-                CheckAstUnit (ref passData, ref astUnit);
+                CheckAstUnit (ref compileData, ref passData, ref astUnit);
         }
 
-        GenerateGlobalStaticConstructor (ref passData);
+        GenerateGlobalStaticConstructor (ref compileData, ref passData);
 
-        passData.Symbols.Pop ();
+        compileData.Symbols.Pop ();
+        Debug.Assert (compileData.Symbols.ScopesCount == 0);
 
         return irWriter.FinishTree ();
     }
 
-    private static void GatherGlobalImports (ref PassData passData) {
-        var idPool = passData.Env.IdPool;
-        var globalsNS = passData.EnvBuilder.GetOrCreateNamespace (passData.Env.GlobalsNamespace);
-        var globalsList = globalsNS.NamespaceData.Types;
-
-        // Add built-in symbols.
-        foreach (var type in globalsList)
-            passData.Symbols.AddSymbol (type.Address->Name.TypeName, TCSymbol.NewType (type));
-    }
-
-    private static void GatherAstImports (ref PassData passData, ref AstUnitData astUnit) {
-        // Add imported symbols.
-        foreach (var import in astUnit.Ast.ImportStatements)
-            HandleImport (ref passData, import);
-
-        foreach (var alias in astUnit.Ast.TypeAliases)
-            HandleAlias (ref passData, alias);
-    }
-
-    private static void CheckAstUnit (ref PassData passData, ref AstUnitData astUnit) {
-        var idPool = passData.Env.IdPool;
+    private static void CheckAstUnit (ref CompileData compileData, ref PassData passData, ref AstUnitData astUnit) {
+        var idPool = compileData.IdPool;
 
         passData.Source = astUnit.SourceData;
-        passData.Symbols.Push ();
+        compileData.Symbols.Push ();
 
-        GatherAstImports (ref passData, ref astUnit);
+        compileData.GatherAstImports (ref astUnit);
 
         foreach (var nm in astUnit.Ast.Namespaces) {
-            ES_Identifier namespaceName;
-            using (var nameArr = nm.NamespaceName.ToPooledChars ())
-                namespaceName = idPool.GetIdentifier (nameArr);
+            var namespaceName = nm.NamespaceName.ToIdentifier (idPool);
+            var namespaceData = compileData.GetOrCreateNamespace (namespaceName);
 
-            var namespaceBuilder = passData.EnvBuilder.GetOrCreateNamespace (namespaceName);
-            var namespaceData = namespaceBuilder.NamespaceData;
+            compileData.Symbols.Push ();
 
-            passData.Symbols.Push ();
-
-            ImportNamespaceSymbols (ref passData, namespaceData);
+            compileData.ImportNamespaceSymbols (namespaceData);
 
             foreach (var type in nm.Contents) {
                 switch (type) {
                     case ES_AstClassDefinition classDef: {
                         var typeName = idPool.GetIdentifier (classDef.Name.Text.Span);
-                        var classBuilder = namespaceBuilder.GetClass (typeName);
-                        Debug.Assert (classBuilder is not null);
+                        var classData = namespaceData.GetClass (typeName);
+                        Debug.Assert (classData is not null);
 
-                        // TODO: CheckTypes_Class (ref transUnit, ref astUnit, classDef, classBuilder);
+                        // TODO: CheckTypes_Class (ref compileData, ref passData, classDef, classData);
                         throw new NotImplementedException ("[TODO] Classes not implemented yet.");
                     }
 
                     case ES_AstStructDefinition structDef: {
                         var typeName = idPool.GetIdentifier (structDef.Name.Text.Span);
-                        var structBuilder = namespaceBuilder.GetStruct (typeName);
-                        Debug.Assert (structBuilder is not null);
+                        var structData = namespaceData.GetStruct (typeName);
+                        Debug.Assert (structData is not null);
 
-                        CheckStruct (ref passData, structDef, structBuilder);
+                        CheckStruct (ref compileData, ref passData, structDef, structData);
                         break;
                     }
 
                     case ES_AstEnumDefinition enumDef: {
                         var typeName = idPool.GetIdentifier (enumDef.Name.Text.Span);
-                        var enumBuilder = namespaceBuilder.GetEnum (typeName);
-                        Debug.Assert (enumBuilder is not null);
+                        var enumData = namespaceData.GetEnum (typeName);
+                        Debug.Assert (enumData is not null);
 
-                        // TODO: CheckTypes_Enum (ref transUnit, ref astUnit, enumDef, enumBuilder);
+                        // TODO: CheckTypes_Enum (ref compileData, ref passData, enumDef, enumData);
                         throw new NotImplementedException ("[TODO] Enums not implemented yet.");
                     }
 
                     case ES_AstFunctionDefinition funcDef:
-                        CheckFunction (ref passData, null, namespaceData, funcDef);
+                        CheckFunction (ref compileData, ref passData, null, namespaceData, funcDef);
                         break;
 
                     default:
@@ -260,16 +115,16 @@ internal unsafe static partial class Compiler_TypeChecking {
                 }
             }
 
-            passData.Symbols.Pop ();
+            compileData.Symbols.Pop ();
         }
 
-        passData.Symbols.Pop ();
+        compileData.Symbols.Pop ();
     }
 
-    private static ES_NamespaceData? GetNamespace (ref PassData passData, ReadOnlySpan<char> namespaceStr) {
-        var namespaceName = passData.Env.IdPool.GetIdentifier (namespaceStr);
+    private static ESC_Namespace? GetNamespace (ref CompileData compileData, ReadOnlySpan<char> namespaceStr) {
+        var namespaceName = compileData.IdPool.GetIdentifier (namespaceStr);
 
-        if (!passData.Env.Namespaces.TryGetValue (namespaceName, out var namespaceData)) {
+        if (!compileData.Namespaces.TryGetValue (namespaceName, out var namespaceData)) {
             Debug.Fail ("We shouldn't get here.");
             return null;
         }
@@ -277,102 +132,14 @@ internal unsafe static partial class Compiler_TypeChecking {
         return namespaceData;
     }
 
-    private static void ImportNamespaceSymbols (
-        ref PassData passData,
-        ES_NamespaceData namespaceData
-    ) {
-        foreach (var type in namespaceData.Types)
-            passData.Symbols.AddSymbol (type.Address->Name.TypeName, TCSymbol.NewType (type));
-        foreach (var funcKVP in namespaceData.Functions)
-            passData.Symbols.AddSymbol (funcKVP.Key, TCSymbol.NewFunction (funcKVP.Value));
-    }
-
-    private static void HandleImport (
-        ref PassData passData,
-        ES_AstImportStatement import
-    ) {
-        var symbols = passData.Symbols;
-
-        using var nmNameString = import.NamespaceName.ToPooledChars ();
-        var namespaceData = GetNamespace (ref passData, nmNameString);
-
-        if (namespaceData is null)
-            return;
-
-        if (import.ImportedNames is null || import.ImportedNames.Length == 0) {
-            foreach (var type in namespaceData.Types) {
-                if (!symbols.AddSymbol (type.Address->Name.TypeName, TCSymbol.NewType (type)))
-                    Debug.Fail ("This shouldn't be reachable.");
-            }
-
-            foreach (var funcKVP in namespaceData.Functions) {
-                if (!symbols.AddSymbol (funcKVP.Key, TCSymbol.NewFunction (funcKVP.Value)))
-                    Debug.Fail ("This shouldn't be reachable.");
-            }
-
-            return;
-        }
-
-        foreach (var importTk in import.ImportedNames) {
-            var name = passData.Env.IdPool.GetIdentifier (importTk.Text.Span);
-
-            var symbolFound = false;
-            var isDuplicate = false;
-
-            if (!symbolFound) {
-                foreach (var typeData in namespaceData.Types) {
-                    if (!typeData.Address->Name.TypeName.Equals (name))
-                        continue;
-
-                    isDuplicate = !symbols.AddSymbol (name, TCSymbol.NewType (typeData));
-                    symbolFound = true;
-                    break;
-                }
-            }
-
-            if (!symbolFound) {
-                foreach (var funcKVP in namespaceData.Functions) {
-                    if (!funcKVP.Key.Equals (name))
-                        continue;
-
-                    isDuplicate = !symbols.AddSymbol (name, TCSymbol.NewFunction (funcKVP.Value.Address));
-                    symbolFound = true;
-                    break;
-                }
-            }
-
-            if (!symbolFound)
-                Debug.Fail ("This shouldn't be reachable.");
-
-            if (isDuplicate)
-                Debug.Fail ("This shouldn't be reachable.");
-        }
-    }
-
-    private static void HandleAlias (
-        ref PassData passData,
-        ES_AstTypeAlias alias
-    ) {
-        var idPool = passData.Env.IdPool;
-
-        var aliasName = alias.AliasName.Text.Span;
-        var aliasId = idPool.GetIdentifier (aliasName);
-
-        Debug.Assert (alias.OriginalName is ES_AstTypeDeclaration_TypeReference);
-        var origType = GetTypeRef (alias.OriginalName);
-
-        if (!passData.Symbols.AddSymbol (aliasId, TCSymbol.NewType (origType)))
-            Debug.Fail ("This shouldn't be reachable.");
-    }
-
     private static void CheckAggregate (
-        ref PassData passData,
-        ES_FullyQualifiedName typeFQN,
+        ref CompileData compileData, ref PassData passData,
+        ESC_TypeAggregate type,
         ES_AstAggregateDefinition typeDef, bool isClass
     ) {
-        var idPool = passData.Env.IdPool;
+        var idPool = compileData.IdPool;
         var irWriter = passData.IRWriter;
-        var irTypeVoid = TypeNode (ref passData, passData.Env.TypeVoid);
+        var irTypeVoid = TypeNode (ref compileData, compileData.GetVoidType (ESC_Constness.Mutable));
 
         using var defStaticConsBody = new StructPooledList<ESIR_Statement> (CL_ClearMode.Auto);
 
@@ -382,41 +149,37 @@ internal unsafe static partial class Compiler_TypeChecking {
                     Debug.Assert (varDef.ValueType is not null);
 
                     var varId = idPool.GetIdentifier (varDef.Name.Text.Span);
-                    var varType = UnpackFirstConst (GetTypeRef (varDef.ValueType));
-                    var flags = (ES_MemberFlags) 0;
+                    var varType = GetTypeRef (varDef.ValueType);
 
-                    if (varType.Type->Flags.HasFlag (ES_TypeFlag.NoNew)) {
-                        passData.ErrorList.Add (ES_FrontendErrors.GenNoTypeNew (
-                            passData.Env.GetNiceTypeNameString (varType.Type, true), passData.Source, varDef.ValueType.NodeBounds
+                    if (varType.Type!.Flags.HasFlag (ESC_TypeFlag.NoNew)) {
+                        compileData.ErrorList.Add (ES_FrontendErrors.GenNoTypeNew (
+                            compileData.GetNiceNameString (varType, true), passData.Source, varDef.ValueType.NodeBounds
                         ));
                     }
-
-                    if (varDef.Static)
-                        flags |= ES_MemberFlags.Static;
 
                     ESIR_Expression initValue;
                     if (varDef.InitializationExpression is not null) {
                         if (!isClass && !varDef.Static)
-                            passData.ErrorList.Add (new (varDef.Name, ES_FrontendErrors.InstDefValOutsideClass));
+                            compileData.ErrorList.Add (new (varDef.Name, ES_FrontendErrors.InstDefValOutsideClass));
 
-                        var defExpr = CheckExpression (ref passData, varDef.InitializationExpression, varType);
-                        var compat = EnsureCompat (ref defExpr, varType, ref passData, defExpr.Expr.NodeBounds);
+                        var defExpr = CheckExpression (ref compileData, ref passData, varDef.InitializationExpression, varType);
+                        var compat = EnsureCompat (ref compileData, ref passData, ref defExpr, varType, defExpr.Expr.NodeBounds);
 
                         if (!defExpr.CompileTimeConst) {
-                            passData.ErrorList.Add (new (
+                            compileData.ErrorList.Add (new (
                                 passData.Source, defExpr.Expr.NodeBounds, ES_FrontendErrors.ConstantExprExpected
                             ));
                         }
 
                         initValue = defExpr.Value;
                     } else
-                        initValue = DefaultValueExpression (TypeNode (ref passData, varType));
+                        initValue = DefaultValueExpression (TypeNode (ref compileData, varType));
 
                     if (varDef.Static) {
-                        var mangledStaticVar = MangleStaticVar (ref passData, typeFQN, varId);
-                        passData.IRWriter.AddStaticVar (StaticVariable (TypeNode (ref passData, varType), mangledStaticVar));
+                        var mangledStaticVar = MangleStaticVar (ref compileData, type.Name, varId);
+                        passData.IRWriter.AddStaticVar (StaticVariable (TypeNode (ref compileData, varType), mangledStaticVar));
 
-                        var staticVarName = MangleStaticVar (ref passData, typeFQN, varId);
+                        var staticVarName = MangleStaticVar (ref compileData, type.Name, varId);
 
                         defStaticConsBody.Add (
                             ExpressionStatement (
@@ -439,116 +202,111 @@ internal unsafe static partial class Compiler_TypeChecking {
             }
         }
 
-        var defStaticConsName = MangleDefStaticConstructor (ref passData, typeFQN);
+        var defStaticConsName = MangleDefStaticConstructor (ref compileData, type.Name);
         irWriter.StartFunction (defStaticConsName, irTypeVoid);
         irWriter.AddStatements (defStaticConsBody.Span);
         irWriter.EndFunction (null);
     }
 
     private static void EnsureInterfaces (
-        ref PassData passData,
-        ReadOnlySpan<Pointer<ES_InterfaceData>> interfaces, ES_TypeMembers* members
+        ref CompileData compileData, ref PassData passData,
+        ReadOnlySpan<ESC_TypeInterface> interfaces, ESC_TypeAggregate type
     ) {
         if (interfaces.Length > 0)
             throw new NotImplementedException ("[TODO] Interfaces not implemented yet.");
     }
 
     private static void CheckStruct (
-        ref PassData passData,
-        ES_AstStructDefinition structDef, ES_StructData.Builder structBuilder
+        ref CompileData compileData, ref PassData passData,
+        ES_AstStructDefinition structDef, ESC_TypeStruct structData
     ) {
-        var structType = structBuilder.StructData;
+        CheckAggregate (ref compileData, ref passData, structData, structDef, false);
 
-        CheckAggregate (ref passData, structType->TypeInfo.Name, structDef, false);
-
-        EnsureInterfaces (ref passData, structBuilder.InterfacesList.Span, structBuilder.MembersList);
+        EnsureInterfaces (ref compileData, ref passData, structData.Interfaces, structData);
 
         using var membersList = new StructPooledList<ESIR_MemberNode> (CL_ClearMode.Auto);
-        foreach (var memberAddr in structType->TypeInfo.MembersList.MembersList.Span) {
-            var member = memberAddr.Address;
-            var memberName = member->Name;
+        foreach (var member in structData.GetMembers ()) {
+            var memberName = member.Name;
 
-            if (member->MemberType != ES_MemberType.Field)
-                continue;
+            switch (member) {
+                case ESC_TypeMember_Field memberField: {
+                    ESIR_MemberNode irMember;
+                    if (memberField.Flags.HasFlag (ESC_MemberFlags.Static)) {
+                        var staticVarName = MangleStaticVar (ref compileData, structData.Name, memberName);
+                        irMember = StaticField (memberName, staticVarName);
+                    } else
+                        irMember = Field (TypeNode (ref compileData, memberField.FieldType), memberField.Offset, memberName);
 
-            var field = (ES_MemberData_Variable*) member;
+                    membersList.Add (irMember);
 
-            ESIR_MemberNode irMember;
-            if (member->Flags.HasFlag (ES_MemberFlags.Static)) {
-                var staticVarName = MangleStaticVar (ref passData, structType->TypeInfo.Name, memberName);
-                irMember = StaticField (memberName, staticVarName);
-            } else
-                irMember = Field (TypeNode (ref passData, field->Type), field->Offset, memberName);
+                    break;
+                }
 
-            membersList.Add (irMember);
+                case ESC_TypeMember_Function:
+                    break;
+
+                default:
+                    throw new NotImplementedException ("Member type not implemented.");
+            }
         }
 
-        passData.IRWriter.AddStruct (Struct (&structType->TypeInfo, List (membersList.Span)));
+        passData.IRWriter.AddStruct (Struct (compileData.ToTypeInfo (structData), List (membersList.Span)));
     }
 
-    private static bool IsNullable (
-        ref PassData passData,
-        TypeData destType, out TypeData retType
-    ) {
+    private static bool IsNullable (ref CompileData compileData, ESC_TypeRef destType, out ESC_TypeRef retType) {
         Debug.Assert (destType.Type is not null);
 
-        var typeUnkn = passData.Env.TypeUnknownValue;
+        var typeUnkn = compileData.GetUnknownType (ESC_Constness.Mutable);
 
-        switch (destType.Type->TypeTag) {
-            case ES_TypeTag.UNKNOWN:
-                retType = destType.WithType (typeUnkn);
+        switch (destType.Type) {
+            case ESC_TypeUnknown:
+                retType = typeUnkn.WithConst (destType.Constness);
                 return true;
 
-            case ES_TypeTag.Interface:
-            case ES_TypeTag.Reference:
-            case ES_TypeTag.Array:
+            case ESC_TypeInterface:
+            case ESC_TypeReference:
+            case ESC_TypeArray:
                 retType = destType;
                 return true;
 
             default:
-                retType = destType.WithType (typeUnkn);
+                retType = typeUnkn.WithConst (destType.Constness);
                 return false;
         }
     }
 
-    private static ESIR_TypeNode TypeNode (ref PassData passData, ES_TypeInfo* type)
-        => ESIR_Factory.TypeNode (StripFirstConst (type, out _));
+    private static ESIR_TypeNode TypeNode (ref CompileData compileData, ESC_TypeRef type)
+        => ESIR_Factory.TypeNode (compileData.ToTypeInfo (type.WithConst (ESC_Constness.Mutable)));
 
-    private static ESIR_TypeNode TypeNode (ref PassData passData, TypeData type) => TypeNode (ref passData, type.Type);
-
-    private static void GenerateGlobalStaticConstructor (ref PassData passData) {
+    private static void GenerateGlobalStaticConstructor (ref CompileData compileData, ref PassData passData) {
         var irWriter = passData.IRWriter;
 
         using var globalStaticConsBody = new StructPooledList<ESIR_Statement> (CL_ClearMode.Auto);
 
-        foreach (var nsKVP in passData.Env.Namespaces) {
-            foreach (var typePtr in nsKVP.Value.Types) {
-                var type = typePtr.Address;
-
-                switch (type->TypeTag) {
-                    case ES_TypeTag.Null:
-                    case ES_TypeTag.Void:
-                    case ES_TypeTag.Bool:
-                    case ES_TypeTag.Int:
-                    case ES_TypeTag.Float:
-                    case ES_TypeTag.FuncPrototype:
-                    case ES_TypeTag.Enum:
-                    case ES_TypeTag.Interface:
-                    case ES_TypeTag.Reference:
-                    case ES_TypeTag.Const:
-                    case ES_TypeTag.Immutable:
-                    case ES_TypeTag.Array:
+        foreach (var nsKVP in compileData.Namespaces) {
+            foreach (var typeKVP in nsKVP.Value.Types) {
+                switch (typeKVP.Value) {
+                    case ESC_TypeNull:
+                    case ESC_TypeVoid:
+                    case ESC_TypeBool:
+                    case ESC_TypeInt:
+                    case ESC_TypeFloat:
+                    case ESC_TypePrototype:
+                    case ESC_TypeEnum:
+                    case ESC_TypeInterface:
+                    case ESC_TypeReference:
+                    case ESC_TypeArray:
                         continue;
 
-                    case ES_TypeTag.Struct:
-                    case ES_TypeTag.Class:
+                    case ESC_TypeStruct:
+                    case ESC_TypeClass:
                         break;
 
                     default:
                         throw new NotImplementedException ("Type not implemented yet.");
                 }
 
-                var defStaticConsName = MangleDefStaticConstructor (ref passData, type->Name);
+                var defStaticConsName = MangleDefStaticConstructor (ref compileData, typeKVP.Value.Name);
                 globalStaticConsBody.Add (
                     ExpressionStatement (
                         FunctionCallExpression (defStaticConsName, List<ESIR_ArgumentValue> ())
@@ -557,8 +315,8 @@ internal unsafe static partial class Compiler_TypeChecking {
             }
         }
 
-        var globalStaticConsName = passData.Env.IdPool.GetIdentifier (ES_Constants.GlobalStaticConstructorName);
-        irWriter.StartFunction (globalStaticConsName, TypeNode (ref passData, passData.Env.TypeVoid));
+        var globalStaticConsName = compileData.IdPool.GetIdentifier (ES_Constants.GlobalStaticConstructorName);
+        irWriter.StartFunction (globalStaticConsName, TypeNode (ref compileData, compileData.GetVoidType (ESC_Constness.Mutable)));
         irWriter.AddStatements (globalStaticConsBody.Span);
         irWriter.EndFunction (null);
     }

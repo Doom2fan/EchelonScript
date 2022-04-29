@@ -73,8 +73,6 @@ public partial class IRTest : UserControl {
 
     #endregion
 
-    #region ================== Constructors
-
     public IRTest () {
         InitializeComponent ();
 
@@ -91,8 +89,6 @@ public partial class IRTest : UserControl {
         idPool = new ();
         compiler = EchelonScript_Compiler.Create ();
     }
-
-    #endregion
 
     #region ================== Instance methods
 
@@ -325,7 +321,7 @@ public partial class IRTest : UserControl {
         }
     }
 
-    private string GetNiceExpr (ESIR_Expression node) {
+    private unsafe string GetNiceExpr (ESIR_Expression node) {
         Debug.Assert (node is not null);
         if (node is null)
             return "[EXPR NODE NULL]";
@@ -462,10 +458,10 @@ public partial class IRTest : UserControl {
                 return $"{GetExprLabel (indexExpr.IndexedExpr)} [{new string (',', indexExpr.Indices.Elements.Length - 1)}]";
 
             case ESIR_NodeKind.NewObjectExpression when node is ESIR_NewObjectExpression newObjExpr:
-                return $"new ({GetTypeName (newObjExpr.Type, true)})";
+                return $"new ({GetTypeName (newObjExpr.PointerType->PointedType, true)})";
 
             case ESIR_NodeKind.NewArrayExpression when node is ESIR_NewArrayExpression newArrExpr:
-                return $"array ({GetTypeName (newArrExpr.ElementType, true)} [{new string (',', newArrExpr.Ranks.Elements.Length - 1)}])";
+                return $"array ({GetTypeName (newArrExpr.ArrayType->ElementType, true)} [{new string (',', newArrExpr.ArrayType->Rank - 1)}])";
 
             case ESIR_NodeKind.CastExpression when node is ESIR_CastExpression castExpr:
                 return $"cast ({GetExprLabel (castExpr.Expression)} -> {GetTypeName (castExpr.DestType, true)})";
@@ -828,15 +824,15 @@ public partial class IRTest : UserControl {
             }
 
             case ESIR_NodeKind.NewObjectExpression when node is ESIR_NewObjectExpression newObjExpr: {
-                AddNodeToTree ($"New {GetTypeName (newObjExpr.Type, true)}", parentItem);
+                AddNodeToTree ($"New {GetTypeName (newObjExpr.PointerType->PointedType, true)}", parentItem);
                 break;
             }
 
             case ESIR_NodeKind.NewArrayExpression when node is ESIR_NewArrayExpression newArrExpr: {
-                var dimsCount = newArrExpr.Ranks.Elements.Length;
-                var newItem = AddNodeToTree ($"New {GetTypeName (newArrExpr.ElementType, true)} [{new string (',', dimsCount - 1)}]", parentItem);
+                var rank = newArrExpr.Dimensions.Elements.Length;
+                var newItem = AddNodeToTree ($"New {GetTypeName (newArrExpr.ArrayType->ElementType, true)} [{new string (',', rank - 1)}]", parentItem);
 
-                foreach (var dim in newArrExpr.Ranks.Elements)
+                foreach (var dim in newArrExpr.Dimensions.Elements)
                     AddIRNodeToTree (dim, newItem);
 
                 break;
