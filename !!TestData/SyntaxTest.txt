@@ -27,7 +27,7 @@ namespace A.Namespace {
 
     public class SomeClass {
         public {
-            static int Fuck = 15;
+            static int32 Fuck = 15;
             const (string) SomeConstant = "Fuck\n\tShit";
 
             int32 SomeCounter;
@@ -37,11 +37,11 @@ namespace A.Namespace {
             mixin SomeMixin; // Inserted into this block
         }
 
-        public float SomeFunction (float val) {
+        public float32 SomeFunction (float32 val) {
             return SomeTemplatedFunction (val);
         }
 
-        public int SomeFunction (int val) {
+        public int32 SomeFunction (int32 val) {
             return SomeTemplatedFunction (val);
         }
 
@@ -65,10 +65,10 @@ namespace A.Namespace {
         mixin SomeMixin;
 
         public void DoTheThing () {
-            var someUInt32 = 50u;
+            var someUInt32 = 50u32;
 
             var someArraySlice = SomePointer [0 .. 8]; // Slices from 0 to 8. Start is inclusive, end is exclusive.
-            (int foo, float bar) someOtherTuple = (69, 13.37);
+            (int32 foo, float32 bar) someOtherTuple = (69, 13.37f);
             var someTuple = (someArraySlice, someOtherTuple.foo);
 
             // Also does the thing
@@ -76,9 +76,9 @@ namespace A.Namespace {
     }
 
     component Damageable {
-        int Health;
+        int32 Health;
 
-        int DefaultHealth {
+        int32 DefaultHealth {
             Health = value;
         }
     }
