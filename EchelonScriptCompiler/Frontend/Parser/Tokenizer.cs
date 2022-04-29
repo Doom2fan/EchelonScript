@@ -251,7 +251,7 @@ public class EchelonScriptTokenizer : IDisposable {
                     ));
                     unclosed = true;
                     break;
-                } else if (c == '\\' && tokenizer.PeekChar () == '\'')
+                } else if (c == '\\' && (tokenizer.PeekChar () == '\'' || tokenizer.PeekChar () == '\\'))
                     tokenizer.ReadChar ();
                 else if (c == '\r' || c == '\n') {
                     var err = new EchelonScriptErrorMessage (
