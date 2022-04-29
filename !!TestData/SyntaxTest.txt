@@ -7,7 +7,7 @@ alias SomeShit = System.SomeShit;
 
 namespace A.Namespace {
     mixin template SomeMixin {
-        immutable (int64[])* SomePointer; // Pointer to an immutable array of int64s
+        immutable (int64[])& SomePointer; // Pointer to an immutable array of int64s
     }
 
     public interface ISomeInterface {
@@ -26,10 +26,10 @@ namespace A.Namespace {
     }
 
     public class SomeClass {
-        public static ui int Fuck = 15;
-        public const (string) SomeConstant = "Fuck\n\tShit";
+        public {
+            static int Fuck = 15;
+            const (string) SomeConstant = "Fuck\n\tShit";
 
-        public ui {
             int32 SomeCounter;
             float32 SomeFloat;
             string SomeText;
@@ -56,7 +56,7 @@ namespace A.Namespace {
             using SomeNamespace : Fuckle;
 
             Fuckle (1337);
-            Foo* aThing = new (1234);
+            var Foo& aThing = new (1234);
             // Does the thing
         }
     }

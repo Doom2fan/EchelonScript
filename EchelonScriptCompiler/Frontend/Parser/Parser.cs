@@ -1072,7 +1072,7 @@ public class EchelonScriptParser : IDisposable {
         tk = tokenizer.PeekNextToken ().tk;
 
         if (EnsureToken (tk, EchelonScriptTokenType.Semicolon, null) != EnsureTokenResult.Correct) {
-            errorsList.Add (ES_FrontendErrors.GenExpectedXGotY ("';'", tk));
+            errorsList.Add (new (tk, ES_FrontendErrors.MissingSemicolon));
             return false;
         }
 

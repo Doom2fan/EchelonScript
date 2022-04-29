@@ -251,7 +251,7 @@ public class EchelonScriptTokenizer : IDisposable {
                     ));
                     unclosed = true;
                     break;
-                } else if (c == '\\' && tokenizer.PeekChar () == '\'')
+                } else if (c == '\\' && (tokenizer.PeekChar () == '\'' || tokenizer.PeekChar () == '\\'))
                     tokenizer.ReadChar ();
                 else if (c == '\r' || c == '\n') {
                     var err = new EchelonScriptErrorMessage (
@@ -363,7 +363,7 @@ public class EchelonScriptTokenizer : IDisposable {
         }
 
         public override int MinimumStartPeek => tokenStringsMinLength;
-        public override int RequestedStartPeek => tokenParsersMaxLength;
+        public override int RequestedStartPeek => tokenStringsMaxLength;
 
         public override bool IsStartValid (EchelonScriptTokenizer tokenizer, ReadOnlySpan<char> peekedChars) => true;
 
