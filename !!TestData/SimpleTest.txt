@@ -1,6 +1,6 @@
 namespace asd {
     public asd foo (ref SomeClass asd, int32 asd5) {
-        if (foo > 0x80081E5 && foo < 0X1337AaAuL) {
+        if (foo > 0x80081E5 && foo < 0X1337AaAu64) {
             someVar = foo;
         } else
             asd.someOtherVar = bar [0b101];
