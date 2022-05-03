@@ -42,3 +42,44 @@ namespace CycleTest3 {
         public C Baz;
     }
 }
+
+namespace ConstantCycleTest {
+    struct Struct1 {
+        public static {
+            const (int32) Foo = Bar;
+            const (int32) Bar = Foo;
+        }
+    }
+
+    struct Struct2 {
+        public static {
+            const (int32) Foo = Struct1.Foo;
+            const (int32) Bar = Struct3.Foo;
+        }
+    }
+
+    struct Struct3 {
+        public static {
+            const (int32) Foo = Struct2.Bar;
+        }
+    }
+}
+
+namespace EnumCycleTest {
+    enum Enum1 {
+        Foo = Bar,
+
+        Bar = Baz,
+        Baz = Bar,
+    }
+
+    enum Enum2 {
+        Foo = Enum1.Foo,
+        Bar = Enum3.Foo,
+        Baz = Enum1.Baz,
+    }
+
+    enum Enum3 {
+        Foo = Enum2.Bar,
+    }
+}
