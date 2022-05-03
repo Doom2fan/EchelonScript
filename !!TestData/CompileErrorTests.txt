@@ -7,3 +7,18 @@ namespace CycleTest {
         public A Foo;
     }
 }
+
+namespace CycleTest2 {
+    public struct A {
+        public B Foo;
+        public C Bar;
+    }
+
+    public struct B {
+        public C Foo;
+    }
+
+    public struct C {
+        public B Foo;
+    }
+}
