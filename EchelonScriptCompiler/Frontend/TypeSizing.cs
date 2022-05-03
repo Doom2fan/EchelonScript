@@ -135,40 +135,47 @@ internal static partial class Compiler_TypeSizing {
         }
 
         var hasCycles = false;
-        foreach (var member in type.GetMembers ()) {
-            switch (member) {
-                case ESC_TypeMember_Field memberField: {
-                    if (member.Flags.HasFlag (ESC_MemberFlags.Static))
-                        continue;
+        var typeStack = new StructPooledList<ESC_TypeData> (CL_ClearMode.Auto);
+        try {
+            typeStack.Add (type);
 
-                    var fieldType = memberField.FieldType.Type;
-                    Debug.Assert (fieldType is not null);
+            foreach (var member in type.GetMembers ()) {
+                switch (member) {
+                    case ESC_TypeMember_Field memberField: {
+                        if (member.Flags.HasFlag (ESC_MemberFlags.Static))
+                            continue;
 
-                    if (TypeSizing_AnalyzeCycles_Traverse (ref compileData, fieldType, type)) {
-                        compileData.ErrorList.Add (ES_FrontendErrors.GenFieldCausesCycle (
-                            member.Name.GetCharsSpan ().GetPooledString (),
-                            compileData.GetNiceNameString (new (ESC_Constness.Mutable, type), true),
-                            type.SourceUnit.GetCharsSpan ()
-                        ));
+                        var fieldType = memberField.FieldType.Type;
+                        Debug.Assert (fieldType is not null);
 
-                        hasCycles = true;
+                        if (TypeSizing_AnalyzeCycles_Traverse (ref compileData, fieldType, ref typeStack)) {
+                            compileData.ErrorList.Add (ES_FrontendErrors.GenFieldCausesCycle (
+                                member.Name.GetCharsSpan ().GetPooledString (),
+                                compileData.GetNiceNameString (new (ESC_Constness.Mutable, type), true),
+                                type.SourceUnit.GetCharsSpan ()
+                            ));
+
+                            hasCycles = true;
+                        }
+
+                        break;
                     }
 
-                    break;
+                    case ESC_TypeMember_Function:
+                        break;
+
+                    default:
+                        throw new NotImplementedException ("Member type not implemented.");
                 }
-
-                case ESC_TypeMember_Function:
-                    break;
-
-                default:
-                    throw new NotImplementedException ("Member type not implemented.");
             }
+        } finally {
+            typeStack.Dispose ();
         }
 
         return hasCycles;
     }
 
-    private static bool TypeSizing_AnalyzeCycles_Traverse (ref CompileData compileData, ESC_TypeData innerType, ESC_TypeData containingType) {
+    private static bool TypeSizing_AnalyzeCycles_Traverse (ref CompileData compileData, ESC_TypeData innerType, ref StructPooledList<ESC_TypeData> typeStack) {
         switch (innerType) {
             case ESC_TypeStruct:
             case ESC_TypeClass:
@@ -189,6 +196,13 @@ internal static partial class Compiler_TypeSizing {
                 throw new NotImplementedException ("Type not implemented yet.");
         }
 
+        foreach (var type in typeStack) {
+            if (innerType == type)
+                return true;
+        }
+
+        typeStack.Add (innerType);
+
         foreach (var member in innerType.GetMembers ()) {
             switch (member) {
                 case ESC_TypeMember_Field memberField: {
@@ -198,11 +212,10 @@ internal static partial class Compiler_TypeSizing {
                     var fieldType = memberField.FieldType.Type;
                     Debug.Assert (fieldType is not null);
 
-                    if (fieldType == containingType)
+                    if (TypeSizing_AnalyzeCycles_Traverse (ref compileData, fieldType, ref typeStack)) {
+                        typeStack.RemoveEnd (1);
                         return true;
-
-                    if (TypeSizing_AnalyzeCycles_Traverse (ref compileData, fieldType, containingType))
-                        return true;
+                    }
 
                     break;
                 }
@@ -214,6 +227,8 @@ internal static partial class Compiler_TypeSizing {
                     throw new NotImplementedException ("Member type not implemented.");
             }
         }
+
+        typeStack.RemoveEnd (1);
 
         return false;
     }
