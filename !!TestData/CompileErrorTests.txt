@@ -22,3 +22,23 @@ namespace CycleTest2 {
         public B Foo;
     }
 }
+
+namespace CycleTest3 {
+    public struct A {
+        public A Foo;
+        public B Bar;
+        public C Baz;
+    }
+
+    public struct B {
+        public A Foo;
+        public B Bar;
+        public C Baz;
+    }
+
+    public struct C {
+        public A Foo;
+        public B Bar;
+        public C Baz;
+    }
+}
