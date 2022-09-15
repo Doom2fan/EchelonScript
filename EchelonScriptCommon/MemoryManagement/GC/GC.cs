@@ -379,7 +379,7 @@ public unsafe sealed partial class ES_GarbageCollector : IDisposable {
 
         // Copy the array data to the start of the array object.
         var arrHeader = (ES_ArrayHeader*) ((byte*) objHeader + sizeof (ES_ObjectHeader));
-        var arrDimsArea = ES_ArrayHeader.GetArrayIndicesPointer (arrHeader);
+        var arrDimsArea = ES_ArrayHeader.GetArrayRanksPointer (arrHeader);
 
         *arrHeader = new ES_ArrayHeader {
             Length = totalElemsCount,

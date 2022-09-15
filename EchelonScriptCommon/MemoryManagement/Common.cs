@@ -113,11 +113,11 @@ public unsafe struct ES_ArrayHeader {
         => (byte*) arrayPointer + sizeof (ES_ArrayHeader) + arrayPointer->Rank * sizeof (ES_ArrayIndex);
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
-    public static void* GetArrayDataPointer<T> ([NotNull] ES_ArrayHeader* arrayPointer) where T : unmanaged
+    public static T* GetArrayDataPointer<T> ([NotNull] ES_ArrayHeader* arrayPointer) where T : unmanaged
         => (T*) GetArrayDataPointer (arrayPointer);
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
-    public static ES_ArrayIndex* GetArrayIndicesPointer ([NotNull] ES_ArrayHeader* arrayPointer)
+    public static ES_ArrayIndex* GetArrayRanksPointer ([NotNull] ES_ArrayHeader* arrayPointer)
         => (ES_ArrayIndex*) ((byte*) arrayPointer + sizeof (ES_ArrayHeader));
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
