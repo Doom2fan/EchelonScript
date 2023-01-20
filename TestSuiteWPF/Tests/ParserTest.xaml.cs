@@ -14,11 +14,12 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using ChronosLib.Pooled;
-using EchelonScriptCommon.Data.Types;
-using EchelonScriptCompiler.CompilerCommon;
-using EchelonScriptCompiler.Data;
-using EchelonScriptCompiler.Frontend;
-using EchelonScriptCompiler.Frontend.Parser;
+using EchelonScript.Common.Data.Types;
+using EchelonScript.Compiler.CompilerCommon;
+using EchelonScript.Compiler.Data;
+using EchelonScript.Compiler.Frontend;
+using EchelonScript.Compiler.Frontend.AST;
+using EchelonScript.Compiler.Frontend.Parser;
 using ICSharpCode.AvalonEdit.Document;
 
 namespace TestSuiteWPF.Tests;
@@ -452,7 +453,8 @@ public partial class ParserTest : UserControl {
 
             #region Loops
 
-            case ES_AstLoopStatement loopStatement: {
+            // TODO: FIXME
+            /*case ES_AstLoopStatement loopStatement: {
                 string itemString;
                 var forLoop = false;
 
@@ -498,7 +500,7 @@ public partial class ParserTest : UserControl {
                 AddAstNodeToTree (loopStatement.LoopBody, bodyItem);
 
                 break;
-            }
+            }*/
 
             #endregion
 
@@ -561,7 +563,8 @@ public partial class ParserTest : UserControl {
                 break;
             }
 
-            case ES_AstStringLiteralExpression strLiteralExpr: {
+            // TODO: FIXME
+            /*case ES_AstStringLiteralExpression strLiteralExpr: {
                 string nodeText;
                 if (!strLiteralExpr.Verbatim)
                     nodeText = $"String literal \"{strLiteralExpr.ValueUTF16}\"";
@@ -572,7 +575,7 @@ public partial class ParserTest : UserControl {
                 thisItem.Tag = strLiteralExpr.Token;
 
                 break;
-            }
+            }*/
 
             case ES_AstCharLiteralExpression charLiteralExpr: {
                 Span<char> charBuf = stackalloc char [2];
@@ -787,10 +790,10 @@ public partial class ParserTest : UserControl {
     private static void AddArgumentsListToTree (ES_AstFunctionArgumentDefinition [] argsList, TreeViewItem parentItem) {
         foreach (var arg in argsList) {
             var text = arg.ArgType switch {
-                ES_ArgumentType.Normal => $"{arg.ValueType} {arg.Name.Text}",
-                ES_ArgumentType.Ref => $"ref {arg.ValueType} {arg.Name.Text}",
-                ES_ArgumentType.In => $"in {arg.ValueType} {arg.Name.Text}",
-                ES_ArgumentType.Out => $"out {arg.ValueType} {arg.Name.Text}",
+                ES_ArgumentKind.Normal => $"{arg.ValueType} {arg.Name.Text}",
+                ES_ArgumentKind.Ref => $"ref {arg.ValueType} {arg.Name.Text}",
+                ES_ArgumentKind.In => $"in {arg.ValueType} {arg.Name.Text}",
+                ES_ArgumentKind.Out => $"out {arg.ValueType} {arg.Name.Text}",
 
                 _ => throw new NotImplementedException (),
             };
@@ -806,11 +809,11 @@ public partial class ParserTest : UserControl {
     private static void AddArgumentsListToTree (ES_AstFunctionCallArgument [] argsList, TreeViewItem parentItem) {
         foreach (var arg in argsList) {
             var typeString = arg.ArgType switch {
-                ES_ArgumentType.Normal => "By-value",
-                ES_ArgumentType.Ref => "By-ref",
-                ES_ArgumentType.Out => "Out",
+                ES_ArgumentKind.Normal => "By-value",
+                ES_ArgumentKind.Ref => "By-ref",
+                ES_ArgumentKind.Out => "Out",
 
-                ES_ArgumentType.In => throw new Exception ("What? This shouldn't happen."),
+                ES_ArgumentKind.In => throw new Exception ("What? This shouldn't happen."),
 
                 _ => throw new NotImplementedException (),
             };

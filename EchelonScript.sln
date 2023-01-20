@@ -3,16 +3,20 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.1.32210.238
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "EchelonScriptCompiler", "EchelonScriptCompiler\EchelonScriptCompiler.csproj", "{6130B5D3-585D-4109-AF6A-CEE029705F65}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "EchelonScript.Compiler", "EchelonScript.Compiler\EchelonScript.Compiler.csproj", "{6130B5D3-585D-4109-AF6A-CEE029705F65}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TestSuiteWPF", "TestSuiteWPF\TestSuiteWPF.csproj", "{27FE619F-773B-4A00-B0C3-06C7E8EA49AC}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "EchelonScriptCommon", "EchelonScriptCommon\EchelonScriptCommon.csproj", "{8520BCDA-59CC-4E4F-9AEB-25D907ADC0EF}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "EchelonScript.Common", "EchelonScript.Common\EchelonScript.Common.csproj", "{8520BCDA-59CC-4E4F-9AEB-25D907ADC0EF}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{536ABDF2-1134-43EE-9D2D-971C025F4E1C}"
 	ProjectSection(SolutionItems) = preProject
 		.editorconfig = .editorconfig
 	EndProjectSection
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "EchelonScript.Analyzers", "EchelonScript.Analyzers\EchelonScript.Analyzers.csproj", "{C45C05BD-EBDE-49A3-A0DF-1683FB43A05F}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "EchelonScript.UnitTests", "EchelonScript.UnitTests\EchelonScript.UnitTests.csproj", "{C9D3C2C5-6F22-44F7-A4C7-8768E35FCCB8}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -32,6 +36,14 @@ Global
 		{8520BCDA-59CC-4E4F-9AEB-25D907ADC0EF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8520BCDA-59CC-4E4F-9AEB-25D907ADC0EF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{8520BCDA-59CC-4E4F-9AEB-25D907ADC0EF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C45C05BD-EBDE-49A3-A0DF-1683FB43A05F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C45C05BD-EBDE-49A3-A0DF-1683FB43A05F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C45C05BD-EBDE-49A3-A0DF-1683FB43A05F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C45C05BD-EBDE-49A3-A0DF-1683FB43A05F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C9D3C2C5-6F22-44F7-A4C7-8768E35FCCB8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C9D3C2C5-6F22-44F7-A4C7-8768E35FCCB8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C9D3C2C5-6F22-44F7-A4C7-8768E35FCCB8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C9D3C2C5-6F22-44F7-A4C7-8768E35FCCB8}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -1,0 +1,122 @@
+{
+    "aliases": {
+        "RegisterIndex": "i64",
+        "BasicBlockIndex": "i32"
+    },
+
+    "structs": {
+        "RegisterDef": {
+            "Mutable": "bool",
+            "Type": "TypeInfo"
+        },
+
+        "Body": {
+            "Registers": "RegisterDef[]",
+            "BasicBlocks": "BasicBlock[]"
+        },
+
+        "BasicBlock": {
+            "Statements": "Statement[]",
+            "Terminator": "Terminator"
+        },
+
+        "Constant": {
+            "SourceData": "SourceData",
+            "Data": "ConstantData"
+        },
+
+        "Statement": {
+            "SourceData": "SourceData",
+            "Data": "StatementData"
+        },
+
+        "Terminator": {
+            "SourceData": "SourceData",
+            "Data": "TerminatorData"
+        },
+
+        "CallArgument": {
+            "ArgValue": "Value",
+            "ByRef": "bool"
+        }
+    },
+
+    "enums": {
+        "ValueKind": [
+            "Register",
+            "IntConst",
+            "StringConst"
+        ],
+
+        "BinaryOpKind": [
+            "Add",
+            "Sub",
+
+            "Mul",
+            "Div",
+            "Mod",
+
+            "Pow",
+
+            "ShL",
+            "ShR",
+            "ShRU",
+
+            "Eq",
+            "Lt",
+            "LtEq",
+            "Gt",
+            "GtEq",
+
+            "And",
+            "Or",
+            "Xor"
+        ],
+
+        "UnaryOpKind": [
+            "Negative",
+            "Not"
+        ]
+    },
+
+    "taggedUnions": {
+        "ConstantData": {
+            "Bool": { "Value": "bool" },
+            "Int": { "Value": "i64" },
+            "Float": { "Value": "f32" },
+            "Double": { "Value": "f64" },
+            "String": { "Value": "String" }
+        },
+
+        "Value": {
+            "Register": { "Index": "RegisterIndex" },
+            "Constant": { "Value": "Constant" }
+        },
+
+        "RValue": {
+            "Use": { "Operand": "Value" },
+            "Ref": { "Register": "RegisterIndex" },
+            "BinaryOp": { "OpType": "BinaryOpKind", "DestOperand": "LValue", "LeftOperand": "Value", "RightOperand": "Value" },
+            "UnaryOp": { "OpType": "UnaryOpKind", "DestOperand": "LValue", "SourceOperand": "Value" },
+            "MemberAccess": { "ParentOperand": "Value", "MemberIndex": "Constant" },
+            "Cast": { "DestType": "TypeInfo", "Operand": "Value" },
+            "Dereference": { "Operand": "Value" }
+        },
+
+        "LValue": {
+            "Discard": { },
+            "Register": { "Index": "RegisterIndex" }
+        },
+
+        "StatementData": {
+            "Assign": { "DestOperand": "LValue", "SourceOperand": "RValue" }
+        },
+
+        "TerminatorData": {
+            "Goto": { "BasicBlock": "BasicBlockIndex" },
+            "Branch": { "Operand": "Value", "FalseBranch": "BasicBlockIndex", "TrueBranch": "BasicBlockIndex" },
+            "Switch": { "Operand": "Value", "Branches": "(IntConst, BasicBlockIndex)[]", "OtherwiseBranch": "Option<BasicBlockIndex>" },
+            "Call": { "FunctionName": "String", "Arguments": "CallArgument[]", "DestOperand": "Option<LValue>", "target": "BasicBlockIndex" }
+        }
+    }
+}

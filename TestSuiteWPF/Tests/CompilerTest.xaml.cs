@@ -10,18 +10,19 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using ChronosLib.Pooled;
-using EchelonScriptCommon;
-using EchelonScriptCommon.Data;
-using EchelonScriptCommon.Data.Types;
-using EchelonScriptCompiler;
-using EchelonScriptCompiler.Backends.RoslynBackend;
-using EchelonScriptCompiler.Data;
-using EchelonScriptCompiler.Frontend;
+using EchelonScript.Common;
+using EchelonScript.Common.Data;
+using EchelonScript.Common.Data.Types;
+using EchelonScript.Compiler;
+using EchelonScript.Compiler.Backends.RoslynBackend;
+using EchelonScript.Compiler.Data;
+using EchelonScript.Compiler.Frontend;
 using ICSharpCode.AvalonEdit.Document;
 
 namespace TestSuiteWPF.Tests;
@@ -30,6 +31,14 @@ namespace TestSuiteWPF.Tests;
 /// Interaction logic for CompilerTest.xaml
 /// </summary>
 public partial class CompilerTest : UserControl {
+#if true
+    public CompilerTest () => InitializeComponent ();
+    private void codeText_TextChanged (object sender, EventArgs e) { }
+    private void CompileButton_Click (object sender, System.Windows.RoutedEventArgs e) { }
+    private void RunButton_Click (object sender, System.Windows.RoutedEventArgs e) { }
+    private void errorsList_MouseDoubleClick (object sender, MouseButtonEventArgs e) { }
+    private void symbolsTreeView_ClickItem (object sender, MouseButtonEventArgs e) { }
+#else
     protected enum MessageType {
         Error,
         Warning,
@@ -122,8 +131,8 @@ public partial class CompilerTest : UserControl {
         }
     }
 
-    private unsafe string GetTypeName (ES_TypeInfo* type, bool fullyQualified)
-        => env!.GetNiceTypeNameString (type, fullyQualified);
+    private unsafe string GetTypeName (ES_TypeInfo* type, bool fullyQualified) // FIXME:
+        => "FIXME";//ES_TypeInfo.GetNiceTypeName (type, fullyQualified);
 
     private static TreeViewItem AddNodeToTree (string nodeText, TreeViewItem parentItem) {
         var thisItem = new TreeViewItem ();
@@ -151,14 +160,11 @@ public partial class CompilerTest : UserControl {
 
             ES_TypeTag.Reference => "Reference",
             ES_TypeTag.Array => "Array",
-
-            ES_TypeTag.Const => "Const",
-            ES_TypeTag.Immutable => "Immutable",
             _ => "[UNRECOGNIZED]",
         };
         var typeNode = AddNodeToTree ($"{typeType} {GetTypeName (typeData, false)}", parentItem);
 
-        AddNodeToTree ($"Runtime size: {typeData->RuntimeSize}", typeNode);
+        AddNodeToTree ($"Runtime size: {typeData->MethodTable->RuntimeSize}", typeNode);
         AddNodeToTree ($"Fully qualified name: {GetTypeName (typeData, true)}", typeNode);
         AddNodeToTree ($"Source unit: {typeData->SourceUnitString}", typeNode);
 
@@ -183,7 +189,7 @@ public partial class CompilerTest : UserControl {
     }
 
     private unsafe void AddFunctionToTree (ES_FunctionData* functionData, TreeViewItem parentItem) {
-        var typeNode = AddNodeToTree ($"Function {functionData->Name.TypeName.GetCharsSpan ()}", parentItem);
+        var typeNode = AddNodeToTree ($"Function {functionData->Name.TypeName.GetPooledString ()}", parentItem);
 
         AddNodeToTree ($"Fully qualified name: {functionData->Name.GetNameAsTypeString ()}", typeNode);
         AddNodeToTree ($"Source unit: {functionData->SourceUnitString}", typeNode);
@@ -319,10 +325,10 @@ public partial class CompilerTest : UserControl {
         var idTestI32 = env.IdPool.GetIdentifier (testI32Name);
         var idTestF32 = env.IdPool.GetIdentifier (testF32Name);
 
-        var idInt32 = env.IdPool.GetIdentifier (ES_PrimitiveTypes.GetIntName (ES_IntSize.Int32, false));
+        var idInt32 = env.IdPool.GetIdentifier (ES_PrimitiveTypeConsts.GetIntName (ES_IntSize.Int32, false));
         var typeInt32 = env.GetFullyQualifiedType (env.GlobalsNamespace, idInt32);
 
-        var idFloat32 = env.IdPool.GetIdentifier (ES_PrimitiveTypes.GetFloatName (ES_FloatSize.Single));
+        var idFloat32 = env.IdPool.GetIdentifier (ES_PrimitiveTypeConsts.GetFloatName (ES_FloatSize.Single));
         var typeFloat32 = env.GetFullyQualifiedType (env.GlobalsNamespace, idFloat32);
 
         Debug.Assert (typeInt32 is not null);
@@ -453,4 +459,5 @@ public partial class CompilerTest : UserControl {
     }
 
     #endregion
+#endif
 }

@@ -28,6 +28,11 @@
                 <Tests:CompilerTest />
             </Grid>
         </TabItem>
+        <TabItem Header="Exports and GC tests">
+            <Grid Background="#FFE5E5E5">
+                <Tests:ExportAndGCTest />
+            </Grid>
+        </TabItem>
         <TabItem Header="GC Info">
             <Grid Background="#FFE5E5E5">
                 <Tests:GCInfo />

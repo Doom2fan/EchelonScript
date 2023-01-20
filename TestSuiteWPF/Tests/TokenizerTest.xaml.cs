@@ -13,9 +13,9 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
-using EchelonScriptCompiler.CompilerCommon;
-using EchelonScriptCompiler.Data;
-using EchelonScriptCompiler.Frontend.Parser;
+using EchelonScript.Compiler.CompilerCommon;
+using EchelonScript.Compiler.Data;
+using EchelonScript.Compiler.Frontend.Parser.Tokenizer;
 using ICSharpCode.AvalonEdit.Document;
 
 namespace TestSuiteWPF.Tests;

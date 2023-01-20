@@ -15,13 +15,12 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using ChronosLib.Pooled;
-using EchelonScriptCommon;
-using EchelonScriptCommon.Data;
-using EchelonScriptCommon.Data.Types;
-using EchelonScriptCommon.Utilities;
-using EchelonScriptCompiler;
-using EchelonScriptCompiler.CompilerCommon.IR;
-using EchelonScriptCompiler.Data;
+using EchelonScript.Common;
+using EchelonScript.Common.Data;
+using EchelonScript.Common.Data.Types;
+using EchelonScript.Common.Utilities;
+using EchelonScript.Compiler;
+using EchelonScript.Compiler.Data;
 using ICSharpCode.AvalonEdit.Document;
 
 namespace TestSuiteWPF.Tests;
@@ -30,6 +29,13 @@ namespace TestSuiteWPF.Tests;
 /// Interaction logic for IRTest.xaml
 /// </summary>
 public partial class IRTest : UserControl {
+#if true
+    public IRTest () => InitializeComponent ();
+    private void codeText_TextChanged (object sender, EventArgs e) { }
+    private void CompileButton_Click (object sender, System.Windows.RoutedEventArgs e) { }
+    private void errorsList_MouseDoubleClick (object sender, MouseButtonEventArgs e) { }
+    private void symbolsTreeView_ClickItem (object sender, MouseButtonEventArgs e) { }
+#else
     protected enum MessageType {
         Error,
         Warning,
@@ -137,14 +143,11 @@ public partial class IRTest : UserControl {
             ES_TypeTag.Reference => "Reference",
             ES_TypeTag.Array => "Array",
 
-            ES_TypeTag.Const => "Const",
-            ES_TypeTag.Immutable => "Immutable",
-
             _ => "[UNRECOGNIZED]",
         };
         var typeNode = AddNodeToTree ($"{typeType} {GetTypeName (typeData, false)}", parentItem);
 
-        AddNodeToTree ($"Runtime size: {typeData->RuntimeSize}", typeNode);
+        AddNodeToTree ($"Runtime size: {typeData->MethodTable->RuntimeSize}", typeNode);
         AddNodeToTree ($"Fully qualified name: {GetTypeName (typeData, true)}", typeNode);
         AddNodeToTree ($"Source unit: {typeData->SourceUnitString}", typeNode);
 
@@ -225,7 +228,7 @@ public partial class IRTest : UserControl {
 
             case ESIR_NodeKind.AssignExpression: return "[Assign]";
 
-            #region Binary
+    #region Binary
 
             case ESIR_NodeKind.BinaryExprConcat: return "[Concat]";
 
@@ -257,9 +260,9 @@ public partial class IRTest : UserControl {
             case ESIR_NodeKind.BinaryExprLogicalAnd: return "[Logical AND]";
             case ESIR_NodeKind.BinaryExprLogicalOr: return "[Logical OR]";
 
-            #endregion
+    #endregion
 
-            #region Unary
+    #region Unary
 
             case ESIR_NodeKind.UnaryNegative: return "[Negative]";
             case ESIR_NodeKind.UnaryLogicalNot: return "[Logical negation]";
@@ -271,9 +274,9 @@ public partial class IRTest : UserControl {
             case ESIR_NodeKind.UnaryPostIncrement: return $"[Post-increment]";
             case ESIR_NodeKind.UnaryPostDecrement: return $"[Post-decrement]";
 
-            #endregion
+    #endregion
 
-            #region Literals
+    #region Literals
 
             case ESIR_NodeKind.LiteralTrue:
             case ESIR_NodeKind.LiteralFalse:
@@ -283,9 +286,9 @@ public partial class IRTest : UserControl {
             case ESIR_NodeKind.LiteralNull:
                 return GetNiceExpr (node);
 
-            #endregion
+    #endregion
 
-            #region Values
+    #region Values
 
             case ESIR_NodeKind.StringConstant:
             case ESIR_NodeKind.StaticVariableExpression:
@@ -295,7 +298,7 @@ public partial class IRTest : UserControl {
 
             case ESIR_NodeKind.DefaultValueExpression: return "[default]";
 
-            #endregion
+    #endregion
 
             case ESIR_NodeKind.MemberAccessExpression: return "[Member access]";
 
@@ -332,7 +335,7 @@ public partial class IRTest : UserControl {
             case ESIR_NodeKind.AssignExpression when node is ESIR_AssignExpression assignExpr:
                 return $"{GetExprLabel (assignExpr.Assignee)} = {GetExprLabel (assignExpr.Value)}";
 
-            #region Binary
+    #region Binary
 
             case ESIR_NodeKind.BinaryExprConcat when node is ESIR_SimpleBinaryExpression binaryExpr:
                 return $"{GetExprLabel (binaryExpr.ExprLeft)} .. {GetExprLabel (binaryExpr.ExprRight)}";
@@ -385,9 +388,9 @@ public partial class IRTest : UserControl {
             case ESIR_NodeKind.BinaryExprLogicalOr when node is ESIR_SimpleBinaryExpression binaryExpr:
                 return $"{GetExprLabel (binaryExpr.ExprLeft)} || {GetExprLabel (binaryExpr.ExprRight)}";
 
-            #endregion
+    #endregion
 
-            #region Unary
+    #region Unary
 
             case ESIR_NodeKind.UnaryNegative when node is ESIR_UnaryExpression unaryExpr:
                 return $"-{GetExprLabel (unaryExpr.ExprInner)}";
@@ -407,9 +410,9 @@ public partial class IRTest : UserControl {
             case ESIR_NodeKind.UnaryPostDecrement when node is ESIR_UnaryExpression unaryExpr:
                 return $"{GetExprLabel (unaryExpr.ExprInner)}--";
 
-            #endregion
+    #endregion
 
-            #region Literals
+    #region Literals
 
             case ESIR_NodeKind.LiteralTrue: return "True";
             case ESIR_NodeKind.LiteralFalse: return "False";
@@ -427,9 +430,9 @@ public partial class IRTest : UserControl {
             case ESIR_NodeKind.LiteralNull when node is ESIR_NullLiteralExpression:
                 return "[null]";
 
-            #endregion
+    #endregion
 
-            #region Values
+    #region Values
 
             case ESIR_NodeKind.StringConstant when node is ESIR_StringConstantExpression stringConstExpr:
                 return $"str{stringConstExpr.Index}";
@@ -446,7 +449,7 @@ public partial class IRTest : UserControl {
             case ESIR_NodeKind.DefaultValueExpression when node is ESIR_DefaultValueExpression:
                 return "[default]";
 
-            #endregion
+    #endregion
 
             case ESIR_NodeKind.MemberAccessExpression when node is ESIR_MemberAccessExpression accessExpr:
                 return $"{GetExprLabel (accessExpr.ExprParent)}.{GetString (accessExpr.Name)}";
@@ -457,11 +460,11 @@ public partial class IRTest : UserControl {
             case ESIR_NodeKind.IndexingExpression when node is ESIR_IndexingExpression indexExpr:
                 return $"{GetExprLabel (indexExpr.IndexedExpr)} [{new string (',', indexExpr.Indices.Elements.Length - 1)}]";
 
-            case ESIR_NodeKind.NewObjectExpression when node is ESIR_NewObjectExpression newObjExpr:
+            /*case ESIR_NodeKind.NewObjectExpression when node is ESIR_NewObjectExpression newObjExpr:
                 return $"new ({GetTypeName (newObjExpr.PointerType->PointedType, true)})";
 
             case ESIR_NodeKind.NewArrayExpression when node is ESIR_NewArrayExpression newArrExpr:
-                return $"array ({GetTypeName (newArrExpr.ArrayType->ElementType, true)} [{new string (',', newArrExpr.ArrayType->Rank - 1)}])";
+                return $"array ({GetTypeName (newArrExpr.ArrayType->ElementType, true)} [{new string (',', newArrExpr.ArrayType->Rank - 1)}])";*/
 
             case ESIR_NodeKind.CastExpression when node is ESIR_CastExpression castExpr:
                 return $"cast ({GetExprLabel (castExpr.Expression)} -> {GetTypeName (castExpr.DestType, true)})";
@@ -523,7 +526,7 @@ public partial class IRTest : UserControl {
 
             case ESIR_NodeKind.Struct when node is ESIR_Struct structDef: {
                 var structItem = AddNodeToTree ($"{GetTypeName (structDef.Type, true)}", parentItem);
-                AddNodeToTree ($"Size: {structDef.Type->RuntimeSize}", structItem);
+                AddNodeToTree ($"Size: {structDef.Type->MethodTable->RuntimeSize}", structItem);
 
                 foreach (var member in structDef.Members.Elements)
                     AddIRNodeToTree (member, structItem);
@@ -574,7 +577,7 @@ public partial class IRTest : UserControl {
                 AddNodeToTree ($"{GetString (staticField.Name)} : {GetString (staticField.StaticVariable)}", parentItem);
                 break;
 
-            #region Expressions
+    #region Expressions
 
             case ESIR_NodeKind.ErrorExpression:
                 AddNodeToTree ("[ERROR]", parentItem);
@@ -587,7 +590,7 @@ public partial class IRTest : UserControl {
                 break;
             }
 
-            #region Binary
+    #region Binary
 
             case ESIR_NodeKind.BinaryExprConcat when node is ESIR_SimpleBinaryExpression binaryExpr: {
                 AddBinaryExprToTree ("Concatenate", "..", binaryExpr, parentItem);
@@ -682,9 +685,9 @@ public partial class IRTest : UserControl {
                 break;
             }
 
-            #endregion
+    #endregion
 
-            #region Unary
+    #region Unary
 
             case ESIR_NodeKind.UnaryNegative when node is ESIR_UnaryExpression unaryExpr: {
                 AddUnaryExprToTree ("Negative", "-", unaryExpr, parentItem);
@@ -720,9 +723,9 @@ public partial class IRTest : UserControl {
                 break;
             }
 
-            #endregion
+    #endregion
 
-            #region Literals
+    #region Literals
 
             case ESIR_NodeKind.LiteralTrue:
                 AddNodeToTree ("True", parentItem);
@@ -748,9 +751,9 @@ public partial class IRTest : UserControl {
                 AddNodeToTree ($"Null {GetTypeName (nullExpr.Type, true)}", parentItem);
                 break;
 
-            #endregion
+    #endregion
 
-            #region Values
+    #region Values
 
             case ESIR_NodeKind.StringConstant when node is ESIR_StringConstantExpression stringConstExpr: {
                 AddNodeToTree ($"String constant #{stringConstExpr.Index}", parentItem);
@@ -777,7 +780,7 @@ public partial class IRTest : UserControl {
                 break;
             }
 
-            #endregion
+    #endregion
 
             case ESIR_NodeKind.MemberAccessExpression when node is ESIR_MemberAccessExpression accessExpr: {
                 var nameStr = GetString (accessExpr.Name);
@@ -823,7 +826,7 @@ public partial class IRTest : UserControl {
                 break;
             }
 
-            case ESIR_NodeKind.NewObjectExpression when node is ESIR_NewObjectExpression newObjExpr: {
+            /*case ESIR_NodeKind.NewObjectExpression when node is ESIR_NewObjectExpression newObjExpr: {
                 AddNodeToTree ($"New {GetTypeName (newObjExpr.PointerType->PointedType, true)}", parentItem);
                 break;
             }
@@ -836,7 +839,7 @@ public partial class IRTest : UserControl {
                     AddIRNodeToTree (dim, newItem);
 
                 break;
-            }
+            }*/
 
             case ESIR_NodeKind.CastExpression when node is ESIR_CastExpression castExpr: {
                 var castItem = AddNodeToTree ($"Cast ({GetTypeName (castExpr.DestType, true)})", parentItem);
@@ -866,9 +869,9 @@ public partial class IRTest : UserControl {
                 break;
             }
 
-            #endregion
+    #endregion
 
-            #region Statements
+    #region Statements
 
             case ESIR_NodeKind.BlockStatement when node is ESIR_BlockStatement blockStmt: {
                 var blockItem = AddNodeToTree ("Block", parentItem);
@@ -969,7 +972,7 @@ public partial class IRTest : UserControl {
                 break;
             }
 
-            #endregion
+    #endregion
 
             default:
                 Debug.Fail ("IR node invalid or not implemented.");
@@ -1093,4 +1096,5 @@ public partial class IRTest : UserControl {
     }
 
     #endregion
+#endif
 }

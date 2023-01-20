@@ -1,0 +1,21 @@
+<Project>
+  <PropertyGroup>
+    <StringResourcesPath Condition="'$(StringResourcesPath)' == '' and Exists('$(MSBuildProjectDirectory)\Resources\Strings.resx')">$(MSBuildProjectDirectory)\Resources\Strings.resx</StringResourcesPath>
+    <StringResourcesNamespace Condition="'$(StringResourcesNamespace)' == ''">$(RootNamespace)</StringResourcesNamespace>
+    <StringResourcesClassName Condition="'$(StringResourcesClassName)' == ''">SR</StringResourcesClassName>
+    <StringResourcesName Condition="'$(StringResourcesName)' == ''">FxResources.$(AssemblyName).$(StringResourcesClassName)</StringResourcesName>
+
+    <!-- We define our own implementation of GetResourceString -->
+    <GenerateResxSourceOmitGetResourceString>true</GenerateResxSourceOmitGetResourceString>
+    <!-- For debug builds we include the full value string so that we get actual resources, even in the case the toolchain strips the resources file -->
+    <GenerateResxSourceIncludeDefaultValues Condition="'$(Configuration)' == 'Debug'">true</GenerateResxSourceIncludeDefaultValues>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(StringResourcesPath)' != ''">
+    <EmbeddedResource Include="$(StringResourcesPath)"
+                      Visible="true"
+                      ManifestResourceName="$(StringResourcesName)"
+                      GenerateSource="true"
+                      ClassName="$(StringResourcesNamespace).$(StringResourcesClassName)" />
+  </ItemGroup>
+</Project>

@@ -13,8 +13,8 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Threading;
-using EchelonScriptCommon.GarbageCollection;
-using EchelonScriptCommon.GarbageCollection.Immix;
+using EchelonScript.Common.GarbageCollection;
+using EchelonScript.Common.GarbageCollection.Immix;
 
 namespace TestSuiteWPF.Tests;
 
