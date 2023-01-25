@@ -12,6 +12,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Reflection;
 using ChronosLib.Pooled;
+using EchelonScript.Common;
 using EchelonScript.Common.Data.Types;
 using EchelonScript.Compiler.CompilerCommon;
 using EchelonScript.Compiler.Data;

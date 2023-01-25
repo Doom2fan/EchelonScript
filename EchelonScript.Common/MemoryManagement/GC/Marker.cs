@@ -11,7 +11,6 @@ using System;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using ChronosLib.Pooled;
-using EchelonScript.Common.Data.Types;
 using EchelonScript.Common.GarbageCollection.Immix;
 using EchelonScript.Common.Utilities;
 

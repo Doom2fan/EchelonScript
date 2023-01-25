@@ -15,6 +15,15 @@ namespace EchelonScript.Analyzers.RoslynExtensions;
 internal static partial class CompilationExtensions {
     public static INamedTypeSymbol? GetAnalyzerTypeByMetadataName (this Compilation compilation, string fullyQualifiedMetadataName)
         => GetBestTypeByMetadataName (compilation, fullyQualifiedMetadataName);
+
+    public static INamedTypeSymbol? GetTypeByMetadataNameAndAssembly (this Compilation compilation, string fullyQualifiedMetadataName, string assemblyName) {
+        foreach (var currentType in compilation.GetTypesByMetadataName (fullyQualifiedMetadataName)) {
+            if (currentType.ContainingAssembly.Name == assemblyName)
+                return currentType;
+        }
+
+        return null;
+    }
 }
 
 // THE FOLLOWING LICENSE APPLIES ONLY TO THE FOLLOWING CODE:

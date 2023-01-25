@@ -17,7 +17,6 @@ using ChronosLib.Pooled;
 using EchelonScript.Common.Data.Types;
 using EchelonScript.Compiler.CompilerCommon;
 using EchelonScript.Compiler.Data;
-using EchelonScript.Compiler.Frontend;
 using EchelonScript.Compiler.Frontend.AST;
 using EchelonScript.Compiler.Frontend.Parser;
 using ICSharpCode.AvalonEdit.Document;

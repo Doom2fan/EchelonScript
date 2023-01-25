@@ -9,14 +9,16 @@
              d:DesignHeight="450" d:DesignWidth="800">
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="340"/>
-            <ColumnDefinition Width="1*"/>
-            <ColumnDefinition Width="452"/>
+            <ColumnDefinition Width="340*"/>
+            <ColumnDefinition Width="8*"/>
+            <ColumnDefinition Width="452*"/>
         </Grid.ColumnDefinitions>
-        <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch"/>
-        <Button Content="Test exports" Margin="10,10,230,0" VerticalAlignment="Top" Click="TestExports_Click"/>
-        <Button Content="Test GC" Margin="120,10,120,0" VerticalAlignment="Top"/>
-        <Button Content="Test Consistency" Margin="230,10,10,0" VerticalAlignment="Top" Click="TestConsistency_Click"/>
-        <TextBox x:Name="resultsTextBox" Grid.Column="2" TextWrapping="Wrap" UndoLimit="0" IsReadOnly="True"/>
+        <StackPanel Grid.Column="0" >
+            <Button Content="Test exports" Click="TestExports_Click"/>
+            <Button Content="Test GC" />
+            <Button Content="Test Consistency" Click="TestConsistency_Click"/>
+        </StackPanel>
+        <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" ResizeDirection="Columns"/>
+        <TextBox x:Name="resultsTextBox" Grid.Column="2" HorizontalAlignment="Stretch" TextWrapping="Wrap" UndoLimit="0" IsReadOnly="True" FontFamily="Courier New"/>
     </Grid>
 </UserControl>

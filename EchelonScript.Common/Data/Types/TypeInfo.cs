@@ -9,7 +9,6 @@
 
 using System;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using ChronosLib.Pooled;
 using EchelonScript.Common.Utilities;
 using ExhaustiveMatching;
@@ -34,12 +33,6 @@ public enum ES_TypeTag : int {
 
     Reference,
     Array,
-}
-
-public enum ES_Constness {
-    Mutable,
-    Const,
-    Immutable,
 }
 
 [Flags]
@@ -76,107 +69,32 @@ public readonly unsafe struct ES_TypeInfo {
 
     #endregion
 
-    #region ================== Instance fields
-
-    public ES_MethodTable* MethodTableInit { init => MethodTable = value; }
-
-    public ES_TypeTag TypeTagInit {init => TypeTag = value; }
-
-    public void* ExtraDataInit {init => ExtraData = value; }
-
-    public ES_FullyQualifiedName NameInit {init => Name = value; }
-
-    public ES_Utf8String SourceUnitInit {init => SourceUnit = value; }
-
-    #endregion
-
-    private ES_TypeInfo (
-        ES_TypeTag typeTag, [NotNull] ES_MethodTable* methodTable,
-        ES_Utf8String sourceUnit,
-        ES_FullyQualifiedName fullyQualifiedName,
-        void* extraData
-    ) {
-        TypeTag = typeTag;
-        MethodTable = methodTable;
-
-        Name = fullyQualifiedName;
-        SourceUnit = sourceUnit;
-        ExtraData = extraData;
-    }
-
-    internal ES_TypeInfo (
-        ES_TypeTag typeTag, [NotNull] ES_MethodTable* methodTable,
-        ES_Utf8String sourceUnit,
-        ES_FullyQualifiedName fullyQualifiedName
-    ) {
-        TypeTag = typeTag;
-        MethodTable = methodTable;
-
-        Name = fullyQualifiedName;
-        SourceUnit = sourceUnit;
-        ExtraData = null;
-    }
-
-    internal ES_TypeInfo (
-        [NotNull] ES_MethodTable* methodTable,
-        ES_Utf8String sourceUnit,
-        ES_FullyQualifiedName fullyQualifiedName,
-        ES_ClassInfo* classData
-    ) : this (ES_TypeTag.Class, methodTable, sourceUnit, fullyQualifiedName, classData) { }
-
-    internal ES_TypeInfo (
-        [NotNull] ES_MethodTable* methodTable,
-        ES_Utf8String sourceUnit,
-        ES_FullyQualifiedName fullyQualifiedName,
-        ES_StructInfo* structData
-    ) : this (ES_TypeTag.Struct, methodTable, sourceUnit, fullyQualifiedName, structData) { }
-
-    internal ES_TypeInfo (
-        [NotNull] ES_MethodTable* methodTable,
-        ES_Utf8String sourceUnit,
-        ES_FullyQualifiedName fullyQualifiedName,
-        ES_IntInfo intInfo
-    ) : this (ES_TypeTag.Int, methodTable, sourceUnit, fullyQualifiedName, (void*) intInfo) { }
-
-    internal ES_TypeInfo (
-        [NotNull] ES_MethodTable* methodTable,
-        ES_Utf8String sourceUnit,
-        ES_FullyQualifiedName fullyQualifiedName,
-        ES_FloatInfo floatInfo
-    ) : this (ES_TypeTag.Float, methodTable, sourceUnit, fullyQualifiedName, (void*) floatInfo) { }
-
-    internal ES_TypeInfo (
-        [NotNull] ES_MethodTable* methodTable,
-        ES_Utf8String sourceUnit,
-        ES_FullyQualifiedName fullyQualifiedName,
-        [NotNull] ES_ArrayInfo* arrayInfo
-    ) : this (ES_TypeTag.Array, methodTable, sourceUnit, fullyQualifiedName, arrayInfo) { }
-
-    internal ES_TypeInfo (
-        [NotNull] ES_MethodTable* methodTable,
-        ES_Utf8String sourceUnit,
-        ES_FullyQualifiedName fullyQualifiedName,
-        ES_ReferenceInfo* refInfo
-    ) : this (ES_TypeTag.Reference, methodTable, sourceUnit, fullyQualifiedName, (void*) refInfo) { }
-
     #region ================== Instance properties
 
-    #region String utilities
+    internal ES_MethodTable* MethodTableInit { init => MethodTable = value; }
+
+    internal ES_TypeTag TypeTagInit {init => TypeTag = value; }
+
+    internal void* ExtraDataInit {init => ExtraData = value; }
+
+    internal ES_FullyQualifiedName NameInit {init => Name = value; }
+
+    internal ES_Utf8String SourceUnitInit {init => SourceUnit = value; }
 
     /// <summary>The type's source unit's name as a string.</summary>
     public string SourceUnitString => SourceUnit.GetPooledString ();
 
     #endregion
 
-    public bool IsReferenceType () {
-        return TypeTag switch {
-            ES_TypeTag.Reference => true,
-            ES_TypeTag.Array => true,
-            ES_TypeTag.Interface => true,
+    #region ================== Instance methods
 
-            _ => false,
-        };
-    }
+    public bool IsReferenceType () => TypeTag switch {
+        ES_TypeTag.Reference => true,
+        ES_TypeTag.Array => true,
+        ES_TypeTag.Interface => true,
+
+        _ => false,
+    };
 
     #endregion
 

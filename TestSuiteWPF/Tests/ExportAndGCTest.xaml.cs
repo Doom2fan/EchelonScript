@@ -14,22 +14,39 @@ using System.Windows.Controls;
 using EchelonScript.Common;
 using EchelonScript.Common.Data;
 using EchelonScript.Common.Data.Types;
+using EchelonScript.Common.Exporting;
 using EchelonScript.Common.GarbageCollection;
-using TerraFX.Interop;
+using static TerraFX.Interop.Mimalloc;
 
 namespace TestSuiteWPF.Tests;
 
-[ES_ExportStruct (new [] { "NativeTests.Export" }, "LinkedList")]
-internal struct Struct_TreeTest {
-    public ES_Object<Struct_TreeTest> Left;
-    public ES_Object<Struct_TreeTest> Right;
+[ES_ExportStruct (Namespace = "NativeTests.Export", Name = "LinkedList")]
+internal partial struct Struct_TreeTest {
+    private struct ExportDefinition {
+        [ES_ExportField (AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
+        public ES_Object<Struct_TreeTest> Left;
+        [ES_ExportField (AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
+        public ES_Object<Struct_TreeTest> Right;
 
-    public int Value;
+        public Struct_ValueTypeTest Value;
+    }
 
     public Struct_TreeTest (int val, ES_Object<Struct_TreeTest> left, ES_Object<Struct_TreeTest> right) {
-        Value = val;
+        Value.Value = val;
         Left = left;
         Right = right;
+    }
+}
+
+[ES_ExportStruct (Namespace = "NativeTests.Export", Name = "LinkedList")]
+internal partial struct Struct_ValueTypeTest {
+    private struct ExportDefinition {
+        [ES_ExportField (AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
+        public ES_Object<Struct_TreeTest> A;
+        public ES_Object<Struct_TreeTest> B;
+
+        [ES_ExportField (AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
+        public int Value;
     }
 }
 
@@ -37,13 +54,26 @@ internal struct Struct_TreeTest {
 /// Interaction logic for ExportAndGCTest.xaml
 /// </summary>
 public unsafe partial class ExportAndGCTest : UserControl {
-    private static ES_Object<Struct_TreeTest>* TreePointer;
+    private ES_Object<Struct_TreeTest>* TreePointer;
+    private ES_ObjectAddress** Roots;
 
-    private static ES_MethodTable* GetTreeMethodTable () => ES_NativeTypeTable.GetNativeType<Struct_TreeTest>().MethodTable;
-    private static ES_Object<Struct_TreeTest> AddNode (int val, ES_Object<Struct_TreeTest> left, ES_Object<Struct_TreeTest> right, bool pinned = false)
-        => ES_GarbageCollector.AllocObject<Struct_TreeTest> (GetTreeMethodTable (), pinned, new (val, left, right));
+    private void InitTree () {
+        if (TreePointer != null)
+            return;
 
-    private static ES_Object<Struct_TreeTest> GenerateTree () =>
+        TreePointer = mi_malloc_tp<ES_Object<Struct_TreeTest>> ();
+        *TreePointer = ES_Object<Struct_TreeTest>.Null;
+
+        Roots = (ES_ObjectAddress**) mi_malloc_tp<nint> ();
+        Roots [0] = (ES_ObjectAddress*) TreePointer;
+
+        ES_GarbageCollector.AddRoots (Roots, 1);
+    }
+    private ES_MethodTable* GetTreeMethodTable () => ES_TypeTable.GetNativeType<Struct_TreeTest>();
+    private ES_Object<Struct_TreeTest> AddNode (int val, ES_Object<Struct_TreeTest> left, ES_Object<Struct_TreeTest> right, bool pinned = false)
+        => ES_GarbageCollector.AllocObject<Struct_TreeTest> (new (val, left, right), pinned);
+
+    private ES_Object<Struct_TreeTest> GenerateTree () =>
         AddNode (1,
             AddNode (2,
                 AddNode (4,
@@ -79,8 +109,8 @@ public unsafe partial class ExportAndGCTest : UserControl {
     }
 
     private void TestExports_Click (object sender, System.Windows.RoutedEventArgs e) {
-        TreePointer = Mimalloc.mi_malloc_tp<ES_Object<Struct_TreeTest>> ();
-        ES_GarbageCollector.AddRoots ((ES_ObjectAddress**) TreePointer, 1);
+        InitTree ();
+
         try {
             var mTable = GetTreeMethodTable ();
 
@@ -88,6 +118,8 @@ public unsafe partial class ExportAndGCTest : UserControl {
                 resultsTextBox.Text = $"Exports test failed: RuntimeSize ({mTable->RuntimeSize}) != struct size ({sizeof (Struct_TreeTest)})";
                 return;
             }
+
+            resultsTextBox.Text = $"Exports test succeeded";
         } catch (Exception ex) {
             resultsTextBox.Text = $"Exports test failed: Exception\n{ex.Message}\n{ex.StackTrace}";
         }
@@ -95,7 +127,7 @@ public unsafe partial class ExportAndGCTest : UserControl {
 
     private void TestConsistency_Click (object sender, System.Windows.RoutedEventArgs e) {
         static IEnumerable<int> Preorder (Struct_TreeTest node) {
-            yield return node.Value;
+            yield return node.Value.Value;
             if (!node.Left.IsNull ())
                 foreach (var value in Preorder (node.Left.Value))
                     yield return value;
@@ -108,7 +140,7 @@ public unsafe partial class ExportAndGCTest : UserControl {
             if (!node.Left.IsNull ())
                 foreach (var value in Inorder (node.Left.Value))
                     yield return value;
-            yield return node.Value;
+            yield return node.Value.Value;
             if (!node.Right.IsNull ())
                 foreach (var value in Inorder (node.Right.Value))
                     yield return value;
@@ -121,7 +153,7 @@ public unsafe partial class ExportAndGCTest : UserControl {
             if (!node.Right.IsNull ())
                 foreach (var value in Postorder (node.Right.Value))
                     yield return value;
-            yield return node.Value;
+            yield return node.Value.Value;
         }
 
         static IEnumerable<int> LevelOrder (ES_Object<Struct_TreeTest> thisNode) {
@@ -129,7 +161,7 @@ public unsafe partial class ExportAndGCTest : UserControl {
             queue.Enqueue (thisNode);
             while (queue.Any ()) {
                 var node = queue.Dequeue ();
-                yield return node.Value.Value;
+                yield return node.Value.Value.Value;
                 if (!node.Value.Left.IsNull ())
                     queue.Enqueue (node.Value.Left);
                 if (!node.Value.Right.IsNull ())
@@ -137,15 +169,17 @@ public unsafe partial class ExportAndGCTest : UserControl {
             }
         }
 
+        InitTree ();
+
         try {
             ref ES_Object<Struct_TreeTest> tree = ref *TreePointer;
             tree = GenerateTree ();
             ES_GarbageCollector.PerformCollection (-1, ES_GarbageCollector.CollectionMode.Forced);
 
-            Console.WriteLine ($"Preorder:    {Preorder (tree.Value)}");
-            Console.WriteLine ($"Inorder:     {Inorder (tree.Value)}");
-            Console.WriteLine ($"Postorder:   {Postorder (tree.Value)}");
-            Console.WriteLine ($"Level-order: {LevelOrder (tree)}");
+            resultsTextBox.Text = $@"Preorder:    {string.Join (" ", Preorder (tree.Value))}
+Inorder:     {string.Join (" ", Inorder (tree.Value))}
+Postorder:   {string.Join (" ", Postorder (tree.Value))}
+Level-order: {string.Join (" ", LevelOrder (tree))}";
             ES_GarbageCollector.PerformCollection (-1, ES_GarbageCollector.CollectionMode.Forced);
         } catch (Exception ex) {
             resultsTextBox.Text = $"Consistency test failed: Exception\n{ex.Message}\n{ex.StackTrace}";

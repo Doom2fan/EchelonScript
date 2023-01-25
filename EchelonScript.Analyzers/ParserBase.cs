@@ -8,6 +8,8 @@
  */
 
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -25,10 +27,25 @@ internal abstract class ParserBase {
         this.cancellationToken = cancellationToken;
     }
 
+    protected void Diag (DiagnosticDescriptor desc, params object? []? messageArgs)
+        => reportDiagnostic (Diagnostic.Create (desc, null, messageArgs));
+
     protected void Diag (DiagnosticDescriptor desc, Location? location, params object? []? messageArgs)
         => reportDiagnostic (Diagnostic.Create (desc, location, messageArgs));
 
-    protected string GetNamespaceString (TypeDeclarationSyntax typeDecl) {
+    protected void Diag (DiagnosticDescriptor desc, Location? location, IEnumerable<Location>? additionalLocations, params object? []? messageArgs)
+        => reportDiagnostic (Diagnostic.Create (desc, location, additionalLocations, messageArgs));
+
+    protected void Diag (DiagnosticDescriptor desc, IReadOnlyList<Location>? locations, params object? []? messageArgs) {
+        if (locations is null || locations.Count < 0)
+            Diag (desc, messageArgs);
+        else if (locations.Count == 1)
+            Diag (desc, locations [0], messageArgs);
+        else
+            Diag (desc, locations [0], locations.Skip (1), messageArgs);
+    }
+
+    protected static string GetNamespaceString (TypeDeclarationSyntax typeDecl) {
         // determine the namespace the class is declared in, if any
         var potentialNamespaceParent = typeDecl.Parent;
         while (potentialNamespaceParent != null &&
@@ -50,4 +67,35 @@ internal abstract class ParserBase {
 
         return nspace;
     }
+
+    protected static string? GetAccessMod (Accessibility accessMod) {
+        return accessMod switch {
+            Accessibility.NotApplicable => string.Empty,
+
+            Accessibility.Private => "private",
+            Accessibility.ProtectedAndInternal => throw new NotSupportedException (),
+            Accessibility.Protected => "protected",
+            Accessibility.Internal => "internal",
+            Accessibility.ProtectedOrInternal => "protected internal",
+            Accessibility.Public => "public",
+
+            _ => null,
+        };
+    }
+
+    protected static bool CompareTypeSymbols (INamedTypeSymbol? symbolA, INamedTypeSymbol? symbolB) {
+        if (symbolA is null || symbolB is null)
+            return false;
+
+        return symbolA.Equals (symbolB, SymbolEqualityComparer.Default);
+    }
+
+    protected static bool CheckAttribute (AttributeData attr, INamedTypeSymbol? attrToCheck) {
+        if (attr.AttributeClass is null || attrToCheck is null)
+            return false;
+
+        return CompareTypeSymbols (attr.AttributeClass, attrToCheck);
+    }
+
+    protected static object GetItem (TypedConstant arg) => arg.Kind == TypedConstantKind.Array ? arg.Values! : arg.Value!;
 }

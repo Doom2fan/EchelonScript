@@ -8,26 +8,25 @@
  */
 
 using System;
-using EchelonScript.Common.Data.Types;
 
 namespace EchelonScript.Common.Exporting;
 
 [AttributeUsage (AttributeTargets.Struct)]
 public sealed class ES_ExportStructAttribute : Attribute {
-    public string? ExportName { get; init; }
-    public string []? ExportNamespace { get; init; }
+    public string? Namespace { get; init; }
+    public string? Name { get; init; }
 }
 
 [AttributeUsage (AttributeTargets.Struct)]
 public sealed class ES_ExportClassAttribute : Attribute {
-    public string []? ExportNamespace { get; init; }
-    public string? ExportName { get; init; }
+    public string? Namespace { get; init; }
+    public string? Name { get; init; }
     public Type? ParentClass { get; init; }
 }
 
-[AttributeUsage (AttributeTargets.Property)]
+[AttributeUsage (AttributeTargets.Field)]
 public sealed class ES_ExportFieldAttribute : Attribute {
-    public string? ExportName { get; init; }
+    public string? Name { get; init; }
     public required ES_AccessModifier AccessModifier { get; init; }
     public required ES_Constness Constness { get; init; }
 }

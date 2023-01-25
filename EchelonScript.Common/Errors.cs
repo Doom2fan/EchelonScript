@@ -133,6 +133,19 @@ public abstract class EchelonScriptException : Exception {
     }
 }
 
+public class EchelonScriptAllocationException : EchelonScriptException {
+    private EchelonScriptAllocationException (string message)
+        : base (message) { }
+
+    public static EchelonScriptAllocationException NewInvalidType<T> () where T : unmanaged
+        => new (string.Format ("Type '{0}' cannot be allocated by the GC.", typeof (T).AssemblyQualifiedName));
+}
+
+public class EchelonScriptTypeLoadException : EchelonScriptException {
+    public EchelonScriptTypeLoadException (string typeName)
+        : base (string.Format ("Failed to load type '{0}'.", typeName)) { }
+}
+
 public class EchelonScriptNullAccessException : EchelonScriptException {
     public EchelonScriptNullAccessException ()
         : base ("Tried to access a null reference.") { }

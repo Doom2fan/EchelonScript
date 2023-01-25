@@ -8,12 +8,16 @@
  */
 
 using EchelonScript.Common.Data;
-using EchelonScript.Common.Data.Types;
 
 namespace EchelonScript.Common.Exporting;
 
 public unsafe interface IES_ExportedType {
-    public static ES_MethodTable* MethodTable { get; internal set; }
-
-    public abstract static void InitializeType (ES_NativeTypeTable.NativeTypeLoader typeLoader, ref ES_NativeTypeTable.TypeLoadToken typeToken);
+    protected internal ES_TypeTable.BasicTypeInfo GetBasicData (ES_TypeTable.TypeLoader typeLoader);
+    protected internal void InitializeType (ES_TypeTable.TypeLoader typeLoader, ref ES_TypeTable.TypeLoadToken typeToken);
 }
+
+internal interface IES_ReferenceType {
+    protected internal void InitializeType (ES_TypeTable.TypeLoader typeLoader, ref ES_TypeTable.TypeLoadToken typeToken);
+}
+
+internal interface IES_ArrayType : IES_ReferenceType { }

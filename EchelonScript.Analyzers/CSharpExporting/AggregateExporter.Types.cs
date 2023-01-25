@@ -9,13 +9,23 @@
 
 namespace EchelonScript.Analyzers.CSharpExporting.Internal;
 
+internal enum ExportedFieldSpecialType {
+    None,
+    Reference,
+    Array,
+}
+
 internal struct ExportedField {
-    public string? ExportName;
-    public string? AccessModifier;
-    public string? Constness;
+    public ExportedFieldSpecialType SpecialType;
+
+    public bool NoExport;
+    public string ExportName;
+    public string AccessModifier;
+    public string Constness;
 
     public string FieldType;
     public string PropertyName;
+    public string PropertyAccessibility;
 }
 
 internal struct ExportedMethod {
@@ -31,6 +41,7 @@ internal struct ExportedStruct {
     public string NativeNamespace;
     public string [] NativeParents;
 
+    public string? BaseClass;
     public string? ExportNamespace;
     public string ExportName;
 

@@ -7,6 +7,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+using System;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
@@ -55,7 +56,7 @@ public unsafe struct ES_ObjectAddress {
         get => new (null);
     }
 
-    public void* Address;
+    internal void* Address;
 
     public ES_ObjectHeader* Header {
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
@@ -107,7 +108,34 @@ public struct ES_ArrayIndex {
 }
 
 [StructLayout (LayoutKind.Sequential, Pack = 1)]
-public unsafe struct ES_ArrayHeader {
+public unsafe struct ES_ArrayAddress {
+    public static ES_ArrayAddress Null {
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
+        get => new (null);
+    }
+
+    internal ES_ArrayHeader* Address;
+
+    public ES_ObjectAddress Object {
+        [MethodImpl (MethodImplOptions.AggressiveInlining)]
+        get => new (Address);
+    }
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    internal ES_ArrayAddress (ES_ArrayHeader* addr) => Address = addr;
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    public static explicit operator ES_ObjectAddress (ES_ArrayAddress arrAddr) => new (arrAddr.Address);
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    public ReadOnlySpan<ES_ArrayIndex> GetArrayRanks () => new (ES_ArrayHeader.GetArrayRanksPointer (Address), Address->Rank);
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    public int GetArraySize () => ES_ArrayHeader.GetArraySize ((ES_ObjectAddress) this);
+}
+
+[StructLayout (LayoutKind.Sequential, Pack = 1)]
+internal unsafe struct ES_ArrayHeader {
     public ES_ArrayIndex Length;
     private short padding0;
     private byte padding1;

@@ -18,7 +18,8 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using EchelonScript.Common.Data.Types;
+using EchelonScript.Common.Data;
+using EchelonScript.Common.Exporting;
 
 namespace EchelonScript.Common;
 
@@ -64,7 +65,7 @@ static partial class ES_Utils {
 }
 
 [StructLayout (LayoutKind.Sequential, Pack = 1)]
-public unsafe readonly struct ES_Object<T> : IEquatable<ES_Object<T>>, IEquatable<ES_ObjectConst<T>>
+public unsafe readonly struct ES_Object<T> : IES_ReferenceType, IEquatable<ES_Object<T>>, IEquatable<ES_ObjectConst<T>>
     where T : unmanaged {
     public static ES_Object<T> Null {
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
@@ -123,11 +124,16 @@ public unsafe readonly struct ES_Object<T> : IEquatable<ES_Object<T>>, IEquatabl
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     public override int GetHashCode () => ((nint) objPtr.Address).GetHashCode ();
 
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    void IES_ReferenceType.InitializeType (ES_TypeTable.TypeLoader typeLoader, ref ES_TypeTable.TypeLoadToken typeToken) {
+        typeLoader.CreateReference<T> (ref typeToken, ES_Constness.Mutable);
+    }
+
     #endregion
 }
 
 [StructLayout (LayoutKind.Sequential, Pack = 1)]
-public unsafe readonly struct ES_ObjectImmut<T> : IEquatable<ES_ObjectImmut<T>>, IEquatable<ES_ObjectConst<T>>
+public unsafe readonly struct ES_ObjectImmut<T> : IES_ReferenceType, IEquatable<ES_ObjectImmut<T>>, IEquatable<ES_ObjectConst<T>>
     where T : unmanaged {
     public static ES_ObjectImmut<T> Null {
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
@@ -186,11 +192,16 @@ public unsafe readonly struct ES_ObjectImmut<T> : IEquatable<ES_ObjectImmut<T>>,
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     public override int GetHashCode () => ((nint) objPtr.Address).GetHashCode ();
 
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    void IES_ReferenceType.InitializeType (ES_TypeTable.TypeLoader typeLoader, ref ES_TypeTable.TypeLoadToken typeToken) {
+        typeLoader.CreateReference<T> (ref typeToken, ES_Constness.Immutable);
+    }
+
     #endregion
 }
 
 [StructLayout (LayoutKind.Sequential, Pack = 1)]
-public unsafe readonly struct ES_ObjectConst<T> : IEquatable<ES_ObjectConst<T>>, IEquatable<ES_Object<T>>, IEquatable<ES_ObjectImmut<T>>
+public unsafe readonly struct ES_ObjectConst<T> : IES_ReferenceType, IEquatable<ES_ObjectConst<T>>, IEquatable<ES_Object<T>>, IEquatable<ES_ObjectImmut<T>>
     where T : unmanaged {
     public static ES_ObjectConst<T> Null {
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
@@ -253,6 +264,11 @@ public unsafe readonly struct ES_ObjectConst<T> : IEquatable<ES_ObjectConst<T>>,
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     public override int GetHashCode () => ((nint) objPtr.Address).GetHashCode ();
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    void IES_ReferenceType.InitializeType (ES_TypeTable.TypeLoader typeLoader, ref ES_TypeTable.TypeLoadToken typeToken) {
+        typeLoader.CreateReference<T> (ref typeToken, ES_Constness.Const);
+    }
 
     #endregion
 }

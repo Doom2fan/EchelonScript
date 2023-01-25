@@ -19,15 +19,12 @@ namespace EchelonScript.Analyzers.CSharpExporting;
 
 [Generator]
 public sealed partial class ES_ExportGenerator : IIncrementalGenerator {
-    public const string ExportAttributeNamespace = "EchelonScript.Common.Exporting";
-    public const string ExportInterfaceNamespace = "EchelonScript.Common.Exporting";
+    public const string TypeCommonNamespace = "EchelonScript.Common";
+    public const string ExportAttributeNamespace = $"{TypeCommonNamespace}.Exporting";
+    public const string ExportInterfaceNamespace = $"{TypeCommonNamespace}.Exporting";
 
     public void Initialize (IncrementalGeneratorInitializationContext context) {
         // Do a simple filter for structs.
-        /*var structDeclarations = context.SyntaxProvider.CreateSyntaxProvider (
-            predicate: static (s, _) => StructGenerator.IsSyntaxTargetForGeneration (s),
-            transform: static (ctx, _) => StructGenerator.GetSemanticTargetForGeneration (ctx)
-        ).Where (static m => m is not null)!;*/
         var structDeclarations = context.SyntaxProvider.ForAttributeWithMetadataName (
             AggregateExporter_Parser.StructAttributeFullName,
             static (node, _) => node is StructDeclarationSyntax,
@@ -62,7 +59,7 @@ public sealed partial class ES_ExportGenerator : IIncrementalGenerator {
 
         // Generate the source code and add it to the output.
         var structEmit = new AggregateExporter_Emitter ();
-        var result = structEmit.ExportStruct (structsToExport);
+        var result = structEmit.Emit (structsToExport, context.CancellationToken);
         context.AddSource ("ExportedAggregates.g.cs", SourceText.From (result, Encoding.UTF8));
     }
 

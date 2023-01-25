@@ -10,8 +10,6 @@
 using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using ChronosLib.Pooled;
-using EchelonScript.Common.Utilities;
 
 namespace EchelonScript.Common.Data.Types;
 

@@ -1,24 +1,47 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
+
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <AssemblyName>$(MSBuildThisFileName)</AssemblyName>
-    <IncludeBuildOutput>false</IncludeBuildOutput>
-    <Nullable>enable</Nullable>
     <LangVersion>Latest</LangVersion>
-  </PropertyGroup>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
 
-  <PropertyGroup>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <IncludeSymbols>true</IncludeSymbols>
+    <DebugType>portable</DebugType>
+    <NoPackageAnalysis>true</NoPackageAnalysis>
+
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
     <EnableDefaultItems>true</EnableDefaultItems>
   </PropertyGroup>
 
+  <PropertyGroup>
+  </PropertyGroup>
+
   <ItemGroup>
+    <PackageReference Update="NetStandard.Library" PrivateAssets="all" />
     <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" PrivateAssets="all" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.4.0" PrivateAssets="all" />
-    <PackageReference Include="ExhaustiveMatching.Analyzer" Version="0.5.0" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="$(OutputPath)/$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <None Update="tools\*.ps1" CopyToOutputDirectory="Always" Pack="true" PackagePath="tools" />
+    <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
   </ItemGroup>
+
+  <Target Name="CopyPackage" AfterTargets="Pack">
+    <Copy
+      SourceFiles="$(OutputPath)..\$(PackageId).$(PackageVersion).nupkg"
+      DestinationFolder="$(SolutionDir)\_LocalNuGetPackages\"
+      />
+    <Copy
+      SourceFiles="$(OutputPath)..\$(PackageId).$(PackageVersion).symbols.nupkg"
+      DestinationFolder="$(SolutionDir)\_LocalNuGetPackages\"
+      />
+    <Delete Files="$(OutputPath)..\$(PackageId).$(PackageVersion).nupkg" />
+    <Delete Files="$(OutputPath)..\$(PackageId).$(PackageVersion).symbols.nupkg" />
+  </Target>
+
 </Project>

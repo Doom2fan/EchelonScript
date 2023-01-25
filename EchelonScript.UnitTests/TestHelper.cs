@@ -7,32 +7,41 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+using System.Runtime.CompilerServices;
+using EchelonScript.Common.Exporting;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 
 namespace EchelonScript.UnitTests;
 
 public static class TestHelper {
-    public static Task VerifyCSharp<T> (string source) where T : IIncrementalGenerator, new () {
-        // Parse the provided string into a C# syntax tree
-        var syntaxTree = CSharpSyntaxTree.ParseText (source);
+    [ModuleInitializer]
+    public static void ModuleInitializer () {
+        VerifySourceGenerators.Enable ();
+    }
 
-        // Create a Roslyn compilation for the syntax tree.
+    public static Task VerifyCSharp<T> (string source) where T : IIncrementalGenerator, new () {
+        var syntaxTree = CSharpSyntaxTree.ParseText (source);
         var compilation = CSharpCompilation.Create (
             assemblyName: "Tests",
-            syntaxTrees: new [] { syntaxTree }
+            syntaxTrees: new [] { syntaxTree },
+            references: Basic.Reference.Assemblies.Net70.References.All.Union (new [] {
+                MetadataReference.CreateFromFile (typeof (TestHelper).Assembly.Location),
+                MetadataReference.CreateFromFile (typeof (IES_ExportedType).Assembly.Location),
+            }),
+            options: new (
+                OutputKind.DynamicallyLinkedLibrary,
+                reportSuppressedDiagnostics: false,
+                allowUnsafe: true,
+                assemblyIdentityComparer: DesktopAssemblyIdentityComparer.Default
+            )
         );
 
-        // Create an instance of the incremental source generator
         var generator = new T ();
-
-        // The GeneratorDriver is used to run the generator against a compilation.
         var driver = (GeneratorDriver) CSharpGeneratorDriver.Create (generator);
 
-        // Run the source generator!
         driver = driver.RunGenerators (compilation);
 
-        // Use verify to snapshot test the source generator output!
-        return Verify (driver);
+        return Verify (driver).UseDirectory ("Snapshots");
     }
 }

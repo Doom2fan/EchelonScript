@@ -108,83 +108,7 @@ internal unsafe struct ES_TypeFactory {
         return pointerRefList;
     }
 
-    public ES_MethodTable* GetVoid () {
-        var name = AllocateString (ES_PrimitiveTypeConsts.Void);
-
-        var ret = AllocateType<ES_MethodTable> ();
-        *ret = new (
-            1, ES_TypeFlag.ValueType | ES_TypeFlag.NoRefs,
-            null, 0,
-            null, 0,
-            null, AllocateType<ES_TypeInfo> (new (
-                ES_TypeTag.Void,
-                ret,
-                ES_Utf8String.Empty, new (ES_Utf8String.Empty, name)
-            )),
-            null, 0
-        );
-
-        return ret;
-    }
-
-    public ES_MethodTable* GetBool () {
-        var name = AllocateString (ES_PrimitiveTypeConsts.Bool);
-
-        var ret = AllocateType<ES_MethodTable> ();
-        *ret = new (
-            1, ES_TypeFlag.ValueType | ES_TypeFlag.NoRefs,
-            null, 0,
-            null, 0,
-            null, AllocateType<ES_TypeInfo> (new (
-                ES_TypeTag.Void,
-                ret,
-                ES_Utf8String.Empty, new (ES_Utf8String.Empty, name)
-            )),
-            null, 0
-        );
-
-        return ret;
-    }
-
-    public ES_MethodTable* GetInt (ES_IntSize size, bool unsigned) => GetInt (new ES_IntInfo (size, unsigned));
-    public ES_MethodTable* GetInt (ES_IntInfo intInfo) {
-        var name = AllocateString (ES_PrimitiveTypeConsts.GetIntName (intInfo.Size, intInfo.Unsigned));
-
-        var ret = AllocateType<ES_MethodTable> ();
-        *ret = new (
-            ES_PrimitiveTypeConsts.GetIntMemorySize (intInfo.Size), ES_TypeFlag.ValueType | ES_TypeFlag.NoRefs,
-            null, 0,
-            null, 0,
-            null, AllocateType<ES_TypeInfo> (new (
-                ret,
-                ES_Utf8String.Empty, new (ES_Utf8String.Empty, name),
-                intInfo
-            )),
-            null, 0
-        );
-
-        return ret;
-    }
-
-    public ES_MethodTable* GetFloat (ES_FloatSize size) => GetFloat (new ES_FloatInfo (size));
-    public ES_MethodTable* GetFloat (ES_FloatInfo floatInfo) {
-        var name = AllocateString (ES_PrimitiveTypeConsts.GetFloatName (floatInfo.Size));
-
-        var ret = AllocateType<ES_MethodTable> ();
-        *ret = new (
-            ES_PrimitiveTypeConsts.GetFloatMemorySize (floatInfo.Size), ES_TypeFlag.ValueType | ES_TypeFlag.NoRefs,
-            null, 0,
-            null, 0,
-            null, AllocateType<ES_TypeInfo> (new (
-                ret,
-                ES_Utf8String.Empty, new (ES_Utf8String.Empty, name),
-                floatInfo
-            )),
-            null, 0
-        );
-
-        return ret;
-    }
+#if false
 
     public ES_MethodTable* GetReference (ES_Constness pointedConst, ES_MethodTable* pointedType) {
         ES_Utf8String name;
@@ -307,6 +231,7 @@ internal unsafe struct ES_TypeFactory {
 
         return ret;
     }
+#endif
 
     public void SetRefsList (ES_MethodTable* methodTable, ReadOnlySpan<nint> refsList) {
         var refsPtr = AllocateArray (refsList);

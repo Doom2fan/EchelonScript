@@ -19,7 +19,8 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using CommunityToolkit.HighPerformance;
-using EchelonScript.Common.Data.Types;
+using EchelonScript.Common.Data;
+using EchelonScript.Common.Exporting;
 
 namespace EchelonScript.Common;
 
@@ -124,7 +125,7 @@ static partial class ES_Utils {
 }
 
 [StructLayout (LayoutKind.Sequential, Pack = 1)]
-public unsafe readonly struct ES_Array1D<T> : IEquatable<ES_Array1D<T>>, IEquatable<ES_ConstArray1D<T>>
+public unsafe readonly struct ES_Array1D<T> : IES_ReferenceType, IEquatable<ES_Array1D<T>>, IEquatable<ES_ConstArray1D<T>>
     where T : unmanaged {
     public static ES_Array1D<T> Null {
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
@@ -146,6 +147,9 @@ public unsafe readonly struct ES_Array1D<T> : IEquatable<ES_Array1D<T>>, IEquata
     }
 
     #endregion
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    internal ES_Array1D (ES_ArrayAddress ptr) => arrayPtr = ptr.Address;
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     internal ES_Array1D (ES_ArrayHeader* ptr) => arrayPtr = ptr;
@@ -201,11 +205,16 @@ public unsafe readonly struct ES_Array1D<T> : IEquatable<ES_Array1D<T>>, IEquata
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     public override int GetHashCode () => ((nint) arrayPtr).GetHashCode ();
 
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    void IES_ReferenceType.InitializeType (ES_TypeTable.TypeLoader typeLoader, ref ES_TypeTable.TypeLoadToken typeToken) {
+        typeLoader.CreateArray<T> (ref typeToken, ES_Constness.Mutable, 1);
+    }
+
     #endregion
 }
 
 [StructLayout (LayoutKind.Sequential, Pack = 1)]
-public unsafe readonly struct ES_ImmutArray1D<T> : IEquatable<ES_ImmutArray1D<T>>, IEquatable<ES_ConstArray1D<T>>
+public unsafe readonly struct ES_ImmutArray1D<T> : IES_ReferenceType, IEquatable<ES_ImmutArray1D<T>>, IEquatable<ES_ConstArray1D<T>>
     where T : unmanaged {
     public static ES_ImmutArray1D<T> Null {
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
@@ -227,6 +236,9 @@ public unsafe readonly struct ES_ImmutArray1D<T> : IEquatable<ES_ImmutArray1D<T>
     }
 
     #endregion
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    internal ES_ImmutArray1D (ES_ArrayAddress ptr) => arrayPtr = ptr.Address;
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     internal ES_ImmutArray1D (ES_ArrayHeader* ptr) => arrayPtr = ptr;
@@ -282,11 +294,16 @@ public unsafe readonly struct ES_ImmutArray1D<T> : IEquatable<ES_ImmutArray1D<T>
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     public override int GetHashCode () => ((nint) arrayPtr).GetHashCode ();
 
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    void IES_ReferenceType.InitializeType (ES_TypeTable.TypeLoader typeLoader, ref ES_TypeTable.TypeLoadToken typeToken) {
+        typeLoader.CreateArray<T> (ref typeToken, ES_Constness.Immutable, 1);
+    }
+
     #endregion
 }
 
 [StructLayout (LayoutKind.Sequential, Pack = 1)]
-public unsafe readonly struct ES_ConstArray1D<T> : IEquatable<ES_ConstArray1D<T>>, IEquatable<ES_Array1D<T>>, IEquatable<ES_ImmutArray1D<T>>
+public unsafe readonly struct ES_ConstArray1D<T> : IES_ReferenceType, IEquatable<ES_ConstArray1D<T>>, IEquatable<ES_Array1D<T>>, IEquatable<ES_ImmutArray1D<T>>
     where T : unmanaged {
     public static ES_ConstArray1D<T> Null {
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
@@ -308,6 +325,9 @@ public unsafe readonly struct ES_ConstArray1D<T> : IEquatable<ES_ConstArray1D<T>
     }
 
     #endregion
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    internal ES_ConstArray1D (ES_ArrayAddress ptr) => arrayPtr = ptr.Address;
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     internal ES_ConstArray1D (ES_ArrayHeader* ptr) => arrayPtr = ptr;
@@ -371,11 +391,16 @@ public unsafe readonly struct ES_ConstArray1D<T> : IEquatable<ES_ConstArray1D<T>
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     public override int GetHashCode () => ((nint) arrayPtr).GetHashCode ();
 
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    void IES_ReferenceType.InitializeType (ES_TypeTable.TypeLoader typeLoader, ref ES_TypeTable.TypeLoadToken typeToken) {
+        typeLoader.CreateArray<T> (ref typeToken, ES_Constness.Const, 1);
+    }
+
     #endregion
 }
 
 [StructLayout (LayoutKind.Sequential, Pack = 1)]
-public unsafe readonly struct ES_Array2D<T> : IEquatable<ES_Array2D<T>>, IEquatable<ES_ConstArray2D<T>>
+public unsafe readonly struct ES_Array2D<T> : IES_ReferenceType, IEquatable<ES_Array2D<T>>, IEquatable<ES_ConstArray2D<T>>
     where T : unmanaged {
     public static ES_Array2D<T> Null {
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
@@ -402,6 +427,9 @@ public unsafe readonly struct ES_Array2D<T> : IEquatable<ES_Array2D<T>>, IEquata
     }
 
     #endregion
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    internal ES_Array2D (ES_ArrayAddress ptr) => arrayPtr = ptr.Address;
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     internal ES_Array2D (ES_ArrayHeader* ptr) => arrayPtr = ptr;
@@ -475,11 +503,16 @@ public unsafe readonly struct ES_Array2D<T> : IEquatable<ES_Array2D<T>>, IEquata
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     public override int GetHashCode () => ((nint) arrayPtr).GetHashCode ();
 
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    void IES_ReferenceType.InitializeType (ES_TypeTable.TypeLoader typeLoader, ref ES_TypeTable.TypeLoadToken typeToken) {
+        typeLoader.CreateArray<T> (ref typeToken, ES_Constness.Mutable, 2);
+    }
+
     #endregion
 }
 
 [StructLayout (LayoutKind.Sequential, Pack = 1)]
-public unsafe readonly struct ES_ImmutArray2D<T> : IEquatable<ES_ImmutArray2D<T>>, IEquatable<ES_ConstArray2D<T>>
+public unsafe readonly struct ES_ImmutArray2D<T> : IES_ReferenceType, IEquatable<ES_ImmutArray2D<T>>, IEquatable<ES_ConstArray2D<T>>
     where T : unmanaged {
     public static ES_ImmutArray2D<T> Null {
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
@@ -506,6 +539,9 @@ public unsafe readonly struct ES_ImmutArray2D<T> : IEquatable<ES_ImmutArray2D<T>
     }
 
     #endregion
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    internal ES_ImmutArray2D (ES_ArrayAddress ptr) => arrayPtr = ptr.Address;
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     internal ES_ImmutArray2D (ES_ArrayHeader* ptr) => arrayPtr = ptr;
@@ -579,11 +615,16 @@ public unsafe readonly struct ES_ImmutArray2D<T> : IEquatable<ES_ImmutArray2D<T>
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     public override int GetHashCode () => ((nint) arrayPtr).GetHashCode ();
 
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    void IES_ReferenceType.InitializeType (ES_TypeTable.TypeLoader typeLoader, ref ES_TypeTable.TypeLoadToken typeToken) {
+        typeLoader.CreateArray<T> (ref typeToken, ES_Constness.Immutable, 2);
+    }
+
     #endregion
 }
 
 [StructLayout (LayoutKind.Sequential, Pack = 1)]
-public unsafe readonly struct ES_ConstArray2D<T> : IEquatable<ES_ConstArray2D<T>>, IEquatable<ES_Array2D<T>>, IEquatable<ES_ImmutArray2D<T>>
+public unsafe readonly struct ES_ConstArray2D<T> : IES_ReferenceType, IEquatable<ES_ConstArray2D<T>>, IEquatable<ES_Array2D<T>>, IEquatable<ES_ImmutArray2D<T>>
     where T : unmanaged {
     public static ES_ConstArray2D<T> Null {
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
@@ -610,6 +651,9 @@ public unsafe readonly struct ES_ConstArray2D<T> : IEquatable<ES_ConstArray2D<T>
     }
 
     #endregion
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    internal ES_ConstArray2D (ES_ArrayAddress ptr) => arrayPtr = ptr.Address;
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     internal ES_ConstArray2D (ES_ArrayHeader* ptr) => arrayPtr = ptr;
@@ -701,11 +745,16 @@ public unsafe readonly struct ES_ConstArray2D<T> : IEquatable<ES_ConstArray2D<T>
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     public override int GetHashCode () => ((nint) arrayPtr).GetHashCode ();
 
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    void IES_ReferenceType.InitializeType (ES_TypeTable.TypeLoader typeLoader, ref ES_TypeTable.TypeLoadToken typeToken) {
+        typeLoader.CreateArray<T> (ref typeToken, ES_Constness.Const, 2);
+    }
+
     #endregion
 }
 
 [StructLayout (LayoutKind.Sequential, Pack = 1)]
-public unsafe readonly struct ES_Array3D<T> : IEquatable<ES_Array3D<T>>, IEquatable<ES_ConstArray3D<T>>
+public unsafe readonly struct ES_Array3D<T> : IES_ReferenceType, IEquatable<ES_Array3D<T>>, IEquatable<ES_ConstArray3D<T>>
     where T : unmanaged {
     public static ES_Array3D<T> Null {
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
@@ -717,6 +766,9 @@ public unsafe readonly struct ES_Array3D<T> : IEquatable<ES_Array3D<T>>, IEquata
     internal readonly ES_ArrayHeader* arrayPtr;
 
     #endregion
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    internal ES_Array3D (ES_ArrayAddress ptr) => arrayPtr = ptr.Address;
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     internal ES_Array3D (ES_ArrayHeader* ptr) => arrayPtr = ptr;
@@ -792,11 +844,16 @@ public unsafe readonly struct ES_Array3D<T> : IEquatable<ES_Array3D<T>>, IEquata
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     public override int GetHashCode () => ((nint) arrayPtr).GetHashCode ();
 
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    void IES_ReferenceType.InitializeType (ES_TypeTable.TypeLoader typeLoader, ref ES_TypeTable.TypeLoadToken typeToken) {
+        typeLoader.CreateArray<T> (ref typeToken, ES_Constness.Mutable, 3);
+    }
+
     #endregion
 }
 
 [StructLayout (LayoutKind.Sequential, Pack = 1)]
-public unsafe readonly struct ES_ImmutArray3D<T> : IEquatable<ES_ImmutArray3D<T>>, IEquatable<ES_ConstArray3D<T>>
+public unsafe readonly struct ES_ImmutArray3D<T> : IES_ReferenceType, IEquatable<ES_ImmutArray3D<T>>, IEquatable<ES_ConstArray3D<T>>
     where T : unmanaged {
     public static ES_ImmutArray3D<T> Null {
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
@@ -808,6 +865,9 @@ public unsafe readonly struct ES_ImmutArray3D<T> : IEquatable<ES_ImmutArray3D<T>
     internal readonly ES_ArrayHeader* arrayPtr;
 
     #endregion
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    internal ES_ImmutArray3D (ES_ArrayAddress ptr) => arrayPtr = ptr.Address;
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     internal ES_ImmutArray3D (ES_ArrayHeader* ptr) => arrayPtr = ptr;
@@ -883,11 +943,16 @@ public unsafe readonly struct ES_ImmutArray3D<T> : IEquatable<ES_ImmutArray3D<T>
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     public override int GetHashCode () => ((nint) arrayPtr).GetHashCode ();
 
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    void IES_ReferenceType.InitializeType (ES_TypeTable.TypeLoader typeLoader, ref ES_TypeTable.TypeLoadToken typeToken) {
+        typeLoader.CreateArray<T> (ref typeToken, ES_Constness.Immutable, 3);
+    }
+
     #endregion
 }
 
 [StructLayout (LayoutKind.Sequential, Pack = 1)]
-public unsafe readonly struct ES_ConstArray3D<T> : IEquatable<ES_ConstArray3D<T>>, IEquatable<ES_Array3D<T>>, IEquatable<ES_ImmutArray3D<T>>
+public unsafe readonly struct ES_ConstArray3D<T> : IES_ReferenceType, IEquatable<ES_ConstArray3D<T>>, IEquatable<ES_Array3D<T>>, IEquatable<ES_ImmutArray3D<T>>
     where T : unmanaged {
     public static ES_ConstArray3D<T> Null {
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
@@ -899,6 +964,9 @@ public unsafe readonly struct ES_ConstArray3D<T> : IEquatable<ES_ConstArray3D<T>
     internal readonly ES_ArrayHeader* arrayPtr;
 
     #endregion
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    internal ES_ConstArray3D (ES_ArrayAddress ptr) => arrayPtr = ptr.Address;
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     internal ES_ConstArray3D (ES_ArrayHeader* ptr) => arrayPtr = ptr;
@@ -992,11 +1060,16 @@ public unsafe readonly struct ES_ConstArray3D<T> : IEquatable<ES_ConstArray3D<T>
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     public override int GetHashCode () => ((nint) arrayPtr).GetHashCode ();
 
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    void IES_ReferenceType.InitializeType (ES_TypeTable.TypeLoader typeLoader, ref ES_TypeTable.TypeLoadToken typeToken) {
+        typeLoader.CreateArray<T> (ref typeToken, ES_Constness.Const, 3);
+    }
+
     #endregion
 }
 
 [StructLayout (LayoutKind.Sequential, Pack = 1)]
-public unsafe readonly struct ES_Array4D<T> : IEquatable<ES_Array4D<T>>, IEquatable<ES_ConstArray4D<T>>
+public unsafe readonly struct ES_Array4D<T> : IES_ReferenceType, IEquatable<ES_Array4D<T>>, IEquatable<ES_ConstArray4D<T>>
     where T : unmanaged {
     public static ES_Array4D<T> Null {
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
@@ -1008,6 +1081,9 @@ public unsafe readonly struct ES_Array4D<T> : IEquatable<ES_Array4D<T>>, IEquata
     internal readonly ES_ArrayHeader* arrayPtr;
 
     #endregion
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    internal ES_Array4D (ES_ArrayAddress ptr) => arrayPtr = ptr.Address;
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     internal ES_Array4D (ES_ArrayHeader* ptr) => arrayPtr = ptr;
@@ -1085,11 +1161,16 @@ public unsafe readonly struct ES_Array4D<T> : IEquatable<ES_Array4D<T>>, IEquata
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     public override int GetHashCode () => ((nint) arrayPtr).GetHashCode ();
 
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    void IES_ReferenceType.InitializeType (ES_TypeTable.TypeLoader typeLoader, ref ES_TypeTable.TypeLoadToken typeToken) {
+        typeLoader.CreateArray<T> (ref typeToken, ES_Constness.Mutable, 4);
+    }
+
     #endregion
 }
 
 [StructLayout (LayoutKind.Sequential, Pack = 1)]
-public unsafe readonly struct ES_ImmutArray4D<T> : IEquatable<ES_ImmutArray4D<T>>, IEquatable<ES_ConstArray4D<T>>
+public unsafe readonly struct ES_ImmutArray4D<T> : IES_ReferenceType, IEquatable<ES_ImmutArray4D<T>>, IEquatable<ES_ConstArray4D<T>>
     where T : unmanaged {
     public static ES_ImmutArray4D<T> Null {
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
@@ -1101,6 +1182,9 @@ public unsafe readonly struct ES_ImmutArray4D<T> : IEquatable<ES_ImmutArray4D<T>
     internal readonly ES_ArrayHeader* arrayPtr;
 
     #endregion
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    internal ES_ImmutArray4D (ES_ArrayAddress ptr) => arrayPtr = ptr.Address;
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     internal ES_ImmutArray4D (ES_ArrayHeader* ptr) => arrayPtr = ptr;
@@ -1178,11 +1262,16 @@ public unsafe readonly struct ES_ImmutArray4D<T> : IEquatable<ES_ImmutArray4D<T>
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     public override int GetHashCode () => ((nint) arrayPtr).GetHashCode ();
 
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    void IES_ReferenceType.InitializeType (ES_TypeTable.TypeLoader typeLoader, ref ES_TypeTable.TypeLoadToken typeToken) {
+        typeLoader.CreateArray<T> (ref typeToken, ES_Constness.Immutable, 4);
+    }
+
     #endregion
 }
 
 [StructLayout (LayoutKind.Sequential, Pack = 1)]
-public unsafe readonly struct ES_ConstArray4D<T> : IEquatable<ES_ConstArray4D<T>>, IEquatable<ES_Array4D<T>>, IEquatable<ES_ImmutArray4D<T>>
+public unsafe readonly struct ES_ConstArray4D<T> : IES_ReferenceType, IEquatable<ES_ConstArray4D<T>>, IEquatable<ES_Array4D<T>>, IEquatable<ES_ImmutArray4D<T>>
     where T : unmanaged {
     public static ES_ConstArray4D<T> Null {
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
@@ -1194,6 +1283,9 @@ public unsafe readonly struct ES_ConstArray4D<T> : IEquatable<ES_ConstArray4D<T>
     internal readonly ES_ArrayHeader* arrayPtr;
 
     #endregion
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    internal ES_ConstArray4D (ES_ArrayAddress ptr) => arrayPtr = ptr.Address;
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     internal ES_ConstArray4D (ES_ArrayHeader* ptr) => arrayPtr = ptr;
@@ -1288,6 +1380,11 @@ public unsafe readonly struct ES_ConstArray4D<T> : IEquatable<ES_ConstArray4D<T>
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     public override int GetHashCode () => ((nint) arrayPtr).GetHashCode ();
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    void IES_ReferenceType.InitializeType (ES_TypeTable.TypeLoader typeLoader, ref ES_TypeTable.TypeLoadToken typeToken) {
+        typeLoader.CreateArray<T> (ref typeToken, ES_Constness.Const, 4);
+    }
 
     #endregion
 }

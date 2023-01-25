@@ -16,41 +16,36 @@ public class ExportGeneratorSnapshotTests {
     [Fact]
     public Task GeneratesExportsCorrectly () {
         var source = @"
-[ES_ExportStruct (new [] { ""NativeTests.Export"" }, ""BinaryTree"")]
+using EchelonScript.Common;
+using EchelonScript.Common.Exporting;
+
+[ES_ExportStruct (Namespace = ""NativeTests.Export"", Name = ""BinaryTree"")]
 internal partial struct BinaryTree {
-    [ES_ExportFieldAttribute (""Left"", ES_AccessModifiers.Public, ES_Constness.Mutable)]
-    public partial ref ES_Object<BinaryTree> Left { get; }
-    [ES_ExportFieldAttribute (ES_AccessModifiers.Public, ES_Constness.Mutable)]
-    public partial ref ES_Object<BinaryTree> Right { get; }
+    private struct ExportDefinition {
+        [ES_ExportFieldAttribute (Name = ""Left"", AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
+        public ES_Object<BinaryTree> Left;
+        [ES_ExportFieldAttribute (AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
+        public ES_Object<BinaryTree> Right;
 
-    [ES_ExportFieldAttribute (ES_AccessModifiers.Public, ES_Constness.Mutable)]
-    public partial ref ES_Object<SomeValue> ValuePointer { get; }
-    [ES_ExportFieldAttribute (ES_AccessModifiers.Public, ES_Constness.Mutable)]
-    public partial ref SomeValue ValueDirect { get; }
+        [ES_ExportFieldAttribute (AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
+        public ES_Object<SomeValue> ValuePointer;
+        [ES_ExportFieldAttribute (AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
+        public SomeValue ValueDirect;
 
-    private partial ref ES_Object<SomeValue> HiddenValuePointer { get; }
-    private partial ref SomeValue HiddenValue { get; }
-
-    public BinaryTree (int val, ES_Object<BinaryTree> left, ES_Object<BinaryTree> right) {
-        Value = val;
-        Left = left;
-        Right = right;
-
-        ValuePointer = default;
-        ValueDirect = default;
-
-        HiddenValuePointer = default;
-        HiddenValue = default;
+        private ES_Object<SomeValue> HiddenValuePointer;
+        private SomeValue HiddenValue;
     }
 }
 
-[ES_ExportStruct (new [] { ""NativeTests.Export"" }, ""BinaryTree"")]
+[ES_ExportStruct (Namespace = ""NativeTests.Export"")]
 internal partial struct SomeValue {
-    [ES_ExportFieldAttribute (ES_AccessModifiers.Public, ES_Constness.Mutable)]
-    public partial ref int Value { get; }
+    private struct ExportDefinition {
+        [ES_ExportFieldAttribute (AccessModifier = ES_AccessModifier.Public)]
+        public int Value;
 
-    [ES_ExportFieldAttribute (""SomeBinaryTree"", ES_AccessModifiers.Public, ES_Constness.Mutable)]
-    public partial ref ES_Object<BinaryTree> BinaryTree { get; }
+        [ES_ExportFieldAttribute (Name = ""SomeBinaryTree"", AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
+        public ES_Object<BinaryTree> BinaryTree;
+    }
 }
 ";
 

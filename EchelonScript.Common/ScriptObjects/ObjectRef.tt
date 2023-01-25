@@ -25,7 +25,9 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using EchelonScript.Common.Data;
 using EchelonScript.Common.Data.Types;
+using EchelonScript.Common.Exporting;
 
 namespace EchelonScript.Common;
 <#
@@ -73,7 +75,7 @@ static partial class ES_Utils {
     foreach (var mode in modesList) {
         var isMutable = mode == Mode.Mutable;
         var typeName = $"{GetName (mode)}";
-        var interfaces = $"IEquatable<{typeName}<T>>";
+        var interfaces = $"IES_ReferenceType, IEquatable<{typeName}<T>>";
         var valModifier = isMutable ? " ref" : " ref readonly";
 
         if (mode != Mode.Const)
@@ -180,6 +182,11 @@ public unsafe readonly struct <#= typeName #><T> : <#= interfaces #>
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     public override int GetHashCode () => ((nint) objPtr.Address).GetHashCode ();
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    void IES_ReferenceType.InitializeType (ES_NativeTypeTable.NativeTypeLoader typeLoader, ref ES_NativeTypeTable.TypeLoadToken typeToken) {
+        typeLoader.CreateReference<T> (ref typeToken, <#= GetConstness (mode) #>);
+    }
 
     #endregion
 }

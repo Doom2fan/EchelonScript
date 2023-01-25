@@ -10,32 +10,163 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Reflection;
-using System.Runtime.InteropServices;
-using System.Text;
 using ChronosLib.Pooled;
 using EchelonScript.Common.Data.Types;
 using EchelonScript.Common.Exporting;
 using EchelonScript.Common.Utilities;
-using ExhaustiveMatching;
 using static TerraFX.Interop.Mimalloc;
 
 namespace EchelonScript.Common.Data;
 
-public unsafe readonly struct ES_NativeTypeStoredData {
-    internal readonly bool Loaded { get; init; }
-    internal readonly bool Loading { get; init; }
+internal delegate bool ES_InitializeNativeTypeDelegate (ES_TypeTable.TypeLoader typeLoader, ref ES_TypeTable.TypeLoadToken typeToken, bool doLoad);
+public unsafe delegate void ES_InitializeScriptTypeDelegate (ES_TypeTable.TypeLoader typeLoader, void* data, ref ES_TypeTable.TypeLoadToken typeToken);
 
-    public readonly Type Type { get; init; }
-    public readonly ES_MethodTable* MethodTable { get; init; }
+internal unsafe interface IES_NativeTypeStoredData {
+    internal bool Loaded { get; }
+    internal bool Loading { get; }
+
+    public Type ClrType { get; }
+    public ES_MethodTable* MethodTable { get; }
 }
 
-public unsafe class ES_NativeTypeTable : IDisposable {
-    private static ES_NativeTypeTable instance;
+public unsafe sealed class ES_NativeTypeStoredData<T> : IES_NativeTypeStoredData where T : unmanaged {
+    public readonly static ES_NativeTypeStoredData<T> Instance = new ();
+
+    internal bool Loaded { get; set; }
+    internal bool Loading { get; set; }
+
+    public Type ClrType { get; private set; }
+    public ES_MethodTable* MethodTable { get; private set; }
+
+    bool IES_NativeTypeStoredData.Loaded => Loaded;
+    bool IES_NativeTypeStoredData.Loading => Loading;
+
+    private ES_NativeTypeStoredData () {
+        Loaded = false;
+        Loading = false;
+
+        ClrType = typeof (T);
+        MethodTable = null;
+    }
+
+    internal void StartInit (ES_TypeTable.TypeLoader typeLoader, ref ES_TypeTable.TypeLoadToken typeToken) {
+        Loading = true;
+        MethodTable = typeToken.MethodTable;
+
+        if (default (T) is IES_ExportedType exportedType) {
+            var basicData = exportedType.GetBasicData (typeLoader);
+
+            *MethodTable = *MethodTable with {
+                RuntimeSizeInit = basicData.RuntimeSize,
+            };
+            *MethodTable->TypeInfo = *MethodTable->TypeInfo with {
+                NameInit = basicData.Name,
+                SourceUnitInit = basicData.SourceUnit,
+            };
+        }
+    }
+
+    internal void EndInit (bool loaded) {
+        Debug.Assert (Loading);
+        Debug.Assert (MethodTable != null);
+
+        (Loading, Loaded) = (false, loaded);
+        if (!loaded)
+            MethodTable = null;
+    }
+
+    internal bool InitializeType (ES_TypeTable.TypeLoader typeLoader, ref ES_TypeTable.TypeLoadToken typeToken, bool doLoad) {
+        Debug.Assert (Loading);
+        Debug.Assert (!Loaded);
+
+        if (Loaded)
+            return true;
+        if (!Loading)
+            return false;
+
+        if (
+            TryHandlePrimitive (typeLoader, ref typeToken) ||
+            TryHandleReference (typeLoader, ref typeToken)
+        )
+            goto Success;
+
+        if (!doLoad)
+            return false;
+
+        if (TryHandleExport (typeLoader, ref typeToken))
+            goto Success;
+
+        EndInit (false);
+        throw new EchelonScriptTypeLoadException (nameof (T));
+
+    Success:
+        EndInit (true);
+        return true;
+    }
+
+    private bool TryHandlePrimitive (ES_TypeTable.TypeLoader typeLoader, ref ES_TypeTable.TypeLoadToken typeToken) {
+        if (ClrType == typeof (ES_Void))
+            typeLoader.CreateVoid (ref typeToken);
+        else if (ClrType == typeof (bool))
+            typeLoader.CreateBool (ref typeToken);
+        // Signed ints
+        else if (ClrType == typeof (sbyte))
+            typeLoader.CreateInt (ref typeToken, ES_IntSize.Int8, false);
+        else if (ClrType == typeof (short))
+            typeLoader.CreateInt (ref typeToken, ES_IntSize.Int16, false);
+        else if (ClrType == typeof (int))
+            typeLoader.CreateInt (ref typeToken, ES_IntSize.Int32, false);
+        else if (ClrType == typeof (long))
+            typeLoader.CreateInt (ref typeToken, ES_IntSize.Int64, false);
+        // Unsigned ints
+        else if (ClrType == typeof (byte))
+            typeLoader.CreateInt (ref typeToken, ES_IntSize.Int8, true);
+        else if (ClrType == typeof (ushort))
+            typeLoader.CreateInt (ref typeToken, ES_IntSize.Int16, true);
+        else if (ClrType == typeof (uint))
+            typeLoader.CreateInt (ref typeToken, ES_IntSize.Int32, true);
+        else if (ClrType == typeof (ulong))
+            typeLoader.CreateInt (ref typeToken, ES_IntSize.Int64, true);
+        // Floats
+        else if (ClrType == typeof (float))
+            typeLoader.CreateFloat (ref typeToken, ES_FloatSize.Single);
+        else if (ClrType == typeof (double))
+            typeLoader.CreateFloat (ref typeToken, ES_FloatSize.Double);
+
+        // Non-matching
+        else
+            return false;
+
+        return typeToken.Created;
+    }
+
+    private bool TryHandleReference (ES_TypeTable.TypeLoader typeLoader, ref ES_TypeTable.TypeLoadToken typeToken) {
+        if (ClrType == typeof (ES_ObjectAddress) || ClrType == typeof (ES_ArrayAddress))
+            typeLoader.GetType<ES_Object<ES_Void>> (true);
+        else if (default (T) is IES_ReferenceType refType) {
+            refType.InitializeType (typeLoader, ref typeToken);
+            return typeToken.Created;
+        }
+
+        return false;
+    }
+
+    private static bool TryHandleExport (ES_TypeTable.TypeLoader typeLoader, ref ES_TypeTable.TypeLoadToken typeToken) {
+        if (default (T) is not IES_ExportedType exportedType)
+            return false;
+
+        exportedType.InitializeType (typeLoader, ref typeToken);
+        return typeToken.Created;
+    }
+}
+
+public unsafe sealed class ES_TypeTable : IDisposable {
+    private static ES_TypeTable nativeInstance;
 
     private struct TypeLoadData {
-        public Type Type;
         public ES_MethodTable* MethodTable;
+        public ES_InitializeNativeTypeDelegate? NativeInitDelegate;
+        public ES_InitializeScriptTypeDelegate? ScriptInitDelegate;
     }
 
     [NonCopyable]
@@ -49,46 +180,149 @@ public unsafe class ES_NativeTypeTable : IDisposable {
             Created = false;
             MethodTable = methodTable;
         }
+
+        internal void Validate (string paramName) {
+            if (!Initialized)
+                throw new ArgumentException ("Invalid type token.", paramName);
+            if (Created)
+                throw new ArgumentException ("Type was already initialized.", paramName);
+        }
     }
 
-    public class NativeTypeLoader {
-        private ES_NativeTypeTable typeTable;
+    public readonly struct BasicTypeInfo {
+        public ES_FullyQualifiedName Name { get; private init; }
+        public ES_Utf8String SourceUnit { get; private init; }
+        public int RuntimeSize { get; private init; }
 
-        internal NativeTypeLoader (ES_NativeTypeTable tTable) => typeTable = tTable;
+        public BasicTypeInfo (
+            ES_FullyQualifiedName name,
+            ES_Utf8String sourceUnit,
+            int size
+        ) {
+            Name = name;
+            SourceUnit = sourceUnit;
+            RuntimeSize = size;
+        }
+    }
 
-        public ES_MethodTable* GetType<T> () where T : unmanaged, IES_ExportedType => throw new NotImplementedException ();
+    // TODO: wtf do we do about script types? Turning this into a generic type loader might be more trouble than it's worth.
+    // Or maybe the generic version should work off of data structures? That way we could have it properly walk through the tree.
+    // Maybe we should make it so types do "basic" initialization first (e.g., names, sizes, etc.) then actually load fully.
+    public sealed class TypeLoader {
+        private ES_TypeTable typeTable;
+        private nint* pointerRefList;
 
-        public ES_MethodTable* GetVoid () => Primitive_Void.MethodTable;
-        public ES_MethodTable* GetBool () => GetNativeType<bool> ().MethodTable;
-        public ES_MethodTable* GetInt (ES_IntSize size, bool unsigned) => (size switch {
-            ES_IntSize.Int8  => unsigned ? Primitive_UInt8  : Primitive_SInt8,
-            ES_IntSize.Int16 => unsigned ? Primitive_UInt16 : Primitive_SInt16,
-            ES_IntSize.Int32 => unsigned ? Primitive_UInt32 : Primitive_SInt32,
-            ES_IntSize.Int64 => unsigned ? Primitive_UInt64 : Primitive_SInt64,
+        internal TypeLoader (ES_TypeTable tTable) => typeTable = tTable;
 
-            _ => throw ExhaustiveMatch.Failed (size),
-        }).MethodTable;
-        public ES_MethodTable* GetFloat (ES_FloatSize size) => (size switch {
-            ES_FloatSize.Single => Primitive_Float32,
-            ES_FloatSize.Double => Primitive_Float64,
+        private ArrayPointer<nint> GetPointerRefList () {
+            if (pointerRefList == null)
+                pointerRefList = AllocateType<nint> (0);
 
-            _ => throw ExhaustiveMatch.Failed (size),
-        }).MethodTable;
+            return new (pointerRefList, 1);
+        }
 
-        public ES_MethodTable* GetReference<T> (ES_Constness constness) where T : unmanaged, IES_ExportedType => throw new NotImplementedException ();
-        public ES_MethodTable* GetArray<T> (ES_Constness constness, nint rank) where T : unmanaged, IES_ExportedType => throw new NotImplementedException ();
+        private void AddFQNToChars (ref StructPooledList<char> chars, ES_FullyQualifiedName fqn, ES_Constness constness) {
+            switch (constness) {
+                case ES_Constness.Mutable: break;
+                case ES_Constness.Const: chars.AddRange ("const("); break;
+                case ES_Constness.Immutable: chars.AddRange ("immutable("); break;
 
+                default: throw new NotImplementedException ("Constness kind not implemented.");
+            }
+
+            fqn.GetNameAsTypeChars (ref chars);
+
+            if (constness != ES_Constness.Mutable)
+                chars.Add (')');
+        }
+
+        public ES_FullyQualifiedName AllocateFQN (ReadOnlySpan<char> nsName, ReadOnlySpan<char> name)
+            => new (typeTable.typeFactory.AllocateString (nsName), typeTable.typeFactory.AllocateString (name));
+        public ES_Utf8String AllocateString (ReadOnlySpan<char> text)
+            => typeTable.typeFactory.AllocateString (text);
+
+        private ES_MethodTable* GetType_Internal<T> (bool load) where T : unmanaged {
+            if (!nativeInstance.TryGetNativeType_Internal<T> (out var ret, load))
+                throw new ArgumentException ("Type is not a valid native type.", "T");
+
+            return ret;
+        }
+        public ES_MethodTable* GetType<T> (bool load) where T : unmanaged => GetType_Internal<T> (load);
+        //public ES_MethodTable* GetScriptType () => typeTable.TryGetScriptType ();
+
+        public T* AllocateType<T> () where T : unmanaged => typeTable.typeFactory.AllocateType<T> ();
         public T* AllocateType<T> (T data) where T : unmanaged => typeTable.typeFactory.AllocateType (data);
+        public ArrayPointer<T> AllocateN<T> (int count) where T : unmanaged => typeTable.typeFactory.AllocateN<T> (count);
         public ArrayPointer<T> AllocateArray<T> (Span<T> data) where T : unmanaged => typeTable.typeFactory.AllocateArray<T> (data);
         public ArrayPointer<T> AllocateArray<T> (ReadOnlySpan<T> data) where T : unmanaged => typeTable.typeFactory.AllocateArray (data);
+
+        internal ES_MethodTable* AllocateMethodTable () {
+            var ret = AllocateType<ES_MethodTable> ();
+            *ret = new (
+                -1, 0,
+                null, 0,
+                null, 0,
+                null, AllocateType<ES_TypeInfo> (new () { MethodTableInit = ret }),
+                null, 0
+            );
+
+            return ret;
+        }
+
+        public void CreateReference<TPointed> (ref TypeLoadToken typeToken, ES_Constness pointedConst) where TPointed : unmanaged {
+            Debug.Assert (typeToken.Initialized);
+            Debug.Assert (!typeToken.Created);
+            typeToken.Validate (nameof (typeToken));
+
+            typeToken.Created = true;
+
+            var pointedType = GetType_Internal<TPointed> (false);
+            var methodTablePtr = typeToken.MethodTable;
+            var typeInfoPtr = typeToken.MethodTable->TypeInfo;
+
+            var typeFlags = ES_TypeFlag.ValueType | ES_TypeFlag.NativeType;
+
+            ES_Utf8String name;
+            {
+                var chars = new StructPooledList<char> (CL_ClearMode.Auto);
+                try {
+                    chars.Add ('&');
+                    AddFQNToChars (ref chars, pointedType->TypeInfo->Name, pointedConst);
+
+                    name = typeTable.typeFactory.AllocateString (chars.Span);
+                } finally {
+                    chars.Dispose ();
+                }
+            }
+
+            *methodTablePtr = *methodTablePtr with {
+                RuntimeSizeInit = sizeof (void*),
+                FlagsInit = typeFlags,
+
+                VTableInit = ArrayPointer<Pointer<ES_FunctionData>>.Null,
+
+                RefsListInit = GetPointerRefList (),
+
+                ParentTypeInit = null,
+                TypeInfoInit = typeInfoPtr,
+
+                InterfacesInit = ArrayPointer<ES_TypeInterfaceData>.Null,
+            };
+            *typeInfoPtr = *typeInfoPtr with {
+                MethodTableInit = methodTablePtr,
+                TypeTagInit = ES_TypeTag.Reference,
+
+                ExtraDataInit = AllocateType<ES_ReferenceInfo> (new (pointedConst, pointedType)),
+
+                NameInit = AllocateFQN ("", ES_PrimitiveTypeConsts.Void),
+                SourceUnitInit = ES_Utf8String.Empty,
+            };
+        }
+        public void CreateArray<TPointed> (ref TypeLoadToken typeToken, ES_Constness constness, int rank) where TPointed : unmanaged => throw new NotImplementedException ();
 
         public void CreateStruct (
             ref TypeLoadToken typeToken,
 
-            ES_FullyQualifiedName name,
-            ES_Utf8String sourceUnit,
-
-            int runtimeSize,
             ReadOnlySpan<ES_TypeInterfaceData> interfaces,
 
             ReadOnlySpan<ES_FieldInfo> fields,
@@ -99,10 +333,7 @@ public unsafe class ES_NativeTypeTable : IDisposable {
         ) {
             Debug.Assert (typeToken.Initialized);
             Debug.Assert (!typeToken.Created);
-            if (typeToken.Created)
-                throw new ArgumentException ("Invalid type token.", nameof (typeToken));
-            if (typeToken.Created)
-                throw new ArgumentException ("Type was already initialized.", nameof (typeToken));
+            typeToken.Validate (nameof (typeToken));
 
             typeToken.Created = true;
 
@@ -129,7 +360,6 @@ public unsafe class ES_NativeTypeTable : IDisposable {
             });
 
             *methodTablePtr = *methodTablePtr with {
-                RuntimeSizeInit = runtimeSize,
                 FlagsInit = typeFlags,
 
                 VTableInit = ArrayPointer<Pointer<ES_FunctionData>>.Null,
@@ -146,9 +376,150 @@ public unsafe class ES_NativeTypeTable : IDisposable {
                 TypeTagInit = ES_TypeTag.Struct,
 
                 ExtraDataInit = structInfo,
+            };
+        }
 
-                NameInit = name,
-                SourceUnitInit = sourceUnit,
+        public void CreateVoid (ref TypeLoadToken typeToken) {
+            Debug.Assert (typeToken.Initialized);
+            Debug.Assert (!typeToken.Created);
+            typeToken.Validate (nameof (typeToken));
+
+            typeToken.Created = true;
+
+            var methodTablePtr = typeToken.MethodTable;
+            var typeInfoPtr = typeToken.MethodTable->TypeInfo;
+
+            var typeFlags = ES_TypeFlag.ValueType | ES_TypeFlag.NativeType | ES_TypeFlag.NoRefs;
+
+            *methodTablePtr = *methodTablePtr with {
+                RuntimeSizeInit = 1,
+                FlagsInit = typeFlags,
+
+                VTableInit = ArrayPointer<Pointer<ES_FunctionData>>.Null,
+
+                RefsListInit = ArrayPointer<nint>.Null,
+
+                ParentTypeInit = null,
+                TypeInfoInit = typeInfoPtr,
+
+                InterfacesInit = ArrayPointer<ES_TypeInterfaceData>.Null,
+            };
+            *typeInfoPtr = *typeInfoPtr with {
+                MethodTableInit = methodTablePtr,
+                TypeTagInit = ES_TypeTag.Void,
+
+                ExtraDataInit = null,
+
+                NameInit = AllocateFQN ("", ES_PrimitiveTypeConsts.Void),
+                SourceUnitInit = ES_Utf8String.Empty,
+            };
+        }
+
+        public void CreateBool (ref TypeLoadToken typeToken) {
+            Debug.Assert (typeToken.Initialized);
+            Debug.Assert (!typeToken.Created);
+            typeToken.Validate (nameof (typeToken));
+
+            typeToken.Created = true;
+
+            var methodTablePtr = typeToken.MethodTable;
+            var typeInfoPtr = typeToken.MethodTable->TypeInfo;
+
+            var typeFlags = ES_TypeFlag.ValueType | ES_TypeFlag.NativeType | ES_TypeFlag.NoRefs;
+
+            *methodTablePtr = *methodTablePtr with {
+                RuntimeSizeInit = 1,
+                FlagsInit = typeFlags,
+
+                VTableInit = ArrayPointer<Pointer<ES_FunctionData>>.Null,
+
+                RefsListInit = ArrayPointer<nint>.Null,
+
+                ParentTypeInit = null,
+                TypeInfoInit = typeInfoPtr,
+
+                InterfacesInit = ArrayPointer<ES_TypeInterfaceData>.Null,
+            };
+            *typeInfoPtr = *typeInfoPtr with {
+                MethodTableInit = methodTablePtr,
+                TypeTagInit = ES_TypeTag.Void,
+
+                ExtraDataInit = null,
+
+                NameInit = AllocateFQN ("", ES_PrimitiveTypeConsts.Bool),
+                SourceUnitInit = ES_Utf8String.Empty,
+            };
+        }
+
+        public void CreateInt (ref TypeLoadToken typeToken, ES_IntSize intSize, bool unsigned) {
+            Debug.Assert (typeToken.Initialized);
+            Debug.Assert (!typeToken.Created);
+            typeToken.Validate (nameof (typeToken));
+
+            typeToken.Created = true;
+
+            var methodTablePtr = typeToken.MethodTable;
+            var typeInfoPtr = typeToken.MethodTable->TypeInfo;
+
+            var typeFlags = ES_TypeFlag.ValueType | ES_TypeFlag.NativeType | ES_TypeFlag.NoRefs;
+
+            *methodTablePtr = *methodTablePtr with {
+                RuntimeSizeInit = ES_PrimitiveTypeConsts.GetIntMemorySize (intSize),
+                FlagsInit = typeFlags,
+
+                VTableInit = ArrayPointer<Pointer<ES_FunctionData>>.Null,
+
+                RefsListInit = ArrayPointer<nint>.Null,
+
+                ParentTypeInit = null,
+                TypeInfoInit = typeInfoPtr,
+
+                InterfacesInit = ArrayPointer<ES_TypeInterfaceData>.Null,
+            };
+            *typeInfoPtr = *typeInfoPtr with {
+                MethodTableInit = methodTablePtr,
+                TypeTagInit = ES_TypeTag.Int,
+
+                ExtraDataInit = (void*) new ES_IntInfo (intSize, unsigned),
+
+                NameInit = AllocateFQN ("", ES_PrimitiveTypeConsts.GetIntName (intSize, unsigned)),
+                SourceUnitInit = ES_Utf8String.Empty,
+            };
+        }
+
+        public void CreateFloat (ref TypeLoadToken typeToken, ES_FloatSize floatSize) {
+            Debug.Assert (typeToken.Initialized);
+            Debug.Assert (!typeToken.Created);
+            typeToken.Validate (nameof (typeToken));
+
+            typeToken.Created = true;
+
+            var methodTablePtr = typeToken.MethodTable;
+            var typeInfoPtr = typeToken.MethodTable->TypeInfo;
+
+            var typeFlags = ES_TypeFlag.ValueType | ES_TypeFlag.NativeType | ES_TypeFlag.NoRefs;
+
+            *methodTablePtr = *methodTablePtr with {
+                RuntimeSizeInit = ES_PrimitiveTypeConsts.GetFloatMemorySize (floatSize),
+                FlagsInit = typeFlags,
+
+                VTableInit = ArrayPointer<Pointer<ES_FunctionData>>.Null,
+
+                RefsListInit = ArrayPointer<nint>.Null,
+
+                ParentTypeInit = null,
+                TypeInfoInit = typeInfoPtr,
+
+                InterfacesInit = ArrayPointer<ES_TypeInterfaceData>.Null,
+            };
+            *typeInfoPtr = *typeInfoPtr with {
+                MethodTableInit = methodTablePtr,
+                TypeTagInit = ES_TypeTag.Float,
+
+                ExtraDataInit = (void*) new ES_FloatInfo (floatSize),
+
+                NameInit = AllocateFQN ("", ES_PrimitiveTypeConsts.GetFloatName (floatSize)),
+                SourceUnitInit = ES_Utf8String.Empty,
             };
         }
     }
@@ -159,333 +530,108 @@ public unsafe class ES_NativeTypeTable : IDisposable {
 
     private IntPtr mimallocHeap;
     private ES_TypeFactory typeFactory;
-    private NativeTypeLoader nativeTypeLoader;
-    private Dictionary<Type, ES_NativeTypeStoredData> typeMap;
+    private TypeLoader nativeTypeLoader;
     private Stack<TypeLoadData> typesToLoad;
-
-    #endregion
-
-    #region ================== Static properties
-
-    public static ES_NativeTypeStoredData Primitive_Void { get; }
-    public static ES_NativeTypeStoredData Primitive_Bool => GetNativeType<bool> ();
-
-    public static ES_NativeTypeStoredData Primitive_Float32 => GetNativeType<float> ();
-    public static ES_NativeTypeStoredData Primitive_Float64 => GetNativeType<double> ();
-
-    public static ES_NativeTypeStoredData Primitive_SInt8  => GetNativeType<sbyte> ();
-    public static ES_NativeTypeStoredData Primitive_SInt16 => GetNativeType<short> ();
-    public static ES_NativeTypeStoredData Primitive_SInt32 => GetNativeType<int> ();
-    public static ES_NativeTypeStoredData Primitive_SInt64 => GetNativeType<long> ();
-
-    public static ES_NativeTypeStoredData Primitive_UInt8  => GetNativeType<byte> ();
-    public static ES_NativeTypeStoredData Primitive_UInt16 => GetNativeType<ushort> ();
-    public static ES_NativeTypeStoredData Primitive_UInt32 => GetNativeType<uint> ();
-    public static ES_NativeTypeStoredData Primitive_UInt64 => GetNativeType<ulong> ();
 
     #endregion
 
     #region ================== Constructors
 
-    private ES_NativeTypeTable () {
+    private ES_TypeTable () {
         isDisposed = false;
 
         mimallocHeap = mi_heap_new ();
         typeFactory.Initialize (mimallocHeap);
-        typeMap = new ();
-        typesToLoad = new ();
         nativeTypeLoader = new (this);
+        typesToLoad = new ();
     }
 
-    static ES_NativeTypeTable () {
-        instance = new () {
-            typeFactory = new ES_TypeFactory ()
-        };
-        Primitive_Void = FillFromType (typeof (void), instance.typeFactory.GetVoid (), true);
+    static ES_TypeTable () {
+        nativeInstance = new ();
     }
 
     #endregion
 
-    ~ES_NativeTypeTable () {
+    ~ES_TypeTable () {
         Dispose ();
     }
 
     #region ================== Static methods
 
-    public static ES_NativeTypeStoredData GetNativeType<T> () where T : unmanaged {
-        if (!instance.TryGetNativeType_Internal (typeof (T), out var ret, true))
-            throw new ArgumentException ("Type is not a valid native type.", "type");
-
-        instance.LoadNativeTypes ();
+    public static ES_MethodTable* GetNativeType<T> () where T : unmanaged {
+        var success = nativeInstance.TryGetNativeType_Internal<T> (out var ret, true);
+        nativeInstance.InitializeTypes ();
+        if (!success)
+            throw new ArgumentException ("Type is not a valid native type.", "T");
 
         return ret;
     }
 
-    public static bool TryGetNativeType<T> (out ES_NativeTypeStoredData result) where T : unmanaged
-        => instance.TryGetNativeType_Internal (typeof (T), out result, true);
-
-    private static ES_NativeTypeStoredData FillFromType (Type nativeType, ES_MethodTable* methodTable, bool loaded) => new () {
-        Loaded = loaded,
-        Loading = false,
-
-        Type = nativeType,
-        MethodTable = methodTable,
-    };
+    public static bool TryGetNativeType<T> (out ES_MethodTable* result) where T : unmanaged {
+        var success = nativeInstance.TryGetNativeType_Internal<T> (out result, true);
+        nativeInstance.InitializeTypes ();
+        return success;
+    }
 
     #endregion
 
     #region ================== Instance methods
 
-    private void AddType (ES_NativeTypeStoredData storedData) => typeMap.Add (storedData.Type, storedData);
+    /*public bool TryGetScriptType (ES_InitializeNativeTypeDelegate typeInitializer, out ES_MethodTable* result) {
+        var typeToken = new TypeLoadToken (nativeTypeLoader.AllocateMethodTable ());
 
-    private void MarkLoading (Type type) {
-        var typeData = typeMap [type];
+        dataInst.InitializeType (nativeTypeLoader, ref typeToken);
 
-        Debug.Assert (!typeData.Loaded);
-        Debug.Assert (!typeData.Loading);
-
-        typeMap [type] = typeData with { Loading = true, };
-    }
-
-    private void MarkLoaded (Type type) {
-        var typeData = typeMap [type];
-
-        Debug.Assert (!typeData.Loaded);
-        Debug.Assert (typeData.Loading);
-
-        typeMap [type] = typeData with { Loading = false, Loaded = true, };
-    }
-
-    private (bool Loading, bool Loaded) CheckLoaded (Type type) {
-        var typeData = typeMap [type];
-
-        return (typeData.Loading, typeData.Loaded);
-    }
-
-    private ES_FullyQualifiedName GetFQN (ReadOnlySpan<string> nsStrings, ReadOnlySpan<char> name) {
-        static int WriteBytes (ReadOnlySpan<string> strings, Span<byte> byteBuffer) {
-            var enc = Encoding.UTF8;
-
-            var bufOffset = 0;
-            foreach (var str in strings) {
-                if (bufOffset > 0)
-                    byteBuffer [bufOffset++] = (byte) '.';
-
-                bufOffset += enc.GetBytes (str, byteBuffer [bufOffset..]);
-            }
-
-            return bufOffset;
+        if (!typeToken.Created) {
+            result = null;
+            return false;
         }
 
-        var nameStr = typeFactory.AllocateString (name);
-        if (nsStrings.Length < 1)
-            return new (ES_Utf8String.Empty, nameStr);
+        result = typeToken.MethodTable;
+        return true;
+    }*/
 
-        var enc = Encoding.UTF8;
-        var byteCount = nsStrings.Length - 1;
-        foreach (var str in nsStrings)
-            byteCount += enc.GetByteCount (str);
-
-        if (byteCount <= ES_Utf8String.MaxLocalTextSize) {
-            Span<byte> localBuf = stackalloc byte [byteCount];
-
-            var bufOffset = WriteBytes (nsStrings, localBuf);
-            Debug.Assert (bufOffset == byteCount);
-
-            return new (new (localBuf), nameStr);
-        } else {
-            var memData = typeFactory.AllocateN<byte> (byteCount);
-
-            var bufOffset = WriteBytes (nsStrings, memData.Span);
-            Debug.Assert (bufOffset == byteCount);
-
-            return new (new (memData), nameStr);
-        }
-    }
-
-    #region Type creation
-
-    private bool TryGetNativeType_Internal (Type type, out ES_NativeTypeStoredData result, bool doLoad)
-        => TryGetNativeType_Internal (type, out result, out var loadData, doLoad);
-
-    private bool TryGetNativeType_Internal (Type type, out ES_NativeTypeStoredData result, out TypeLoadData loadData, bool doLoad) {
-        if (typeMap.TryGetValue (type, out result)) {
-            Debug.Assert (!doLoad || result.Loaded);
-            loadData = default;
+    private bool TryGetNativeType_Internal<T> (out ES_MethodTable* result, bool load) where T : unmanaged {
+        var dataInst = ES_NativeTypeStoredData<T>.Instance;
+        if (dataInst.Loaded || (dataInst.Loading && !load)) {
+            Debug.Assert (dataInst.MethodTable != null);
+            result = dataInst.MethodTable;
             return true;
         }
 
-        if (
-            TryAddSpecialType (type, out result, out loadData) ||
-            TryHandleAggregate (type, out result, out loadData, doLoad)
-        ) {
-            if (doLoad) {
-                result = typeMap [type];
-                Debug.Assert (!doLoad || result.Loaded);
-            }
+        var typeToken = new TypeLoadToken (nativeTypeLoader.AllocateMethodTable ());
+
+        dataInst.StartInit (nativeTypeLoader, ref typeToken);
+        var initResult = dataInst.InitializeType (nativeTypeLoader, ref typeToken, load);
+        if (!load && !initResult) {
+            result = typeToken.MethodTable;
+            typesToLoad.Push (new () { MethodTable = result, NativeInitDelegate = dataInst.InitializeType });
 
             return true;
         }
 
-        return false;
-    }
-
-    private bool TryAddSpecialType (Type type, out ES_NativeTypeStoredData result, out TypeLoadData loadData) {
-        if (type == typeof (bool))
-            result = FillFromType (type, typeFactory.GetBool (), true);
-        // Signed ints
-        else if (type == typeof (sbyte))
-            result = FillFromType (type, typeFactory.GetInt (ES_IntSize.Int8, false), true);
-        else if (type == typeof (short))
-            result = FillFromType (type, typeFactory.GetInt (ES_IntSize.Int16, false), true);
-        else if (type == typeof (int))
-            result = FillFromType (type, typeFactory.GetInt (ES_IntSize.Int32, false), true);
-        else if (type == typeof (long))
-            result = FillFromType (type, typeFactory.GetInt (ES_IntSize.Int64, false), true);
-        // Unsigned ints
-        else if (type == typeof (byte))
-            result = FillFromType (type, typeFactory.GetInt (ES_IntSize.Int8, true), true);
-        else if (type == typeof (ushort))
-            result = FillFromType (type, typeFactory.GetInt (ES_IntSize.Int16, true), true);
-        else if (type == typeof (uint))
-            result = FillFromType (type, typeFactory.GetInt (ES_IntSize.Int32, true), true);
-        else if (type == typeof (ulong))
-            result = FillFromType (type, typeFactory.GetInt (ES_IntSize.Int64, true), true);
-        // Floats
-        else if (type == typeof (float))
-            result = FillFromType (type, typeFactory.GetFloat (ES_FloatSize.Single), true);
-        else if (type == typeof (double))
-            result = FillFromType (type, typeFactory.GetFloat (ES_FloatSize.Double), true);
-
-        // References
-        else if (type == typeof (ES_ObjectAddress))
-            result = FillFromType (type, typeFactory.GetReference (ES_Constness.Mutable, Primitive_Void.MethodTable), true);
-        else if (ES_Utils.TryGetNativeObjectRefInfo (type, out var objRefPointedType, out var objRefConstness)) {
-            if (!TryGetNativeType_Internal (objRefPointedType, out var pointedType, false)) {
-                result = default;
-                loadData = default;
-                return false;
-            }
-
-            result = FillFromType (type, typeFactory.GetReference (objRefConstness, pointedType.MethodTable), true);
-        } else if (ES_Utils.TryGetNativeArrayInfo (type, out var arrayElemType, out var arrayRank, out var arrayConstness)) {
-            if (!TryGetNativeType_Internal (arrayElemType, out var pointedType, false)) {
-                result = default;
-                loadData = default;
-                return false;
-            }
-
-            result = FillFromType (type, typeFactory.GetArray (arrayRank, arrayConstness, pointedType.MethodTable), true);
-        }
-
-        // Non-matching
-        else {
-            result = default;
-            loadData = default;
+        if (!typeToken.Created) {
+            result = null;
             return false;
         }
 
-        AddType (result);
-
-        loadData = default;
+        result = typeToken.MethodTable;
         return true;
     }
 
-    private bool TryHandleAggregate (Type type, out ES_NativeTypeStoredData result, out TypeLoadData loadData, bool doLoad) {
-        var aggregateAttribute = type.GetCustomAttribute<ES_ExportStructAttribute> (false);
+    private void InitializeTypes () {
+        while (typesToLoad.Count > 0) {
+            var type = typesToLoad.Pop ();
+            var typeToken = new TypeLoadToken (type.MethodTable);
 
-        if (aggregateAttribute is null) {
-            result = default;
-            loadData = default;
-            return false;
+            type.NativeInitDelegate! (nativeTypeLoader, ref typeToken, true);
         }
-
-        var typeSize = Marshal.SizeOf (type);
-        var nsString = aggregateAttribute.ExportNamespace ?? Array.Empty<string> ();
-
-        var methodTable = typeFactory.GetStruct (
-            true, typeSize,
-            GetFQN (nsString, aggregateAttribute.ExportName),
-            typeFactory.AllocateType<ES_StructInfo> (new ()),
-            ReadOnlySpan<Pointer<ES_FunctionData>>.Empty,
-            ReadOnlySpan<nint>.Empty,
-            ReadOnlySpan<ES_TypeInterfaceData>.Empty
-        );
-
-        result = FillFromType (type, methodTable, false);
-        AddType (result);
-
-        loadData = new TypeLoadData {
-            Type = type,
-            MethodTable = methodTable,
-        };
-        if (doLoad)
-            LoadNativeType (loadData);
-        else
-            typesToLoad.Push (loadData);
-
-        return true;
     }
-
-    #endregion
-
-    #region Type loading
-
-    private void LoadNativeTypes () {
-        while (typesToLoad.Count > 0)
-            LoadNativeType (typesToLoad.Pop ());
-    }
-
-    private void LoadNativeType (TypeLoadData typeData) {
-        var loadFlags = CheckLoaded (typeData.Type);
-        if (loadFlags.Loaded)
-            return;
-        else if (loadFlags.Loading)
-            throw new Exception ("Native type loading exception: Recursive loop.");
-
-        LoadNativeType_Aggregate (typeData.Type, null!, typeData.MethodTable);
-    }
-
-    private void LoadNativeType_Aggregate (Type type, ES_ExportStructAttribute aggregateAttrib, ES_MethodTable* methodTable) {
-        MarkLoading (type);
-
-        using var refsList = new StructPooledList<nint> (CL_ClearMode.Auto);
-        using var fieldsList = new StructPooledList<ES_FieldInfo> (CL_ClearMode.Auto);
-        foreach (var field in type.GetFields (BindingFlags.Public | BindingFlags.NonPublic)) {
-            var fieldAttributes = field.GetCustomAttribute<ES_ExportFieldAttribute> (false);
-            var fieldOffset = Marshal.OffsetOf (type, field.Name);
-
-            if (!TryGetNativeType_Internal (field.FieldType, out var fieldType, out var fieldLoadData, true))
-                continue;
-
-            if (!fieldType.Loaded) {
-                LoadNativeType (fieldLoadData);
-                fieldType = typeMap [field.FieldType];
-            }
-
-            refsList.AddRange (fieldType.MethodTable->GetRefsList ());
-
-            if (fieldAttributes is null)
-                continue;
-
-            fieldsList.Add (new () {
-                Name = typeFactory.AllocateString (fieldAttributes.ExportName),
-                Constness = fieldAttributes.Constness,
-                Type = fieldType.MethodTable,
-                Offset = fieldOffset,
-            });
-        }
-
-        MarkLoaded (type);
-    }
-
-    #endregion
 
     public void Dispose () {
         if (isDisposed)
             return;
 
-        typeMap.Clear ();
         mi_heap_destroy (mimallocHeap);
         mimallocHeap = IntPtr.Zero;
 

@@ -14,6 +14,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using ChronosLib.Pooled;
 using CommunityToolkit.HighPerformance;
+using EchelonScript.Common.Data;
 using EchelonScript.Common.Data.Types;
 using EchelonScript.Common.GarbageCollection.Immix;
 using EchelonScript.Common.Utilities;
@@ -126,28 +127,40 @@ public unsafe sealed partial class ES_GarbageCollector : IDisposable {
     [UnmanagedCallersOnly (CallConvs = new [] { typeof (CallConvCdecl) })]
     public static void* AllocArrayUnmanaged (ES_MethodTable* elemType, ES_ArrayIndex* dimSizesPtr, int rank, bool immutable, byte pinned) {
         EnsureInitialized ();
-        return garbageCollector!.AllocateArray (elemType, new Span<ES_ArrayIndex> (dimSizesPtr, rank), immutable, pinned != 0, true);
+        return garbageCollector!.AllocateArray (elemType, new Span<ES_ArrayIndex> (dimSizesPtr, rank), immutable, pinned != 0, true).Address;
     }
+
+    private static ES_MethodTable* GetMethodTable<T> () where T : unmanaged => ES_TypeTable.GetNativeType<T> ();
 
     #region Objects
 
+
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
-    private static T* AllocObject_Internal<T> (ES_MethodTable* type, bool immutable, bool pinned, T defaultVal) where T : unmanaged {
+    public static ES_Object<T> AllocObject<T> (bool pinned) where T : unmanaged {
         EnsureInitialized ();
 
-        var ptr = (T*) garbageCollector!.AllocateObject (type, immutable, pinned);
-        *ptr = defaultVal;
-
-        return ptr;
+        return new (new (garbageCollector!.AllocateObject (GetMethodTable<T> (), true, pinned)));
     }
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
-    public static ES_Object<T> AllocObject<T> (ES_MethodTable* type, bool pinned, T defaultVal = default) where T : unmanaged
-        => new (new (AllocObject_Internal (type, false, pinned, defaultVal)));
+    public static ES_Object<T> AllocObject<T> (T defaultVal, bool pinned) where T : unmanaged {
+        EnsureInitialized ();
+
+        var ptr = (T*) garbageCollector!.AllocateObject (GetMethodTable<T> (), true, pinned);
+        *ptr = defaultVal;
+
+        return new (new (ptr));
+    }
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
-    public static ES_ObjectImmut<T> AllocObjectImmut<T> (T value, ES_MethodTable* type, bool pinned) where T : unmanaged
-        => new (new (AllocObject_Internal (type, true, pinned, value)));
+    public static ES_ObjectImmut<T> AllocObjectImmut<T> (T value, bool pinned) where T : unmanaged {
+        EnsureInitialized ();
+
+        var ptr = (T*) garbageCollector!.AllocateObject (GetMethodTable<T> (), true, pinned);
+        *ptr = value;
+
+        return new (new (ptr));
+    }
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     public static void* AllocObject (ES_MethodTable* type, bool immutable, bool pinned) {
@@ -160,42 +173,49 @@ public unsafe sealed partial class ES_GarbageCollector : IDisposable {
     #region Arrays
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
-    public static ES_Array1D<T> AllocArray<T> (ES_MethodTable* elemType, ReadOnlySpan<ES_ArrayIndex> dimSizes, bool pinned, T defaultElemVal = default) where T : unmanaged {
+    public static ES_Array1D<T> AllocArray<T> (ReadOnlySpan<ES_ArrayIndex> dimSizes, bool pinned, T defaultElemVal = default) where T : unmanaged {
         EnsureInitialized ();
 
-        var ptr = garbageCollector!.AllocateArray (elemType, dimSizes, false, pinned, false);
+        var ptr = garbageCollector!.AllocateArray (GetMethodTable<T> (), dimSizes, false, pinned, false);
 
-        var arraySpan = new Span<T> (ES_ArrayHeader.GetArrayDataPointer (ptr), ptr->Length);
+        var arraySpan = new Span<T> (ES_ArrayHeader.GetArrayDataPointer (ptr.Address), ptr.Address->Length);
         arraySpan.Fill (defaultElemVal);
 
         return new (ptr);
     }
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
-    public static ES_ImmutArray1D<T> AllocArrayImmut<T> (ES_MethodTable* elemType, ReadOnlySpan<T> values, bool pinned) where T : unmanaged {
+    public static ES_ImmutArray1D<T> AllocArrayImmut<T> (ReadOnlySpan<T> values, bool pinned) where T : unmanaged {
         EnsureInitialized ();
 
         Span<ES_ArrayIndex> dimSizes = stackalloc ES_ArrayIndex [1] { values.Length, };
 
-        return new (AllocArrayImmut_Internal (elemType, dimSizes, values, pinned));
-    }
+        var ptr = garbageCollector!.AllocateArray (GetMethodTable<T> (), dimSizes, true, pinned, false);
 
-    [MethodImpl (MethodImplOptions.AggressiveInlining)]
-    public static ES_ImmutArray2D<T> AllocArrayImmut<T> (ES_MethodTable* elemType, ReadOnlySpan2D<T> values, bool pinned) where T : unmanaged {
-        EnsureInitialized ();
-
-        Span<ES_ArrayIndex> dimSizes = stackalloc ES_ArrayIndex [2] { values.Width, values.Height, };
-
-        var ptr = garbageCollector!.AllocateArray (elemType, dimSizes, false, pinned, false);
-
-        var arraySpan = new Span<T> (ES_ArrayHeader.GetArrayDataPointer (ptr), ptr->Length);
+        var arraySpan = new Span<T> (ES_ArrayHeader.GetArrayDataPointer (ptr.Address), ptr.Address->Length);
         values.CopyTo (arraySpan);
 
         return new (ptr);
     }
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
-    public static ES_ImmutArray1D<T> AllocArrayImmut<T> (ES_MethodTable* elemType, ReadOnlySpan<ES_ArrayIndex> dimSizes, ReadOnlySpan<T> values, bool pinned) where T : unmanaged {
+    public static ES_ImmutArray2D<T> AllocArrayImmut<T> (ReadOnlySpan2D<T> values, bool pinned) where T : unmanaged {
+        EnsureInitialized ();
+
+        Span<ES_ArrayIndex> dimSizes = stackalloc ES_ArrayIndex [2] { values.Width, values.Height, };
+
+        var ptr = garbageCollector!.AllocateArray (GetMethodTable<T> (), dimSizes, false, pinned, false);
+
+        var arraySpan = new Span<T> (ES_ArrayHeader.GetArrayDataPointer (ptr.Address), ptr.Address->Length);
+        values.CopyTo (arraySpan);
+
+        return new (ptr);
+    }
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    public static ES_ImmutArray1D<T> AllocArrayImmut<T> (ReadOnlySpan<ES_ArrayIndex> dimSizes, ReadOnlySpan<T> values, bool pinned) where T : unmanaged {
+        EnsureInitialized ();
+
         if (dimSizes.Length < 0 || dimSizes.Length > byte.MaxValue)
             throw new ArgumentOutOfRangeException (nameof (dimSizes));
 
@@ -206,22 +226,16 @@ public unsafe sealed partial class ES_GarbageCollector : IDisposable {
         if (totalSize != values.Length)
             throw new ArgumentException ("Values span must match the total length of the array");
 
-        EnsureInitialized ();
+        var ptr = garbageCollector!.AllocateArray (GetMethodTable<T> (), dimSizes, true, pinned, false);
 
-        return new (AllocArrayImmut_Internal (elemType, dimSizes, values, pinned));
-    }
-
-    private static ES_ArrayHeader* AllocArrayImmut_Internal<T> (ES_MethodTable* elemType, ReadOnlySpan<ES_ArrayIndex> dimSizes, ReadOnlySpan<T> values, bool pinned) where T : unmanaged {
-        var ptr = garbageCollector!.AllocateArray (elemType, dimSizes, false, pinned, false);
-
-        var arraySpan = new Span<T> (ES_ArrayHeader.GetArrayDataPointer (ptr), ptr->Length);
+        var arraySpan = new Span<T> (ES_ArrayHeader.GetArrayDataPointer (ptr.Address), ptr.Address->Length);
         values.CopyTo (arraySpan);
 
-        return ptr;
+        return new (ptr);
     }
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
-    public static ES_ArrayHeader* AllocArray (ES_MethodTable* elemType, ReadOnlySpan<ES_ArrayIndex> dimSizes, bool immutable, bool pinned) {
+    public static ES_ArrayAddress AllocArray (ES_MethodTable* elemType, ReadOnlySpan<ES_ArrayIndex> dimSizes, bool immutable, bool pinned) {
         EnsureInitialized ();
         return garbageCollector!.AllocateArray (elemType, dimSizes, immutable, pinned, true);
     }
@@ -398,7 +412,7 @@ public unsafe sealed partial class ES_GarbageCollector : IDisposable {
     }
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
-    private ES_ArrayHeader* AllocateArray (ES_MethodTable* elemType, ReadOnlySpan<ES_ArrayIndex> dimSizes, bool immutable, bool pinned, bool clearElems) {
+    private ES_ArrayAddress AllocateArray (ES_MethodTable* elemType, ReadOnlySpan<ES_ArrayIndex> dimSizes, bool immutable, bool pinned, bool clearElems) {
         CheckDisposed ();
 
         Debug.Assert (dimSizes.Length > 0 && dimSizes.Length <= byte.MaxValue);
@@ -463,7 +477,7 @@ public unsafe sealed partial class ES_GarbageCollector : IDisposable {
         if (clearElems)
             objMem.Clear ();
 
-        return arrHeader;
+        return new (arrHeader);
     }
 
     #endregion

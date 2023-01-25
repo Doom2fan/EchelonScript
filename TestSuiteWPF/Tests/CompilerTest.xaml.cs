@@ -8,22 +8,8 @@
  */
 
 using System;
-using System.Collections.ObjectModel;
-using System.Diagnostics;
-using System.Globalization;
-using System.Linq;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Media;
-using ChronosLib.Pooled;
-using EchelonScript.Common;
-using EchelonScript.Common.Data;
-using EchelonScript.Common.Data.Types;
-using EchelonScript.Compiler;
-using EchelonScript.Compiler.Backends.RoslynBackend;
-using EchelonScript.Compiler.Data;
-using EchelonScript.Compiler.Frontend;
-using ICSharpCode.AvalonEdit.Document;
 
 namespace TestSuiteWPF.Tests;
 

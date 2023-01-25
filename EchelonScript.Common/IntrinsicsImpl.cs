@@ -7,13 +7,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-using System;
-using ChronosLib.Pooled;
-using EchelonScript.Common.Data;
-using EchelonScript.Common.Data.Types;
-using EchelonScript.Common.Utilities;
-using ClrGCHandle = System.Runtime.InteropServices.GCHandle;
-
 namespace EchelonScript.Common;
 
 public unsafe static class ES_DotNetIntrinsicsImpl {

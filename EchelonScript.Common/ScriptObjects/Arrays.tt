@@ -25,7 +25,9 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using CommunityToolkit.HighPerformance;
+using EchelonScript.Common.Data;
 using EchelonScript.Common.Data.Types;
+using EchelonScript.Common.Exporting;
 
 namespace EchelonScript.Common;
 <#
@@ -83,7 +85,7 @@ static partial class ES_Utils {
             var isMutable = mode == Mode.Mutable;
             var typeName = GetName (curRank, mode);
             var idxrModifier = isMutable ? " ref" : "";
-            var interfaces = $"IEquatable<{typeName}<T>>";
+            var interfaces = $"IES_ReferenceType, IEquatable<{typeName}<T>>";
 
             if (mode != Mode.Const)
                 interfaces += $", IEquatable<{constName}<T>>";
@@ -130,6 +132,9 @@ public unsafe readonly struct <#= typeName #><T> : <#= interfaces #>
 <# } #>
 
     #endregion
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    internal <#= typeName #> (ES_ArrayAddress ptr) => arrayPtr = ptr.Address;
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     internal <#= typeName #> (ES_ArrayHeader* ptr) => arrayPtr = ptr;
@@ -291,6 +296,11 @@ public unsafe readonly struct <#= typeName #><T> : <#= interfaces #>
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
     public override int GetHashCode () => ((nint) arrayPtr).GetHashCode ();
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    void IES_ReferenceType.InitializeType (ES_NativeTypeTable.NativeTypeLoader typeLoader, ref ES_NativeTypeTable.TypeLoadToken typeToken) {
+        typeLoader.CreateArray<T> (ref typeToken, <#= GetConstness (mode) #>, <#= curRank #>);
+    }
 
     #endregion
 }
