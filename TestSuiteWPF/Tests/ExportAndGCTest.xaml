@@ -15,7 +15,6 @@
         </Grid.ColumnDefinitions>
         <StackPanel Grid.Column="0" >
             <Button Content="Test exports" Click="TestExports_Click"/>
-            <Button Content="Test GC" />
             <Button Content="Test Consistency" Click="TestConsistency_Click"/>
             <Button Content="Test Consistency (Loop)" Click="TestConsistency2_Click"/>
         </StackPanel>
