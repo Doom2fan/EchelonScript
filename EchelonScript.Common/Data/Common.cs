@@ -7,6 +7,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+using System.Diagnostics;
 using System.Text;
 using ChronosLib.Pooled;
 using EchelonScript.Common.Utilities;
@@ -42,6 +43,7 @@ namespace EchelonScript.Common.Data.Types {
         Override,
     }
 
+    [DebuggerDisplay ("{NamespaceName.GetString ()}::{TypeName.GetString ()}")]
     public readonly struct ES_FullyQualifiedName {
         public readonly ES_Utf8String NamespaceName;
         public readonly ES_Utf8String TypeName;

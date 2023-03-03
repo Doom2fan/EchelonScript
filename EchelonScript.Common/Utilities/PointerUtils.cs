@@ -15,6 +15,7 @@ using ChronosLib.Unmanaged;
 namespace EchelonScript.Common.Utilities;
 
 [StructLayout (LayoutKind.Sequential)]
+[DebuggerDisplay ("Pointer<{typeof(T).Name,nq}> (Address = {(nuint) Address, h})")]
 public unsafe struct Pointer<T>
     where T : unmanaged {
     public T* Address;
@@ -29,6 +30,7 @@ public unsafe struct Pointer<T>
 }
 
 //[StructLayout (LayoutKind.Sequential, Pack = 1)]
+[DebuggerDisplay ("ArrayPointer<{typeof(T).Name,nq}> (Length = {Length})")]
 public unsafe readonly struct ArrayPointer<T> : IEquatable<ArrayPointer<T>>
     where T : unmanaged {
     public static ArrayPointer<T> Null => new (null, 0);

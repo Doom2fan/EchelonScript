@@ -17,6 +17,7 @@ using CommunityToolkit.HighPerformance.Buffers;
 
 namespace EchelonScript.Common.Utilities;
 
+[DebuggerDisplay ("{Span}")]
 public unsafe struct ES_String {
     internal const int MaxLocalTextSize = 192;
 
@@ -85,6 +86,7 @@ public unsafe struct ES_String {
 }
 
 [StructLayout (LayoutKind.Explicit)]
+[DebuggerDisplay ("{GetString ()}")]
 public unsafe struct ES_Utf8String : IEquatable<ES_Utf8String> {
     public const int MaxLocalTextSize = 32;
 
