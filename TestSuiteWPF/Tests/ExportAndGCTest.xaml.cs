@@ -196,12 +196,12 @@ Level-order: {string.Join (" ", LevelOrder (tree))}";
 
         try {
             ref ES_Object<Struct_TreeTest> tree = ref *TreePointer;
-            //ES_GarbageCollector.PerformCollection (-1, ES_GarbageCollector.CollectionMode.Forced);
+            ES_GarbageCollector.PerformCollection (-1, ES_GarbageCollector.CollectionMode.Forced);
             tree = GenerateTree ();
 
             for (int i = 0; i < 5000; i++) {
                 for (int j = rng.Next (0, 3); j > 0; j--)
-                    ;// ES_GarbageCollector.PerformCollection (-1, ES_GarbageCollector.CollectionMode.Forced);
+                    ES_GarbageCollector.PerformCollection (-1, ES_GarbageCollector.CollectionMode.Forced);
 
                 if (!Preorder (tree.Value).SequenceEqual (ExpectedPreorder) ||
                     !Inorder (tree.Value).SequenceEqual (ExpectedInorder) ||
@@ -226,7 +226,7 @@ Expected results:
                     tree = tree2;
             }
 
-            //ES_GarbageCollector.PerformCollection (-1, ES_GarbageCollector.CollectionMode.Forced);
+            ES_GarbageCollector.PerformCollection (-1, ES_GarbageCollector.CollectionMode.Forced);
 
             resultsTextBox.Text = $"Consistency succeeded";
         } catch (Exception ex) {
