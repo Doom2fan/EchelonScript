@@ -172,6 +172,29 @@ public unsafe partial class ExportAndGCTest : UserControl {
         }
     }
 
+    private bool ValidateTree (ref ES_Object<Struct_TreeTest> tree) {
+        if (!Preorder (tree.Value).SequenceEqual (ExpectedPreorder) ||
+            !Inorder (tree.Value).SequenceEqual (ExpectedInorder) ||
+            !Postorder (tree.Value).SequenceEqual (ExpectedPostorder) ||
+            !LevelOrder (tree).SequenceEqual (ExpectedLevelOrder)) {
+            resultsTextBox.Text = $@"Consistency test failed.
+Tree results:
+    Preorder:    {string.Join (" ", Preorder (tree.Value))}
+    Inorder:     {string.Join (" ", Inorder (tree.Value))}
+    Postorder:   {string.Join (" ", Postorder (tree.Value))}
+    Level-order: {string.Join (" ", LevelOrder (tree))}
+
+Expected results:
+    Preorder:    {string.Join (" ", ExpectedPreorder)}
+    Inorder:     {string.Join (" ", ExpectedInorder)}
+    Postorder:   {string.Join (" ", ExpectedPostorder)}
+    Level-order: {string.Join (" ", ExpectedLevelOrder)}";
+            return false;
+        }
+
+        return true;
+    }
+
     private void TestConsistency_Click (object sender, System.Windows.RoutedEventArgs e) {
         InitTree ();
 
@@ -180,10 +203,7 @@ public unsafe partial class ExportAndGCTest : UserControl {
             tree = GenerateTree ();
             ES_GarbageCollector.PerformCollection (-1, ES_GarbageCollector.CollectionMode.Forced);
 
-            resultsTextBox.Text = $@"Preorder:    {string.Join (" ", Preorder (tree.Value))}
-Inorder:     {string.Join (" ", Inorder (tree.Value))}
-Postorder:   {string.Join (" ", Postorder (tree.Value))}
-Level-order: {string.Join (" ", LevelOrder (tree))}";
+            ValidateTree (ref tree);
             ES_GarbageCollector.PerformCollection (-1, ES_GarbageCollector.CollectionMode.Forced);
         } catch (Exception ex) {
             resultsTextBox.Text = $"Consistency test failed: Exception\n{ex.Message}\n{ex.StackTrace}";
@@ -203,22 +223,9 @@ Level-order: {string.Join (" ", LevelOrder (tree))}";
                 for (int j = rng.Next (0, 3); j > 0; j--)
                     ES_GarbageCollector.PerformCollection (-1, ES_GarbageCollector.CollectionMode.Forced);
 
-                if (!Preorder (tree.Value).SequenceEqual (ExpectedPreorder) ||
-                    !Inorder (tree.Value).SequenceEqual (ExpectedInorder) ||
-                    !Postorder (tree.Value).SequenceEqual (ExpectedPostorder) ||
-                    !LevelOrder (tree).SequenceEqual (ExpectedLevelOrder)) {
-                    resultsTextBox.Text = $@"Consistency test failed.
-Tree results:
-  Preorder:    {string.Join (" ", Preorder (tree.Value))}
-  Inorder:     {string.Join (" ", Inorder (tree.Value))}
-  Postorder:   {string.Join (" ", Postorder (tree.Value))}
-  Level-order: {string.Join (" ", LevelOrder (tree))}
-
-Expected results:
-  Preorder:    {string.Join (" ", ExpectedPreorder)}
-  Inorder:     {string.Join (" ", ExpectedInorder)}
-  Postorder:   {string.Join (" ", ExpectedPostorder)}
-  Level-order: {string.Join (" ", ExpectedLevelOrder)}";
+                if (!ValidateTree (ref tree)) {
+                    ES_GarbageCollector.PerformCollection (-1, ES_GarbageCollector.CollectionMode.Forced);
+                    return;
                 }
 
                 var tree2 = GenerateTree ();
