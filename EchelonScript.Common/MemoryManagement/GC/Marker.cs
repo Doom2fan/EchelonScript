@@ -91,7 +91,7 @@ unsafe partial class ES_GarbageCollector {
                         var linesCount = (allocSize + (ImmixConstants.LineSize - 1)) / ImmixConstants.LineSize;
 
                         immixLinemap.Slice (linesStart, linesCount).Fill (0xFF);
-                    } else if (!isLarge)
+                    } else
                         immixLinemap [linesStart] = 0xFF;
                 }
 

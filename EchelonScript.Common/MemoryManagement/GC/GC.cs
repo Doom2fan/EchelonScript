@@ -247,9 +247,21 @@ public unsafe sealed partial class ES_GarbageCollector : IDisposable {
     #region Roots
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    public static void AddRoots (ArrayPointer<Pointer<ES_ObjectAddress>> roots) {
+        EnsureInitialized ();
+        garbageCollector!.AddRootsInternal ((ES_ObjectAddress**) roots.Elements, roots.Length);
+    }
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
     public static void AddRoots (ES_ObjectAddress** roots, int count) {
         EnsureInitialized ();
         garbageCollector!.AddRootsInternal (roots, count);
+    }
+
+    [MethodImpl (MethodImplOptions.AggressiveInlining)]
+    public static void RemoveRoots (ArrayPointer<Pointer<ES_ObjectAddress>> roots) {
+        EnsureInitialized ();
+        garbageCollector!.RemoveRootsInternal ((ES_ObjectAddress**) roots.Elements);
     }
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]

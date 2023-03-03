@@ -338,22 +338,17 @@ internal unsafe sealed class ImmixGC : IDisposable {
             }
 
             // Try to find a block with a hole big enough.
-            while (CurBlockIndex < BlocksList.Count) {
-                if (CurrentBlock.Header->UsageLevel == ImmixBlockUsage.Filled) {
-                    CurBlockIndex++;
-                    if (CurBlockIndex < BlocksList.Count)
-                        SetNewAllocData (0, 0);
+            while (++CurBlockIndex < BlocksList.Count) {
+                SetNewAllocData (0, 0);
+
+                if (CurrentBlock.Header->UsageLevel == ImmixBlockUsage.Filled)
                     continue;
-                }
 
                 if (ScanForHole (minSize, out holeOffs, out holeSize)) {
                     SetNewAllocData (holeOffs, holeSize);
                     CurrentBlock.Header->UsageLevel = ImmixBlockUsage.Filled;
                     return;
                 }
-
-                CurBlockIndex++;
-                SetNewAllocData (0, 0);
             }
 
             // If we didn't find one, allocate a new one.
