@@ -125,50 +125,54 @@ public unsafe partial class ExportAndGCTest : UserControl {
         }
     }
 
+    static int [] ExpectedPreorder = { 1, 2, 4, 7, 5, 3, 6, 8, 9, };
+    static IEnumerable<int> Preorder (Struct_TreeTest node) {
+        yield return node.Value.Value;
+        if (!node.Left.IsNull ())
+            foreach (var value in Preorder (node.Left.Value))
+                yield return value;
+        if (!node.Right.IsNull ())
+            foreach (var value in Preorder (node.Right.Value))
+                yield return value;
+    }
+
+    static int [] ExpectedInorder = { 7, 4, 2, 5, 1, 8, 6, 9, 3, };
+    static IEnumerable<int> Inorder (Struct_TreeTest node) {
+        if (!node.Left.IsNull ())
+            foreach (var value in Inorder (node.Left.Value))
+                yield return value;
+        yield return node.Value.Value;
+        if (!node.Right.IsNull ())
+            foreach (var value in Inorder (node.Right.Value))
+                yield return value;
+    }
+
+    static int [] ExpectedPostorder = { 7, 4, 5, 2, 8, 9, 6, 3, 1, };
+    static IEnumerable<int> Postorder (Struct_TreeTest node) {
+        if (!node.Left.IsNull ())
+            foreach (var value in Postorder (node.Left.Value))
+                yield return value;
+        if (!node.Right.IsNull ())
+            foreach (var value in Postorder (node.Right.Value))
+                yield return value;
+        yield return node.Value.Value;
+    }
+
+    static int [] ExpectedLevelOrder = { 1, 2, 3, 4, 5, 6, 7, 8, 9, };
+    static IEnumerable<int> LevelOrder (ES_Object<Struct_TreeTest> thisNode) {
+        var queue = new Queue<ES_Object<Struct_TreeTest>> ();
+        queue.Enqueue (thisNode);
+        while (queue.Any ()) {
+            var node = queue.Dequeue ();
+            yield return node.Value.Value.Value;
+            if (!node.Value.Left.IsNull ())
+                queue.Enqueue (node.Value.Left);
+            if (!node.Value.Right.IsNull ())
+                queue.Enqueue (node.Value.Right);
+        }
+    }
+
     private void TestConsistency_Click (object sender, System.Windows.RoutedEventArgs e) {
-        static IEnumerable<int> Preorder (Struct_TreeTest node) {
-            yield return node.Value.Value;
-            if (!node.Left.IsNull ())
-                foreach (var value in Preorder (node.Left.Value))
-                    yield return value;
-            if (!node.Right.IsNull ())
-                foreach (var value in Preorder (node.Right.Value))
-                    yield return value;
-        }
-
-        static IEnumerable<int> Inorder (Struct_TreeTest node) {
-            if (!node.Left.IsNull ())
-                foreach (var value in Inorder (node.Left.Value))
-                    yield return value;
-            yield return node.Value.Value;
-            if (!node.Right.IsNull ())
-                foreach (var value in Inorder (node.Right.Value))
-                    yield return value;
-        }
-
-        static IEnumerable<int> Postorder (Struct_TreeTest node) {
-            if (!node.Left.IsNull ())
-                foreach (var value in Postorder (node.Left.Value))
-                    yield return value;
-            if (!node.Right.IsNull ())
-                foreach (var value in Postorder (node.Right.Value))
-                    yield return value;
-            yield return node.Value.Value;
-        }
-
-        static IEnumerable<int> LevelOrder (ES_Object<Struct_TreeTest> thisNode) {
-            var queue = new Queue<ES_Object<Struct_TreeTest>> ();
-            queue.Enqueue (thisNode);
-            while (queue.Any ()) {
-                var node = queue.Dequeue ();
-                yield return node.Value.Value.Value;
-                if (!node.Value.Left.IsNull ())
-                    queue.Enqueue (node.Value.Left);
-                if (!node.Value.Right.IsNull ())
-                    queue.Enqueue (node.Value.Right);
-            }
-        }
-
         InitTree ();
 
         try {
@@ -181,6 +185,50 @@ Inorder:     {string.Join (" ", Inorder (tree.Value))}
 Postorder:   {string.Join (" ", Postorder (tree.Value))}
 Level-order: {string.Join (" ", LevelOrder (tree))}";
             ES_GarbageCollector.PerformCollection (-1, ES_GarbageCollector.CollectionMode.Forced);
+        } catch (Exception ex) {
+            resultsTextBox.Text = $"Consistency test failed: Exception\n{ex.Message}\n{ex.StackTrace}";
+        }
+    }
+
+    static Random rng = new Random ();
+    private void TestConsistency2_Click (object sender, System.Windows.RoutedEventArgs e) {
+        InitTree ();
+
+        try {
+            ref ES_Object<Struct_TreeTest> tree = ref *TreePointer;
+            //ES_GarbageCollector.PerformCollection (-1, ES_GarbageCollector.CollectionMode.Forced);
+            tree = GenerateTree ();
+
+            for (int i = 0; i < 5000; i++) {
+                for (int j = rng.Next (0, 3); j > 0; j--)
+                    ;// ES_GarbageCollector.PerformCollection (-1, ES_GarbageCollector.CollectionMode.Forced);
+
+                if (!Preorder (tree.Value).SequenceEqual (ExpectedPreorder) ||
+                    !Inorder (tree.Value).SequenceEqual (ExpectedInorder) ||
+                    !Postorder (tree.Value).SequenceEqual (ExpectedPostorder) ||
+                    !LevelOrder (tree).SequenceEqual (ExpectedLevelOrder)) {
+                    resultsTextBox.Text = $@"Consistency test failed.
+Tree results:
+  Preorder:    {string.Join (" ", Preorder (tree.Value))}
+  Inorder:     {string.Join (" ", Inorder (tree.Value))}
+  Postorder:   {string.Join (" ", Postorder (tree.Value))}
+  Level-order: {string.Join (" ", LevelOrder (tree))}
+
+Expected results:
+  Preorder:    {string.Join (" ", ExpectedPreorder)}
+  Inorder:     {string.Join (" ", ExpectedInorder)}
+  Postorder:   {string.Join (" ", ExpectedPostorder)}
+  Level-order: {string.Join (" ", ExpectedLevelOrder)}";
+                }
+
+                var tree2 = GenerateTree ();
+                if (i % 100 == 0 && rng.NextDouble () <= 0.25)
+                    tree = tree2;
+            }
+
+            //ES_GarbageCollector.PerformCollection (-1, ES_GarbageCollector.CollectionMode.Forced);
+
+            resultsTextBox.Text = $"Consistency succeeded";
         } catch (Exception ex) {
             resultsTextBox.Text = $"Consistency test failed: Exception\n{ex.Message}\n{ex.StackTrace}";
         }
