@@ -594,6 +594,9 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
             if (!IsValidIdentifier (id.Slice (0, sepIndex)))
                 return false;
 
+            if (sepIndex >= id.Length)
+                break;
+
             id = id.Slice (sepIndex + 1);
         }
 
