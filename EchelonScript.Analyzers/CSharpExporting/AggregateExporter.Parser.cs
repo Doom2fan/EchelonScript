@@ -223,7 +223,15 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
 
             if (defStructSymbol.TypeKind != TypeKind.Struct) {
                 Diag (
-                    DiagnosticDescriptors.DefinitionStructMustBePartial,
+                    DiagnosticDescriptors.DefinitionTypeMustBeAStruct,
+                    structSymbol.Locations,
+                    structSymbol.Name
+                );
+            }
+
+            if (defStructSymbol.TypeKind != TypeKind.Struct) {
+                Diag (
+                    DiagnosticDescriptors.DefinitionTypeMustBeAStruct,
                     structSymbol.Locations,
                     structSymbol.Name
                 );
@@ -241,6 +249,16 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
             if (!defStructSymbol.IsUnmanagedType) {
                 Diag (
                     DiagnosticDescriptors.DefinitionStructMustBeUnmanaged,
+                    structSymbol.Locations,
+                    structSymbol.Name
+                );
+                structError = true;
+            }
+
+            if (defStructSymbol.DeclaredAccessibility != Accessibility.Private &&
+                defStructSymbol.DeclaredAccessibility != Accessibility.NotApplicable) {
+                Diag (
+                    DiagnosticDescriptors.DefinitionStructMustBePrivate,
                     structSymbol.Locations,
                     structSymbol.Name
                 );
@@ -314,16 +332,10 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
                             fieldNativeAccessMod = string.Empty;
                         }
 
-                        // Skip adding this if there were any errors.
-                        if (fieldError) {
-                            structError = true;
-                            continue;
-                        }
-
                         var fieldNativeName = fieldSymbol.Name;
                         var fieldAccessMod = $"{AccessModifierFullName}.Private";
                         var fieldConstness = $"{ConstnessFullName}.Const";
-                        var fieldExportName = fieldNativeName;
+                        var fieldExportName = (string?) null;
                         var fieldType = fieldTypeSymbol.ToString ();
 
                         var fieldAttr = fieldSymbol.GetAttributes ().FirstOrDefault (attr => CheckAttribute (attr, fieldExportAttribute));
@@ -332,16 +344,45 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
                             foreach (var namedArg in fieldAttr.NamedArguments) {
                                 var argValue = namedArg.Value;
                                 if (argValue.Kind == TypedConstantKind.Error) {
-                                    structError = true;
+                                    fieldError = true;
                                     continue;
                                 }
 
                                 switch (namedArg.Key) {
-                                    case "Name": fieldExportName = (string) GetItem (argValue); break;
+                                    case "Name": {
+                                        fieldExportName = (string) GetItem (argValue);
+                                        if (!IsValidIdentifier (fieldExportName.AsSpan ())) {
+                                            Diag (
+                                                DiagnosticDescriptors.InvalidFieldName,
+                                                fieldSymbol.Locations,
+                                                fieldNativeName
+                                            );
+                                            fieldError = true;
+                                        }
+                                        break;
+                                    }
                                     case "AccessModifier": fieldAccessMod = argValue.ToCSharpString (); break;
                                     case "Constness": fieldConstness = argValue.ToCSharpString (); break;
                                 }
                             }
+                        }
+
+                        if (fieldExportName is null) {
+                            fieldExportName = fieldNativeName;
+                            if (!IsValidIdentifier (fieldExportName.AsSpan ())) {
+                                Diag (
+                                    DiagnosticDescriptors.InvalidAutoFieldName,
+                                    fieldSymbol.Locations,
+                                    fieldNativeName
+                                );
+                                fieldError = true;
+                            }
+                        }
+
+                        // Skip adding this if there were any errors.
+                        if (fieldError) {
+                            structError = true;
+                            continue;
                         }
 
                         fields.Add (new () {
@@ -369,11 +410,6 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
                 }
             }
 
-            if (structError) {
-                hadError = true;
-                continue;
-            }
-
             static bool IsAllowedKind (SyntaxKind kind) =>
                 kind == SyntaxKind.ClassDeclaration ||
                 kind == SyntaxKind.StructDeclaration ||
@@ -389,6 +425,7 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
                             structSymbol.Locations,
                             structSymbol.Name
                         );
+                        structError = true;
 
                         parentClassesList.Clear ();
                         break;
@@ -398,11 +435,6 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
                 }
 
                 parentClasses = parentClassesList.ToArray ();
-            }
-
-            if (structError) {
-                hadError = true;
-                continue;
             }
 
             var exportNamespace = (string?) null;
@@ -419,8 +451,30 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
                 }
 
                 switch (namedArg.Key) {
-                    case "Namespace": exportNamespace = (string) GetItem (argValue); break;
-                    case "Name": exportName = (string) GetItem (argValue); break;
+                    case "Namespace": {
+                        exportNamespace = (string) GetItem (argValue);
+                        if (!IsValidNamespace (exportNamespace.AsSpan ())) {
+                            Diag (
+                                DiagnosticDescriptors.InvalidNamespace,
+                                structSymbol.Locations,
+                                structSymbol.Name
+                            );
+                            structError = true;
+                        }
+                        break;
+                    }
+                    case "Name": {
+                        exportName = (string) GetItem (argValue);
+                        if (!IsValidIdentifier (exportName.AsSpan ())) {
+                            Diag (
+                                DiagnosticDescriptors.InvalidTypeName,
+                                structSymbol.Locations,
+                                structSymbol.Name
+                            );
+                            structError = true;
+                        }
+                        break;
+                    }
                     case "ParentClass":
                         if (!isClass)
                             continue;
@@ -429,8 +483,22 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
                 }
             }
 
-            if (exportName is null)
-                exportName = structDecl.Identifier.ToString ();
+            if (exportName is null) {
+                exportName = structSymbol.Name;
+                if (!IsValidIdentifier (exportName.AsSpan ())) {
+                    Diag (
+                        DiagnosticDescriptors.InvalidAutoTypeName,
+                        structSymbol.Locations,
+                        structSymbol.Name
+                    );
+                    structError = true;
+                }
+            }
+
+            if (structError) {
+                hadError = true;
+                continue;
+            }
 
             var fieldsArr = fields.ToArray ();
             fields.Clear ();
@@ -452,7 +520,7 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
         return structsToGenerate;
     }
 
-    public bool CheckTypeAllowed (ITypeSymbol type, out ExportedFieldSpecialType specialType) {
+    private bool CheckTypeAllowed (ITypeSymbol type, out ExportedFieldSpecialType specialType) {
         specialType = ExportedFieldSpecialType.None;
         if (!type.IsUnmanagedType)
             return false;
@@ -487,6 +555,47 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
             specialType = ExportedFieldSpecialType.Reference;
         if (isGCArray)
             specialType = ExportedFieldSpecialType.Array;
+
+        return true;
+    }
+
+    private static bool IsLatinLetter (char c) => (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+
+    private static bool IsIntegerDigit (char c) => c >= '0' && c <= '9';
+
+    private static bool IsValidIdentifier (ReadOnlySpan<char> id) {
+        if (id.Length < 1)
+            return false;
+
+        if (!IsLatinLetter (id [0]) && id [0] != '_')
+            return false;
+
+        foreach (var c in id.Slice (1)) {
+            if (!IsLatinLetter (c) && !IsIntegerDigit (c) && c != '_')
+                return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsValidNamespace (ReadOnlySpan<char> id) {
+        if (id.Length < 1)
+            return false;
+
+        while (id.Length > 0) {
+            var sepIndex = id.IndexOf ('.');
+
+            if (sepIndex == 0)
+                return false;
+
+            if (sepIndex == -1)
+                sepIndex = id.Length;
+
+            if (!IsValidIdentifier (id.Slice (0, sepIndex)))
+                return false;
+
+            id = id.Slice (sepIndex + 1);
+        }
 
         return true;
     }

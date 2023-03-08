@@ -20,6 +20,7 @@ static partial class DiagnosticDescriptors {
         DefinitionStructMustBePartial,
         DefinitionStructCannotBeGeneric,
         DefinitionStructMustBeUnmanaged,
+        DefinitionStructMustBePrivate,
         DefinitionStructMustBeDeclaredOnce,
         ExportedTypeNestedInGeneric,
         InstanceMemberInAggregate,
@@ -29,6 +30,13 @@ static partial class DiagnosticDescriptors {
         RefReturnNotAllowed,
         ReferenceTypesNotAllowed,
         DisallowedTypeInField,
+        NonStructExported,
+        NoReferencesOutsideExports,
+        InvalidNamespace,
+        InvalidTypeName,
+        InvalidAutoTypeName,
+        InvalidFieldName,
+        InvalidAutoFieldName,
     }
 
     private static string GetExportErrorId (DiagnosticId id) {

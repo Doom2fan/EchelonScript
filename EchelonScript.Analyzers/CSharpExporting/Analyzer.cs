@@ -36,15 +36,6 @@ public sealed partial class ES_ExportGenerator : IIncrementalGenerator {
 
         // Generate the source using the compilation and structs.
         context.RegisterSourceOutput (compilationAndStructs, static (spc, source) => ExecuteAggregates (source.Left, source.Right!, spc));
-
-        /*Aggregates:
-        if (nm != null && !nm.All (IsValidIdentifier))
-            throw new ArgumentException ("Invalid namespace.", nameof (nm));
-        else if (!IsValidIdentifier (name))
-            throw new ArgumentException ("Invalid name.", nameof (name));*/
-        /*Fields:
-        if (!IsValidIdentifier (name))
-            throw new ArgumentException ("Invalid name.", nameof (name));*/
     }
 
     private static void ExecuteAggregates (Compilation compilation, ImmutableArray<StructDeclarationSyntax> structs, SourceProductionContext context) {
@@ -61,24 +52,5 @@ public sealed partial class ES_ExportGenerator : IIncrementalGenerator {
         var structEmit = new AggregateExporter_Emitter ();
         var result = structEmit.Emit (structsToExport, context.CancellationToken);
         context.AddSource ("ExportedAggregates.g.cs", SourceText.From (result, Encoding.UTF8));
-    }
-
-    public static bool IsLatinLetter (char c) => (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
-
-    public static bool IsIntegerDigit (char c) => c >= '0' && c <= '9';
-
-    public static bool IsValidIdentifier (ReadOnlySpan<char> id) {
-        if (id.Length < 1)
-            return false;
-
-        if (!IsLatinLetter (id [0]) && id [0] != '_')
-            return false;
-
-        foreach (var c in id.Slice (1)) {
-            if (!IsLatinLetter (c) && !IsIntegerDigit (c) && c != '_')
-                return false;
-        }
-
-        return true;
     }
 }

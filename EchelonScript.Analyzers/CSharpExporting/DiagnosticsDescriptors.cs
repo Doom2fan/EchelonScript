@@ -12,6 +12,13 @@ using Microsoft.CodeAnalysis;
 namespace EchelonScript.Analyzers.CSharpExporting.Internal;
 
 internal static partial class DiagnosticDescriptors {
+    private static string [] errorTags = new [] { WellKnownDiagnosticTags.NotConfigurable };
+
+    /*
+     *
+     * Export source generator
+     *
+     */
     public static DiagnosticDescriptor MissingRequiredType => new (
         id: GetExportErrorId (DiagnosticId.MissingRequiredType),
         title: "Could not find a required type definition",
@@ -19,7 +26,7 @@ internal static partial class DiagnosticDescriptors {
         category: Constants.Category.Exports,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        customTags: new [] { WellKnownDiagnosticTags.NotConfigurable }
+        customTags: errorTags
     );
 
     public static DiagnosticDescriptor StructNotPartial => new (
@@ -29,7 +36,7 @@ internal static partial class DiagnosticDescriptors {
         category: Constants.Category.Exports,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        customTags: new [] { WellKnownDiagnosticTags.NotConfigurable }
+        customTags: errorTags
     );
 
     public static DiagnosticDescriptor DefinitionStructMissing => new (
@@ -39,7 +46,7 @@ internal static partial class DiagnosticDescriptors {
         category: Constants.Category.Exports,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        customTags: new [] { WellKnownDiagnosticTags.NotConfigurable }
+        customTags: errorTags
     );
 
     public static DiagnosticDescriptor DefinitionTypeMustBeAStruct => new (
@@ -49,7 +56,7 @@ internal static partial class DiagnosticDescriptors {
         category: Constants.Category.Exports,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        customTags: new [] { WellKnownDiagnosticTags.NotConfigurable }
+        customTags: errorTags
     );
 
     public static DiagnosticDescriptor DefinitionStructMustBePartial => new (
@@ -59,7 +66,7 @@ internal static partial class DiagnosticDescriptors {
         category: Constants.Category.Exports,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        customTags: new [] { WellKnownDiagnosticTags.NotConfigurable }
+        customTags: errorTags
     );
 
     public static DiagnosticDescriptor DefinitionStructCannotBeGeneric => new (
@@ -69,7 +76,7 @@ internal static partial class DiagnosticDescriptors {
         category: Constants.Category.Exports,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        customTags: new [] { WellKnownDiagnosticTags.NotConfigurable }
+        customTags: errorTags
     );
 
     public static DiagnosticDescriptor DefinitionStructMustBeUnmanaged => new (
@@ -79,7 +86,17 @@ internal static partial class DiagnosticDescriptors {
         category: Constants.Category.Exports,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        customTags: new [] { WellKnownDiagnosticTags.NotConfigurable }
+        customTags: errorTags
+    );
+
+    public static DiagnosticDescriptor DefinitionStructMustBePrivate => new (
+        id: GetExportErrorId (DiagnosticId.DefinitionStructMustBePrivate),
+        title: "Definition struct is not private",
+        messageFormat: "Export definition struct for type '{0}' must be private",
+        category: Constants.Category.Exports,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        customTags: errorTags
     );
 
     public static DiagnosticDescriptor DefinitionStructMustBeDeclaredOnce => new (
@@ -89,7 +106,7 @@ internal static partial class DiagnosticDescriptors {
         category: Constants.Category.Exports,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        customTags: new [] { WellKnownDiagnosticTags.NotConfigurable }
+        customTags: errorTags
     );
 
     public static DiagnosticDescriptor ExportedTypeNestedInGeneric => new (
@@ -99,7 +116,7 @@ internal static partial class DiagnosticDescriptors {
         category: Constants.Category.Exports,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        customTags: new [] { WellKnownDiagnosticTags.NotConfigurable }
+        customTags: errorTags
     );
 
     public static DiagnosticDescriptor InstanceMemberInAggregate => new (
@@ -109,7 +126,7 @@ internal static partial class DiagnosticDescriptors {
         category: Constants.Category.Exports,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        customTags: new [] { WellKnownDiagnosticTags.NotConfigurable }
+        customTags: errorTags
     );
 
     public static DiagnosticDescriptor StaticMemberInDefStruct => new (
@@ -119,7 +136,7 @@ internal static partial class DiagnosticDescriptors {
         category: Constants.Category.Exports,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        customTags: new [] { WellKnownDiagnosticTags.NotConfigurable }
+        customTags: errorTags
     );
 
     public static DiagnosticDescriptor ExportedMembersCannotBeReadonly => new (
@@ -129,7 +146,7 @@ internal static partial class DiagnosticDescriptors {
         category: Constants.Category.Exports,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        customTags: new [] { WellKnownDiagnosticTags.NotConfigurable }
+        customTags: errorTags
     );
 
     public static DiagnosticDescriptor RefMembersNotAllowed => new (
@@ -139,7 +156,7 @@ internal static partial class DiagnosticDescriptors {
         category: Constants.Category.Exports,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        customTags: new [] { WellKnownDiagnosticTags.NotConfigurable }
+        customTags: errorTags
     );
 
     public static DiagnosticDescriptor RefReturnNotAllowed => new (
@@ -149,7 +166,7 @@ internal static partial class DiagnosticDescriptors {
         category: Constants.Category.Exports,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        customTags: new [] { WellKnownDiagnosticTags.NotConfigurable }
+        customTags: errorTags
     );
 
     public static DiagnosticDescriptor ReferenceTypesNotAllowed => new (
@@ -159,16 +176,92 @@ internal static partial class DiagnosticDescriptors {
         category: Constants.Category.Exports,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        customTags: new [] { WellKnownDiagnosticTags.NotConfigurable }
+        customTags: errorTags
     );
 
     public static DiagnosticDescriptor DisallowedTypeInField => new (
         id: GetExportErrorId (DiagnosticId.DisallowedTypeInField),
-        title: "Disallowed type in exports",
+        title: "Disallowed type in export",
         messageFormat: "Type '{0}' cannot be exported",
         category: Constants.Category.Exports,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        customTags: new [] { WellKnownDiagnosticTags.NotConfigurable }
+        customTags: errorTags
+    );
+
+    private const string ValidIdentifierChars = "Identifiers may only contain letters (A-Z), numbers (0-9) and underscores (_)";
+    public static DiagnosticDescriptor InvalidNamespace => new (
+        id: GetExportErrorId (DiagnosticId.InvalidNamespace),
+        title: "Invalid export namespace",
+        messageFormat: "The export namespace for type '{0}' is invalid. Namespaces may only contain letters (A-Z), numbers (0-9) and underscores (_), with different segments separated by dots (.)",
+        category: Constants.Category.Exports,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        customTags: errorTags
+    );
+
+    public static DiagnosticDescriptor InvalidTypeName => new (
+        id: GetExportErrorId (DiagnosticId.InvalidTypeName),
+        title: "Invalid export name for field",
+        messageFormat: $"The export name for type '{{0}}' is invalid. {ValidIdentifierChars}",
+        category: Constants.Category.Exports,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        customTags: errorTags
+    );
+
+    public static DiagnosticDescriptor InvalidAutoTypeName => new (
+        id: GetExportErrorId (DiagnosticId.InvalidAutoTypeName),
+        title: "Native name cannot be used for auto-named exported type",
+        messageFormat: $"The native name for type '{{0}}' is not a valid identifier. {ValidIdentifierChars}",
+        category: Constants.Category.Exports,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        customTags: errorTags
+    );
+
+    public static DiagnosticDescriptor InvalidFieldName => new (
+        id: GetExportErrorId (DiagnosticId.InvalidFieldName),
+        title: "Invalid export name for field",
+        messageFormat: $"The export name for field '{{0}}' is invalid. {ValidIdentifierChars}",
+        category: Constants.Category.Exports,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        customTags: errorTags
+    );
+
+    public static DiagnosticDescriptor InvalidAutoFieldName => new (
+        id: GetExportErrorId (DiagnosticId.InvalidAutoFieldName),
+        title: "Native name cannot be used for auto-named exported field",
+        messageFormat: $"The native name for field '{{0}}' is not a valid identifier. {ValidIdentifierChars}",
+        category: Constants.Category.Exports,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        customTags: errorTags
+    );
+
+    /*
+     *
+     * Error analyzer
+     *
+     */
+    public static DiagnosticDescriptor NonStructExported => new (
+        id: GetExportErrorId (DiagnosticId.NonStructExported),
+        title: "Non-struct type cannot be exported",
+        messageFormat: "Type '{0}' is not an unmanaged struct and cannot be exported",
+        category: Constants.Category.Exports,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        customTags: errorTags
+    );
+
+    public static DiagnosticDescriptor NoReferencesOutsideExports => new (
+        id: GetExportErrorId (DiagnosticId.NoReferencesOutsideExports),
+        title: "GC reference in non-exported type",
+        messageFormat: "Member '{0}' in type non-exported '{1}' cannot be a GC reference",
+        category: Constants.Category.Exports,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        customTags: errorTags
     );
 }

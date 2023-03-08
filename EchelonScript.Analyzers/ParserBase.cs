@@ -19,7 +19,7 @@ namespace EchelonScript.Analyzers.Utils;
 internal abstract class ParserBase {
     protected readonly CancellationToken cancellationToken;
     protected readonly Compilation compilation;
-    private readonly Action<Diagnostic> reportDiagnostic;
+    protected Action<Diagnostic> reportDiagnostic;
 
     public ParserBase (Compilation compilation, Action<Diagnostic> reportDiagnostic, CancellationToken cancellationToken) {
         this.compilation = compilation;
