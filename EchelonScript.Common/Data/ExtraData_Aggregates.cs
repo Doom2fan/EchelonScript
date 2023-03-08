@@ -30,6 +30,8 @@ public readonly unsafe struct ES_ClassInfo {
 }
 
 public readonly unsafe struct ES_FieldInfo {
+    /// <summary>Whether the field should be exported and allowed to be used by scripts.</summary>
+    public readonly bool NoExport { get; init; }
     /// <summary>The field's access modifier.</summary>
     public readonly ES_AccessModifier AccessModifier { get; init; }
     /// <summary>The field's name.</summary>

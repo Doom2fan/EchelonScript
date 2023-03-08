@@ -388,6 +388,7 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
                         fields.Add (new () {
                             SpecialType = fieldSpecialType,
 
+                            NoExport = fieldAttr is null,
                             ExportName = fieldExportName,
                             AccessModifier = fieldAccessMod,
                             Constness = fieldConstness,

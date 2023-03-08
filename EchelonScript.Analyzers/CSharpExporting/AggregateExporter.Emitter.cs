@@ -155,6 +155,7 @@ internal sealed class AggregateExporter_Emitter {
 
                 IndentationAdd (ref indentation);
                 builder.Append ($@"
+{indentation}NoExport = {field.NoExport},
 {indentation}AccessModifier = {field.AccessModifier},
 {indentation}Name = typeLoader.AllocateString (""{field.ExportName}""),
 {indentation}Constness = {field.Constness},
