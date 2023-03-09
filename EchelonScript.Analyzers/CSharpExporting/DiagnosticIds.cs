@@ -37,6 +37,10 @@ static partial class DiagnosticDescriptors {
         InvalidAutoTypeName,
         InvalidFieldName,
         InvalidAutoFieldName,
+        StructMustBeUnmanaged,
+        StructCannotBeRef,
+        StructCannotBeGeneric,
+        DefinitionStructCannotBeRef,
     }
 
     private static string GetExportErrorId (DiagnosticId id) {

@@ -116,6 +116,33 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
                 structError = true;
             }
 
+            if (structSymbol.IsRefLikeType) {
+                Diag (
+                    DiagnosticDescriptors.StructCannotBeRef,
+                    structSymbol.Locations,
+                    structSymbol.Name
+                );
+                structError = true;
+            }
+
+            if (structSymbol.TypeParameters.Length > 0) {
+                Diag (
+                    DiagnosticDescriptors.StructCannotBeGeneric,
+                    structSymbol.Locations,
+                    structSymbol.Name
+                );
+                structError = true;
+            }
+
+            if (!structSymbol.IsUnmanagedType) {
+                Diag (
+                    DiagnosticDescriptors.StructMustBeUnmanaged,
+                    structSymbol.Locations,
+                    structSymbol.Name
+                );
+                structError = true;
+            }
+
             var exportAttribute = (AttributeData?) null;
             var isClass = false;
             foreach (var attr in structSymbol.GetAttributes ()) {
@@ -229,9 +256,9 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
                 );
             }
 
-            if (defStructSymbol.TypeKind != TypeKind.Struct) {
+            if (defStructSymbol.IsRefLikeType) {
                 Diag (
-                    DiagnosticDescriptors.DefinitionTypeMustBeAStruct,
+                    DiagnosticDescriptors.DefinitionStructCannotBeRef,
                     structSymbol.Locations,
                     structSymbol.Name
                 );

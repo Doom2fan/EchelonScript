@@ -31,8 +31,38 @@ internal static partial class DiagnosticDescriptors {
 
     public static DiagnosticDescriptor StructNotPartial => new (
         id: GetExportErrorId (DiagnosticId.StructNotPartial),
-        title: "Exported type must be marked partial",
-        messageFormat: "Exported type '{0}' must be marked with the partial keyword",
+        title: "Exported type must be partial",
+        messageFormat: "Exported type '{0}' must have the partial keyword",
+        category: Constants.Category.Exports,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        customTags: errorTags
+    );
+
+    public static DiagnosticDescriptor StructCannotBeRef => new (
+        id: GetExportErrorId (DiagnosticId.StructCannotBeRef),
+        title: "Exported type cannot be ref",
+        messageFormat: "Exported type '{0}' cannot have the ref keyword",
+        category: Constants.Category.Exports,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        customTags: errorTags
+    );
+
+    public static DiagnosticDescriptor StructCannotBeGeneric => new (
+        id: GetExportErrorId (DiagnosticId.StructCannotBeGeneric),
+        title: "Exported type is a generic type",
+        messageFormat: "Exported type '{0}' cannot be have type parameters",
+        category: Constants.Category.Exports,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        customTags: errorTags
+    );
+
+    public static DiagnosticDescriptor StructMustBeUnmanaged => new (
+        id: GetExportErrorId (DiagnosticId.StructMustBeUnmanaged),
+        title: "Exported type must be partial",
+        messageFormat: "Exported type '{0}' must be unmanaged",
         category: Constants.Category.Exports,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
@@ -62,7 +92,7 @@ internal static partial class DiagnosticDescriptors {
     public static DiagnosticDescriptor DefinitionStructMustBePartial => new (
         id: GetExportErrorId (DiagnosticId.DefinitionStructMustBePartial),
         title: "Definition struct must be partial",
-        messageFormat: "Export definition struct for type '{0}' must be partial",
+        messageFormat: "Export definition struct for type '{0}' must have the partial keyword",
         category: Constants.Category.Exports,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
@@ -103,6 +133,16 @@ internal static partial class DiagnosticDescriptors {
         id: GetExportErrorId (DiagnosticId.DefinitionStructMustBeUnmanaged),
         title: "Definition struct cannot be declared in multiple places",
         messageFormat: "Export definition struct for type '{0}' cannot be declared in multiple places",
+        category: Constants.Category.Exports,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        customTags: errorTags
+    );
+
+    public static DiagnosticDescriptor DefinitionStructCannotBeRef => new (
+        id: GetExportErrorId (DiagnosticId.DefinitionStructCannotBeRef),
+        title: "Definition struct cannot be ref",
+        messageFormat: "Export definition struct for type '{0}' cannot have the ref keyword",
         category: Constants.Category.Exports,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
