@@ -22,7 +22,7 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace EchelonScript.Analyzers.CSharpExporting;
 
 [DiagnosticAnalyzer (LanguageNames.CSharp)]
-public class ErrorAnalyzer : DiagnosticAnalyzer {
+public class ES_ErrorAnalyzer : DiagnosticAnalyzer {
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create (
         DiagnosticDescriptors.NonStructExported,
         DiagnosticDescriptors.NoReferencesOutsideExports
