@@ -8,11 +8,9 @@
  */
 
 using System;
-using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Collections.Immutable;
-using System.Data;
 using System.Linq;
-using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using EchelonScript.Analyzers.CSharpExporting.Internal;
 using EchelonScript.Analyzers.RoslynExtensions;
@@ -63,11 +61,11 @@ public class ErrorAnalyzer : DiagnosticAnalyzer {
         private INamedTypeSymbol? objectRefInterface;
         private INamedTypeSymbol? arrayRefInterface;
 
-        private Dictionary<ITypeSymbol, TypeInfo> checkedTypes;
+        private ConcurrentDictionary<ITypeSymbol, TypeInfo> checkedTypes;
 
         public Analyzer (Compilation compilation, CancellationToken cancellationToken)
             : base (compilation, EmptyAction, cancellationToken) {
-            checkedTypes = new Dictionary<ITypeSymbol, TypeInfo> (SymbolEqualityComparer.Default);
+            checkedTypes = new (SymbolEqualityComparer.Default);
         }
 
         public void Initialize () {
@@ -88,7 +86,7 @@ public class ErrorAnalyzer : DiagnosticAnalyzer {
                 IsGCRef = typeSymbol.AllInterfaces.Any (i => CompareTypeSymbols (i, objectRefInterface) || CompareTypeSymbols (i, arrayRefInterface)),
             };
 
-            checkedTypes.Add (typeSymbol, typeInfo);
+            checkedTypes.TryAdd (typeSymbol, typeInfo);
 
             return typeInfo;
         }
