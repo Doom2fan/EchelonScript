@@ -308,8 +308,8 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
                 );
                 structError = true;
             }
-            if (defStructSymbol.DeclaringSyntaxReferences [0].GetSyntax () is not StructDeclarationSyntax defStructDecl) {
-                Debug.Fail ("Definition struct's declaring syntax is not a StructDeclarationSyntax. (???)");
+            if (defStructSymbol.DeclaringSyntaxReferences [0].GetSyntax () is not TypeDeclarationSyntax defStructDecl) {
+                Debug.Fail ("Definition struct's declaring syntax is not a TypeDeclarationSyntax. (???)");
                 throw new NotSupportedException ();
             }
             if (!defStructDecl.Modifiers.Any (SyntaxKind.PartialKeyword)) {
