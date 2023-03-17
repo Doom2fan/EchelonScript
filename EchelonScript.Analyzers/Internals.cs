@@ -7,7 +7,10 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+using System.Runtime.CompilerServices;
+
 [assembly: System.Resources.NeutralResourcesLanguage ("en-us")]
+[assembly: InternalsVisibleTo ("EchelonScript.UnitTests")]
 
 namespace System.Runtime.CompilerServices {
     internal static class IsExternalInit { }

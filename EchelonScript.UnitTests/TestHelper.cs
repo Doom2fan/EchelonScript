@@ -14,21 +14,34 @@ using Microsoft.CodeAnalysis.CSharp;
 
 namespace EchelonScript.UnitTests;
 
-public static class TestHelper {
+internal static partial class TestHelper {
     [ModuleInitializer]
     public static void ModuleInitializer () {
         VerifySourceGenerators.Enable ();
     }
 
-    public static Task VerifyCSharp<T> (string source) where T : IIncrementalGenerator, new () {
-        var syntaxTree = CSharpSyntaxTree.ParseText (source);
-        var compilation = CSharpCompilation.Create (
+    public static IEnumerable<PortableExecutableReference> GetAnalyzerReferences (bool includeFramework) {
+        var assemblies = includeFramework ? Basic.Reference.Assemblies.Net70.References.All : Enumerable.Empty<PortableExecutableReference> ();
+        return assemblies.Union (new [] {
+            MetadataReference.CreateFromFile (typeof (TestHelper).Assembly.Location),
+            MetadataReference.CreateFromFile (typeof (IES_ExportedType).Assembly.Location),
+        });
+    }
+
+    public static bool ContainsDiagnostic<T> (T diagnostics, DiagnosticDescriptor diagDesc) where T : IEnumerable<Diagnostic> {
+        foreach (var diag in diagnostics) {
+            if (diag.Descriptor.Category == diagDesc.Category && diag.Id == diagDesc.Id)
+                return true;
+        }
+
+        return false;
+    }
+
+    public static CSharpCompilation CompileCSharp (string source) {
+        return CSharpCompilation.Create (
             assemblyName: "Tests",
-            syntaxTrees: new [] { syntaxTree },
-            references: Basic.Reference.Assemblies.Net70.References.All.Union (new [] {
-                MetadataReference.CreateFromFile (typeof (TestHelper).Assembly.Location),
-                MetadataReference.CreateFromFile (typeof (IES_ExportedType).Assembly.Location),
-            }),
+            syntaxTrees: new [] { CSharpSyntaxTree.ParseText (source) },
+            references: GetAnalyzerReferences (true),
             options: new (
                 OutputKind.DynamicallyLinkedLibrary,
                 reportSuppressedDiagnostics: false,
@@ -36,12 +49,116 @@ public static class TestHelper {
                 assemblyIdentityComparer: DesktopAssemblyIdentityComparer.Default
             )
         );
+    }
+
+    public static (CSharpCompilation, GeneratorDriver) CompileCSharpAndGenerate<T> (string source) where T : IIncrementalGenerator, new() {
+        var compilation = CompileCSharp (source);
 
         var generator = new T ();
         var driver = (GeneratorDriver) CSharpGeneratorDriver.Create (generator);
 
+        return (compilation, driver.RunGenerators (compilation));
+    }
+
+    private static (Compilation, GeneratorDriver) TestCSharp_Internal<T> (string markupSource, DiagnosticResult []? expectedDiagnostics, Action<Compilation, GeneratorDriver>? userActions)
+        where T : IIncrementalGenerator, new() {
+        var markupData = ProcessMarkup (markupSource);
+
+        // Validate first before we do anything.
+        if (expectedDiagnostics is not null) {
+            foreach (var expectedDiag in expectedDiagnostics) {
+                if (!markupData.DiagnosticLocations.ContainsKey (expectedDiag.LocationIndex))
+                    throw new Exception ($"Non-existent diagnostic index #{expectedDiag.LocationIndex}.");
+            }
+        }
+
+        var compilation = CompileCSharp (markupData.ProcessedCode);
+        var generator = new T ();
+        var driver = (GeneratorDriver) CSharpGeneratorDriver.Create (generator);
+
         driver = driver.RunGenerators (compilation);
+        userActions?.Invoke (compilation, driver);
+
+        if (expectedDiagnostics is null)
+            return (compilation, driver);
+
+        var diagnostics = new List<Diagnostic> (driver.GetRunResult ().Diagnostics);
+        foreach (var expectedDiag in expectedDiagnostics) {
+            var diagLoc = markupData.DiagnosticLocations [expectedDiag.LocationIndex];
+
+            var notFound = true;
+            for (var i = 0; i < diagnostics.Count; i++) {
+                var diag = diagnostics [i];
+
+                // Check expected diagnostic data.
+                if (diag.Id != expectedDiag.Id)
+                    continue;
+                if (diag.DefaultSeverity != expectedDiag.Severity)
+                    continue;
+                // Check expected diagnostic location.
+                static bool CheckLocation (DiagnosticResultLocation diagLoc, Location location) {
+                    var locSpan = location.SourceSpan;
+                    var locStartLinePos = location.GetLineSpan ().StartLinePosition;
+
+                    if (locSpan.Start != diagLoc.StartIndex || locSpan.Length != diagLoc.Length)
+                        return false;
+                    if (locStartLinePos.Line != diagLoc.Line || locStartLinePos.Character != diagLoc.Column)
+                        return false;
+
+                    return true;
+                }
+                if (!CheckLocation (diagLoc, diag.Location) && !diag.AdditionalLocations.Any (loc => CheckLocation (diagLoc, loc)))
+                    continue;
+
+                notFound = false;
+                if (i < diagnostics.Count - 1)
+                    diagnostics [i] = diagnostics [^1];
+                diagnostics.RemoveAt (diagnostics.Count - 1);
+
+                break;
+            }
+
+            Assert.False (notFound, $"Expected diagnostic '{expectedDiag.Id}' with severity {expectedDiag.Severity} at line {diagLoc.Line + 1}, column {diagLoc.Column + 1} is not present.");
+        }
+
+        foreach (var unexpectedDiag in diagnostics) {
+            var loc = unexpectedDiag.Location.GetLineSpan ().StartLinePosition;
+            Assert.Fail ($"Unexpected diagnostic '{unexpectedDiag.Id}' with severity {unexpectedDiag.Severity} at line {loc.Line + 1}, column {loc.Character + 1}.");
+        }
+
+        return (compilation, driver);
+    }
+
+    private static Task VerifyCSharp_Internal<T> (string source, DiagnosticResult []? expectedDiagnostics, Action<Compilation, GeneratorDriver>? userActions = null)
+        where T : IIncrementalGenerator, new() {
+        var (compilation, driver) = TestCSharp_Internal<T> (source, expectedDiagnostics, userActions);
 
         return Verify (driver).UseDirectory ("Snapshots");
+    }
+
+    public static void TestCSharp<T> (string markupSource, DiagnosticResult [] expectedDiagnostics, Action<Compilation, GeneratorDriver>? userActions = null)
+        where T : IIncrementalGenerator, new() => TestCSharp_Internal<T> (markupSource, expectedDiagnostics, userActions);
+
+    public static void TestCSharp<T> (string markupSource, Action<Compilation, GeneratorDriver>? testActions = null)
+        where T : IIncrementalGenerator, new() => TestCSharp_Internal<T> (markupSource, null, testActions);
+
+    public static Task VerifyCSharp<T> (string markupSource, DiagnosticResult [] expectedDiagnostics, Action<Compilation, GeneratorDriver>? userActions = null)
+            where T : IIncrementalGenerator, new() => VerifyCSharp_Internal<T> (markupSource, expectedDiagnostics, userActions);
+
+    public static Task VerifyCSharp<T> (string source, Action<Compilation, GeneratorDriver>? userActions = null)
+        where T : IIncrementalGenerator, new() => VerifyCSharp_Internal<T> (source, null, userActions);
+
+    public static bool HasDiagnostics (this GeneratorDriverRunResult runResult, DiagnosticDescriptor expectedDiagnostic)
+        => HasDiagnostics (runResult, new [] { expectedDiagnostic });
+
+    public static bool HasDiagnostics (this GeneratorDriverRunResult runResult, DiagnosticDescriptor [] expectedDiagnostics) {
+        foreach (var diag in runResult.Diagnostics) {
+            foreach (var diagDesc in expectedDiagnostics) {
+                if (diag.Id == diagDesc.Id && diag.Severity == diagDesc.DefaultSeverity)
+                    return true;
+            }
+        }
+
+        return false;
     }
 }

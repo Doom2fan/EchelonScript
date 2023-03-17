@@ -9,6 +9,4 @@
 
 using System.Runtime.CompilerServices;
 
-[assembly: InternalsVisibleTo ("EchelonScript.Compiler")]
 [assembly: InternalsVisibleTo ("EchelonScript.UnitTests")]
-[assembly: InternalsVisibleTo ("TestSuiteWPF")]

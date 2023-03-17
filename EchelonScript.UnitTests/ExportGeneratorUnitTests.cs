@@ -8,6 +8,9 @@
  */
 
 using EchelonScript.Analyzers.CSharpExporting;
+using EchelonScript.Analyzers.CSharpExporting.Internal;
+using Microsoft.CodeAnalysis;
+using static EchelonScript.UnitTests.TestHelper;
 
 namespace EchelonScript.UnitTests;
 
@@ -20,7 +23,7 @@ using EchelonScript.Common;
 using EchelonScript.Common.Exporting;
 
 [ES_ExportStruct (Namespace = ""NativeTests.Export"", Name = ""BinaryTree"")]
-internal partial struct BinaryTree {
+public partial struct BinaryTree {
     private struct ExportDefinition {
         [ES_ExportFieldAttribute (Name = ""Left"", AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
         public ES_Object<BinaryTree> Left;
@@ -38,9 +41,9 @@ internal partial struct BinaryTree {
 }
 
 [ES_ExportStruct (Namespace = ""NativeTests.Export"")]
-internal partial struct SomeValue {
+public partial struct SomeValue {
     private struct ExportDefinition {
-        [ES_ExportFieldAttribute (AccessModifier = ES_AccessModifier.Public)]
+        [ES_ExportFieldAttribute (AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
         public int Value;
 
         [ES_ExportFieldAttribute (Name = ""SomeBinaryTree"", AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
@@ -49,6 +52,24 @@ internal partial struct SomeValue {
 }
 ";
 
-        return TestHelper.VerifyCSharp<ES_ExportGenerator> (source);
+        return VerifyCSharp<ES_ExportGenerator> (source, (compilation, driver) => {
+            Assert.Empty (compilation.GetDiagnostics ().Where (diag => !diag.IsWarningAsError && diag.Severity == DiagnosticSeverity.Error));
+            Assert.Empty (driver.GetRunResult ().Diagnostics);
+        });
+    }
+
+    [Fact]
+    public void TestError_StructNotPartial () {
+        var source = @$"
+using EchelonScript.Common;
+using EchelonScript.Common.Exporting;
+
+[ES_ExportStruct]
+public struct [|0:Test1|] {{
+    private partial struct ExportDefinition {{ }}
+}}
+";
+
+        TestCSharp<ES_ExportGenerator> (source, new [] { DiagnosticResult.FromDescriptor (0, DiagnosticDescriptors.StructNotPartial) });
     }
 }
