@@ -21,7 +21,7 @@ static partial class DiagnosticDescriptors {
         DefinitionStructIsGeneric,
         DefinitionStructNotUnmanaged,
         DefinitionStructNotPrivate,
-        DefinitionStructDeclaredMultipleTimes,
+        DefinitionStructDeclaredInMultiplePlaces,
         ExportedTypeNestedInGeneric,
         InstanceMemberInAggregate,
         StaticMemberInDefStruct,

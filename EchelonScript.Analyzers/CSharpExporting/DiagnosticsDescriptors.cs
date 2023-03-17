@@ -129,8 +129,8 @@ internal static partial class DiagnosticDescriptors {
         customTags: errorTags
     );
 
-    public static DiagnosticDescriptor DefinitionStructDeclaredMultipleTimes => new (
-        id: GetExportErrorId (DiagnosticId.DefinitionStructDeclaredMultipleTimes),
+    public static DiagnosticDescriptor DefinitionStructDeclaredInMultiplePlaces => new (
+        id: GetExportErrorId (DiagnosticId.DefinitionStructDeclaredInMultiplePlaces),
         title: "Definition struct cannot be declared in multiple places",
         messageFormat: "Export definition struct for type '{0}' cannot be declared in multiple places",
         category: Constants.Category.Exports,

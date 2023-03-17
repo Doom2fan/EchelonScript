@@ -301,7 +301,7 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
             Debug.Assert (!defStructSymbol.IsImplicitlyDeclared);
             if (defStructSymbol.DeclaringSyntaxReferences.Length > 1) {
                 Diag (
-                    DiagnosticDescriptors.DefinitionStructDeclaredMultipleTimes,
+                    DiagnosticDescriptors.DefinitionStructDeclaredInMultiplePlaces,
                     defStructSymbol.Locations,
                     defStructSymbol.Name
                 );
