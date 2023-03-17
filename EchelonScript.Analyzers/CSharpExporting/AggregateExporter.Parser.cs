@@ -176,6 +176,7 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
                             fieldDecl.Locations,
                             fieldDecl.Name
                         );
+                        structError = true;
                         break;
                     case IPropertySymbol propDecl:
                         if (isStatic)
@@ -186,6 +187,7 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
                             propDecl.Locations,
                             propDecl.Name
                         );
+                        structError = true;
                         break;
                     case IMethodSymbol methodDecl:
                         if (isStatic)
@@ -228,6 +230,7 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
                             methodDecl.Locations,
                             methodDecl.Name
                         );
+                        structError = true;
                         break;
 
                     case TypeDeclarationSyntax:
@@ -244,6 +247,7 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
                     structSymbol.Locations,
                     structSymbol.Name
                 );
+                structError = true;
                 continue;
             }
             var defStructSymbol = structDefStructs.First ();
@@ -254,6 +258,7 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
                     structSymbol.Locations,
                     structSymbol.Name
                 );
+                structError = true;
             }
 
             if (defStructSymbol.IsRefLikeType) {
@@ -262,6 +267,7 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
                     structSymbol.Locations,
                     structSymbol.Name
                 );
+                structError = true;
             }
 
             if (defStructSymbol.TypeParameters.Length > 0) {
@@ -299,6 +305,7 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
                     defStructSymbol.Locations,
                     defStructSymbol.Name
                 );
+                structError = true;
             }
 
             foreach (var member in defStructSymbol.GetMembers ()) {
@@ -313,6 +320,7 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
                                 fieldSymbol.Locations,
                                 fieldSymbol.Name
                             );
+                            fieldError = true;
                             continue;
                         }
 
