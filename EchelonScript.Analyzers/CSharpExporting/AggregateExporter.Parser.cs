@@ -51,6 +51,7 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
     public AggregateExporter_Parser (Compilation compilation, Action<Diagnostic> reportDiagnostic, CancellationToken cancellationToken)
         : base (compilation, reportDiagnostic, cancellationToken) { }
 
+    // TODO: Add checks to forbid using the ExportDefinition struct
     public IReadOnlyList<ExportedStruct> GetTypesToGenerate (IEnumerable<StructDeclarationSyntax> structs) {
         var hadError = false;
         var structsToGenerate = new List<ExportedStruct> ();

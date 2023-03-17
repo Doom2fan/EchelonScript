@@ -308,7 +308,17 @@ internal static partial class DiagnosticDescriptors {
     public static DiagnosticDescriptor ReferenceUsedOutsideExport => new (
         id: GetExportErrorId (DiagnosticId.ReferenceUsedOutsideExport),
         title: "GC reference in non-exported type",
-        messageFormat: "Member '{0}' in type non-exported '{1}' cannot be a GC reference",
+        messageFormat: "Member '{0}' in non-exported type '{1}' cannot be a GC reference",
+        category: Constants.Category.Exports,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        customTags: errorTags
+    );
+
+    public static DiagnosticDescriptor ExportUsedAsValueTypeOutsideExport => new (
+        id: GetExportErrorId (DiagnosticId.ExportUsedAsValueTypeOutsideExport),
+        title: "Exported type used by-value in non-exported type",
+        messageFormat: "Member '{0}' in non-exported type '{1}' cannot be of exported type '{2}'",
         category: Constants.Category.Exports,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,

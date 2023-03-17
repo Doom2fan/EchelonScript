@@ -42,6 +42,7 @@ static partial class DiagnosticDescriptors {
         StructIsGeneric,
         DefinitionStructIsRef,
         ExportedTypeNestedInNonPartial,
+        ExportUsedAsValueTypeOutsideExport,
     }
 
     private static string GetExportErrorId (DiagnosticId id) {

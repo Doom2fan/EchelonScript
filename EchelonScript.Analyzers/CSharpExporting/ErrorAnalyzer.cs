@@ -9,6 +9,7 @@
 
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Threading;
@@ -25,7 +26,8 @@ namespace EchelonScript.Analyzers.CSharpExporting;
 public class ES_ErrorAnalyzer : DiagnosticAnalyzer {
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create (
         DiagnosticDescriptors.NonStructExported,
-        DiagnosticDescriptors.ReferenceUsedOutsideExport
+        DiagnosticDescriptors.ReferenceUsedOutsideExport,
+        DiagnosticDescriptors.ExportUsedAsValueTypeOutsideExport
     );
 
     public override void Initialize (AnalysisContext context) {
@@ -37,7 +39,7 @@ public class ES_ErrorAnalyzer : DiagnosticAnalyzer {
                 var analyzer = new Analyzer (compilationContext.Compilation, compilationContext.CancellationToken);
                 analyzer.Initialize ();
 
-                compilationContext.RegisterSyntaxNodeAction (analyzer.AnalyzeSyntaxNode, ImmutableArray.Create (
+                compilationContext.RegisterSyntaxNodeAction (analyzer.AnalyzeTypeDeclarationNode, ImmutableArray.Create (
                     SyntaxKind.StructDeclaration,
                     SyntaxKind.ClassDeclaration,
                     SyntaxKind.RecordDeclaration,
@@ -52,6 +54,8 @@ public class ES_ErrorAnalyzer : DiagnosticAnalyzer {
             public bool IsStruct;
             public bool IsExported;
             public bool IsGCRef;
+
+            public bool IsValidExport => IsStruct && IsExported;
         }
 
         private static Action<Diagnostic> EmptyAction = _ => throw new Exception ("reportDiagnostic not set.");
@@ -67,6 +71,24 @@ public class ES_ErrorAnalyzer : DiagnosticAnalyzer {
         public Analyzer (Compilation compilation, CancellationToken cancellationToken)
             : base (compilation, EmptyAction, cancellationToken) {
             checkedTypes = new (SymbolEqualityComparer.Default);
+        }
+
+        protected static void Diag (SyntaxNodeAnalysisContext nodeContext, DiagnosticDescriptor desc, params object? []? messageArgs)
+            => nodeContext.ReportDiagnostic (Diagnostic.Create (desc, null, messageArgs));
+
+        protected static void Diag (SyntaxNodeAnalysisContext nodeContext, DiagnosticDescriptor desc, Location? location, params object? []? messageArgs)
+            => nodeContext.ReportDiagnostic (Diagnostic.Create (desc, location, messageArgs));
+
+        protected static void Diag (SyntaxNodeAnalysisContext nodeContext, DiagnosticDescriptor desc, Location? location, IEnumerable<Location>? additionalLocations, params object? []? messageArgs)
+            => nodeContext.ReportDiagnostic (Diagnostic.Create (desc, location, additionalLocations, messageArgs));
+
+        protected static void Diag (SyntaxNodeAnalysisContext nodeContext, DiagnosticDescriptor desc, IReadOnlyList<Location>? locations, params object? []? messageArgs) {
+            if (locations is null || locations.Count < 0)
+                Diag (nodeContext, desc, messageArgs);
+            else if (locations.Count == 1)
+                Diag (nodeContext, desc, locations [0], messageArgs);
+            else
+                Diag (nodeContext, desc, locations [0], locations.Skip (1), messageArgs);
         }
 
         public void Initialize () {
@@ -92,62 +114,94 @@ public class ES_ErrorAnalyzer : DiagnosticAnalyzer {
             return typeInfo;
         }
 
-        public void AnalyzeSyntaxNode (SyntaxNodeAnalysisContext nodeContext) {
+        public void AnalyzeTypeDeclarationNode (SyntaxNodeAnalysisContext nodeContext) {
             if (nodeContext.Node is not TypeDeclarationSyntax typeNode)
                 throw new NotSupportedException ("Invalid node.");
 
             if (typeNode.Members.Count < 1 && typeNode.AttributeLists.Count < 1)
                 return;
 
-            reportDiagnostic = nodeContext.ReportDiagnostic;
+            var typeNodeSM = compilation.GetSemanticModel (typeNode.SyntaxTree);
+            if (typeNodeSM.GetDeclaredSymbol (typeNode) is not INamedTypeSymbol typeSymbol)
+                return;
 
-            try {
-                var typeNodeSM = compilation.GetSemanticModel (typeNode.SyntaxTree);
-                if (typeNodeSM.GetDeclaredSymbol (typeNode) is not INamedTypeSymbol typeSymbol)
+            if (typeNode.Parent is TypeDeclarationSyntax parentTypeNode && typeNodeSM.GetDeclaredSymbol (parentTypeNode) is INamedTypeSymbol parentTypeSymbol) {
+                var parentTypeInfo = CheckType (parentTypeSymbol);
+                if (typeSymbol.Name.Equals (AggregateExporter_Parser.DefinitionStructName, StringComparison.InvariantCulture) && parentTypeInfo.IsValidExport)
                     return;
+            }
 
-                var typeInfo = CheckType (typeSymbol);
-                if (!typeInfo.IsStruct && typeInfo.IsExported) {
-                    Diag (
-                        DiagnosticDescriptors.NonStructExported,
-                        typeSymbol.Locations,
-                        typeSymbol.Name
-                    );
-                }
+            var typeInfo = CheckType (typeSymbol);
+            if (!typeInfo.IsStruct && typeInfo.IsExported) {
+                Diag (
+                    nodeContext,
 
-                foreach (var memberNode in typeNode.Members) {
-                    cancellationToken.ThrowIfCancellationRequested ();
+                    DiagnosticDescriptors.NonStructExported,
+                    typeSymbol.Locations,
+                    typeSymbol.Name
+                );
+            }
 
-                    if (memberNode is FieldDeclarationSyntax fieldDecl) {
-                        var varDeclaration = fieldDecl.Declaration;
+            foreach (var memberNode in typeNode.Members) {
+                cancellationToken.ThrowIfCancellationRequested ();
 
-                        if (typeNodeSM.GetDeclaredSymbol (varDeclaration.Type) is not ITypeSymbol fieldType)
-                            continue;
+                if (memberNode is FieldDeclarationSyntax fieldDecl) {
+                    var varDeclaration = fieldDecl.Declaration;
 
-                        var fieldTypeInfo = CheckType (fieldType);
-                        if (fieldTypeInfo.IsGCRef && (!typeInfo.IsStruct || !typeInfo.IsExported)) {
+                    if (typeNodeSM.GetTypeInfo (varDeclaration.Type).ConvertedType is not ITypeSymbol fieldType)
+                        continue;
+
+                    var fieldTypeInfo = CheckType (fieldType);
+                    if (fieldTypeInfo.IsGCRef && !typeInfo.IsValidExport) {
+                        foreach (var variable in varDeclaration.Variables) {
                             Diag (
+                                nodeContext,
+
                                 DiagnosticDescriptors.ReferenceUsedOutsideExport,
-                                varDeclaration.Type.GetLocation (),
+                                variable.Identifier.GetLocation (),
+                                variable.Identifier.ToString (),
                                 typeSymbol.Name
                             );
                         }
-                    } else if (memberNode is PropertyDeclarationSyntax propDecl) {
-                        if (typeNodeSM.GetDeclaredSymbol (propDecl.Type) is not ITypeSymbol propType)
-                            continue;
-
-                        var propTypeInfo = CheckType (propType);
-                        if (propTypeInfo.IsGCRef && (!typeInfo.IsStruct || !typeInfo.IsExported)) {
+                    } else if (fieldTypeInfo.IsValidExport && !typeInfo.IsValidExport) {
+                        foreach (var variable in varDeclaration.Variables) {
                             Diag (
-                                DiagnosticDescriptors.ReferenceUsedOutsideExport,
-                                propDecl.Identifier.GetLocation (),
-                                typeSymbol.Name
+                                nodeContext,
+
+                                DiagnosticDescriptors.ExportUsedAsValueTypeOutsideExport,
+                                variable.Identifier.GetLocation (),
+                                variable.Identifier.ToString (),
+                                typeSymbol.Name,
+                                fieldType.Name
                             );
                         }
                     }
+                } else if (memberNode is PropertyDeclarationSyntax propDecl) {
+                    if (typeNodeSM.GetTypeInfo (propDecl.Type).ConvertedType is not ITypeSymbol propType)
+                        continue;
+
+                    var propTypeInfo = CheckType (propType);
+                    if (propTypeInfo.IsGCRef && !typeInfo.IsValidExport) {
+                        Diag (
+                            nodeContext,
+
+                            DiagnosticDescriptors.ReferenceUsedOutsideExport,
+                            propDecl.Identifier.GetLocation (),
+                            propDecl.Identifier.ToString (),
+                            typeSymbol.Name
+                        );
+                    } else if (propTypeInfo.IsValidExport && !typeInfo.IsValidExport) {
+                        Diag (
+                            nodeContext,
+
+                            DiagnosticDescriptors.ExportUsedAsValueTypeOutsideExport,
+                            propDecl.Identifier.GetLocation (),
+                            propDecl.Identifier.ToString (),
+                            typeSymbol.Name,
+                            propType.Name
+                        );
+                    }
                 }
-            } finally {
-                reportDiagnostic = EmptyAction;
             }
         }
     }
