@@ -25,7 +25,7 @@ namespace EchelonScript.Analyzers.CSharpExporting;
 public class ES_ErrorAnalyzer : DiagnosticAnalyzer {
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create (
         DiagnosticDescriptors.NonStructExported,
-        DiagnosticDescriptors.NoReferencesOutsideExports
+        DiagnosticDescriptors.ReferenceUsedOutsideExport
     );
 
     public override void Initialize (AnalysisContext context) {
@@ -126,7 +126,7 @@ public class ES_ErrorAnalyzer : DiagnosticAnalyzer {
                         var fieldTypeInfo = CheckType (fieldType);
                         if (fieldTypeInfo.IsGCRef && (!typeInfo.IsStruct || !typeInfo.IsExported)) {
                             Diag (
-                                DiagnosticDescriptors.NoReferencesOutsideExports,
+                                DiagnosticDescriptors.ReferenceUsedOutsideExport,
                                 varDeclaration.Type.GetLocation (),
                                 typeSymbol.Name
                             );
@@ -138,7 +138,7 @@ public class ES_ErrorAnalyzer : DiagnosticAnalyzer {
                         var propTypeInfo = CheckType (propType);
                         if (propTypeInfo.IsGCRef && (!typeInfo.IsStruct || !typeInfo.IsExported)) {
                             Diag (
-                                DiagnosticDescriptors.NoReferencesOutsideExports,
+                                DiagnosticDescriptors.ReferenceUsedOutsideExport,
                                 propDecl.Identifier.GetLocation (),
                                 typeSymbol.Name
                             );

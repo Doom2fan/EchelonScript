@@ -123,7 +123,7 @@ internal static partial class TestHelper {
 
         foreach (var unexpectedDiag in diagnostics) {
             var loc = unexpectedDiag.Location.GetLineSpan ().StartLinePosition;
-            Assert.Fail ($"Unexpected diagnostic '{unexpectedDiag.Id}' with severity {unexpectedDiag.Severity} at line {loc.Line + 1}, column {loc.Character + 1}.");
+            Assert.Fail (@$"Unexpected diagnostic '{unexpectedDiag.Id}' with severity {unexpectedDiag.Severity} at line {loc.Line + 1}, column {loc.Character + 1}: ""{unexpectedDiag.GetMessage ()}"".");
         }
 
         return (compilation, driver);

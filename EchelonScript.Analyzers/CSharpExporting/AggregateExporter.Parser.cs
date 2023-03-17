@@ -118,7 +118,7 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
 
             if (structSymbol.IsRefLikeType) {
                 Diag (
-                    DiagnosticDescriptors.StructCannotBeRef,
+                    DiagnosticDescriptors.StructIsRef,
                     structSymbol.Locations,
                     structSymbol.Name
                 );
@@ -127,7 +127,7 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
 
             if (structSymbol.TypeParameters.Length > 0) {
                 Diag (
-                    DiagnosticDescriptors.StructCannotBeGeneric,
+                    DiagnosticDescriptors.StructIsGeneric,
                     structSymbol.Locations,
                     structSymbol.Name
                 );
@@ -136,7 +136,7 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
 
             if (!structSymbol.IsUnmanagedType) {
                 Diag (
-                    DiagnosticDescriptors.StructMustBeUnmanaged,
+                    DiagnosticDescriptors.StructNotUnmanaged,
                     structSymbol.Locations,
                     structSymbol.Name
                 );
@@ -250,7 +250,7 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
 
             if (defStructSymbol.TypeKind != TypeKind.Struct) {
                 Diag (
-                    DiagnosticDescriptors.DefinitionTypeMustBeAStruct,
+                    DiagnosticDescriptors.DefinitionTypeNotAStruct,
                     structSymbol.Locations,
                     structSymbol.Name
                 );
@@ -258,7 +258,7 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
 
             if (defStructSymbol.IsRefLikeType) {
                 Diag (
-                    DiagnosticDescriptors.DefinitionStructCannotBeRef,
+                    DiagnosticDescriptors.DefinitionStructIsRef,
                     structSymbol.Locations,
                     structSymbol.Name
                 );
@@ -266,7 +266,7 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
 
             if (defStructSymbol.TypeParameters.Length > 0) {
                 Diag (
-                    DiagnosticDescriptors.DefinitionStructCannotBeGeneric,
+                    DiagnosticDescriptors.DefinitionStructIsGeneric,
                     structSymbol.Locations,
                     structSymbol.Name
                 );
@@ -275,7 +275,7 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
 
             if (!defStructSymbol.IsUnmanagedType) {
                 Diag (
-                    DiagnosticDescriptors.DefinitionStructMustBeUnmanaged,
+                    DiagnosticDescriptors.DefinitionStructNotUnmanaged,
                     structSymbol.Locations,
                     structSymbol.Name
                 );
@@ -285,7 +285,7 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
             if (defStructSymbol.DeclaredAccessibility != Accessibility.Private &&
                 defStructSymbol.DeclaredAccessibility != Accessibility.NotApplicable) {
                 Diag (
-                    DiagnosticDescriptors.DefinitionStructMustBePrivate,
+                    DiagnosticDescriptors.DefinitionStructNotPrivate,
                     structSymbol.Locations,
                     structSymbol.Name
                 );
@@ -295,7 +295,7 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
             Debug.Assert (!defStructSymbol.IsImplicitlyDeclared);
             if (defStructSymbol.DeclaringSyntaxReferences.Length > 1) {
                 Diag (
-                    DiagnosticDescriptors.DefinitionStructMustBeDeclaredOnce,
+                    DiagnosticDescriptors.DefinitionStructDeclaredMultipleTimes,
                     defStructSymbol.Locations,
                     defStructSymbol.Name
                 );
@@ -318,7 +318,7 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
 
                         if (fieldSymbol.IsReadOnly) {
                             Diag (
-                                DiagnosticDescriptors.ExportedMembersCannotBeReadonly,
+                                DiagnosticDescriptors.ExportedMemberIsReadonly,
                                 fieldSymbol.Locations,
                                 fieldSymbol.Name
                             );

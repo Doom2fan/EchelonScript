@@ -39,8 +39,8 @@ internal static partial class DiagnosticDescriptors {
         customTags: errorTags
     );
 
-    public static DiagnosticDescriptor StructCannotBeRef => new (
-        id: GetExportErrorId (DiagnosticId.StructCannotBeRef),
+    public static DiagnosticDescriptor StructIsRef => new (
+        id: GetExportErrorId (DiagnosticId.StructIsRef),
         title: "Exported type cannot be ref",
         messageFormat: "Exported type '{0}' cannot have the ref keyword",
         category: Constants.Category.Exports,
@@ -49,8 +49,8 @@ internal static partial class DiagnosticDescriptors {
         customTags: errorTags
     );
 
-    public static DiagnosticDescriptor StructCannotBeGeneric => new (
-        id: GetExportErrorId (DiagnosticId.StructCannotBeGeneric),
+    public static DiagnosticDescriptor StructIsGeneric => new (
+        id: GetExportErrorId (DiagnosticId.StructIsGeneric),
         title: "Exported type is a generic type",
         messageFormat: "Exported type '{0}' cannot be have type parameters",
         category: Constants.Category.Exports,
@@ -59,8 +59,8 @@ internal static partial class DiagnosticDescriptors {
         customTags: errorTags
     );
 
-    public static DiagnosticDescriptor StructMustBeUnmanaged => new (
-        id: GetExportErrorId (DiagnosticId.StructMustBeUnmanaged),
+    public static DiagnosticDescriptor StructNotUnmanaged => new (
+        id: GetExportErrorId (DiagnosticId.StructNotUnmanaged),
         title: "Exported type must be partial",
         messageFormat: "Exported type '{0}' must be unmanaged",
         category: Constants.Category.Exports,
@@ -79,8 +79,8 @@ internal static partial class DiagnosticDescriptors {
         customTags: errorTags
     );
 
-    public static DiagnosticDescriptor DefinitionTypeMustBeAStruct => new (
-        id: GetExportErrorId (DiagnosticId.DefinitionTypeMustBeAStruct),
+    public static DiagnosticDescriptor DefinitionTypeNotAStruct => new (
+        id: GetExportErrorId (DiagnosticId.DefinitionTypeNotAStruct),
         title: "Definition type is not a struct",
         messageFormat: "Export definition type for type '{0}' must be a struct",
         category: Constants.Category.Exports,
@@ -89,8 +89,8 @@ internal static partial class DiagnosticDescriptors {
         customTags: errorTags
     );
 
-    public static DiagnosticDescriptor DefinitionStructMustBePartial => new (
-        id: GetExportErrorId (DiagnosticId.DefinitionStructMustBePartial),
+    public static DiagnosticDescriptor DefinitionStructNotPartial => new (
+        id: GetExportErrorId (DiagnosticId.DefinitionStructNotPartial),
         title: "Definition struct must be partial",
         messageFormat: "Export definition struct for type '{0}' must have the partial keyword",
         category: Constants.Category.Exports,
@@ -99,8 +99,8 @@ internal static partial class DiagnosticDescriptors {
         customTags: errorTags
     );
 
-    public static DiagnosticDescriptor DefinitionStructCannotBeGeneric => new (
-        id: GetExportErrorId (DiagnosticId.DefinitionStructCannotBeGeneric),
+    public static DiagnosticDescriptor DefinitionStructIsGeneric => new (
+        id: GetExportErrorId (DiagnosticId.DefinitionStructIsGeneric),
         title: "Definition struct is a generic type",
         messageFormat: "Export definition struct for type '{0}' cannot have type parameters",
         category: Constants.Category.Exports,
@@ -109,8 +109,8 @@ internal static partial class DiagnosticDescriptors {
         customTags: errorTags
     );
 
-    public static DiagnosticDescriptor DefinitionStructMustBeUnmanaged => new (
-        id: GetExportErrorId (DiagnosticId.DefinitionStructMustBeUnmanaged),
+    public static DiagnosticDescriptor DefinitionStructNotUnmanaged => new (
+        id: GetExportErrorId (DiagnosticId.DefinitionStructNotUnmanaged),
         title: "Definition struct is not unmanaged",
         messageFormat: "Export definition struct for type '{0}' must be unmanaged",
         category: Constants.Category.Exports,
@@ -119,8 +119,8 @@ internal static partial class DiagnosticDescriptors {
         customTags: errorTags
     );
 
-    public static DiagnosticDescriptor DefinitionStructMustBePrivate => new (
-        id: GetExportErrorId (DiagnosticId.DefinitionStructMustBePrivate),
+    public static DiagnosticDescriptor DefinitionStructNotPrivate => new (
+        id: GetExportErrorId (DiagnosticId.DefinitionStructNotPrivate),
         title: "Definition struct is not private",
         messageFormat: "Export definition struct for type '{0}' must be private",
         category: Constants.Category.Exports,
@@ -129,8 +129,8 @@ internal static partial class DiagnosticDescriptors {
         customTags: errorTags
     );
 
-    public static DiagnosticDescriptor DefinitionStructMustBeDeclaredOnce => new (
-        id: GetExportErrorId (DiagnosticId.DefinitionStructMustBeUnmanaged),
+    public static DiagnosticDescriptor DefinitionStructDeclaredMultipleTimes => new (
+        id: GetExportErrorId (DiagnosticId.DefinitionStructDeclaredMultipleTimes),
         title: "Definition struct cannot be declared in multiple places",
         messageFormat: "Export definition struct for type '{0}' cannot be declared in multiple places",
         category: Constants.Category.Exports,
@@ -139,8 +139,8 @@ internal static partial class DiagnosticDescriptors {
         customTags: errorTags
     );
 
-    public static DiagnosticDescriptor DefinitionStructCannotBeRef => new (
-        id: GetExportErrorId (DiagnosticId.DefinitionStructCannotBeRef),
+    public static DiagnosticDescriptor DefinitionStructIsRef => new (
+        id: GetExportErrorId (DiagnosticId.DefinitionStructIsRef),
         title: "Definition struct cannot be ref",
         messageFormat: "Export definition struct for type '{0}' cannot have the ref keyword",
         category: Constants.Category.Exports,
@@ -179,8 +179,8 @@ internal static partial class DiagnosticDescriptors {
         customTags: errorTags
     );
 
-    public static DiagnosticDescriptor ExportedMembersCannotBeReadonly => new (
-        id: GetExportErrorId (DiagnosticId.ExportedMembersCannotBeReadonly),
+    public static DiagnosticDescriptor ExportedMemberIsReadonly => new (
+        id: GetExportErrorId (DiagnosticId.ExportedMemberIsReadonly),
         title: "Member is readonly",
         messageFormat: "Member '{0}' cannot be readonly",
         category: Constants.Category.Exports,
@@ -295,8 +295,8 @@ internal static partial class DiagnosticDescriptors {
         customTags: errorTags
     );
 
-    public static DiagnosticDescriptor NoReferencesOutsideExports => new (
-        id: GetExportErrorId (DiagnosticId.NoReferencesOutsideExports),
+    public static DiagnosticDescriptor ReferenceUsedOutsideExport => new (
+        id: GetExportErrorId (DiagnosticId.ReferenceUsedOutsideExport),
         title: "GC reference in non-exported type",
         messageFormat: "Member '{0}' in type non-exported '{1}' cannot be a GC reference",
         category: Constants.Category.Exports,
