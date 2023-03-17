@@ -299,9 +299,22 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
             }
 
             Debug.Assert (!defStructSymbol.IsImplicitlyDeclared);
+            Debug.Assert (defStructSymbol.DeclaringSyntaxReferences.Length == 1);
             if (defStructSymbol.DeclaringSyntaxReferences.Length > 1) {
                 Diag (
                     DiagnosticDescriptors.DefinitionStructDeclaredInMultiplePlaces,
+                    defStructSymbol.Locations,
+                    defStructSymbol.Name
+                );
+                structError = true;
+            }
+            if (defStructSymbol.DeclaringSyntaxReferences [0].GetSyntax () is not StructDeclarationSyntax defStructDecl) {
+                Debug.Fail ("Definition struct's declaring syntax is not a StructDeclarationSyntax. (???)");
+                throw new NotSupportedException ();
+            }
+            if (!defStructDecl.Modifiers.Any (SyntaxKind.PartialKeyword)) {
+                Diag (
+                    DiagnosticDescriptors.DefinitionStructNotPartial,
                     defStructSymbol.Locations,
                     defStructSymbol.Name
                 );
