@@ -82,12 +82,13 @@ internal static partial class TestHelper {
         if (expectedDiagnostics is null)
             return (compilation, driver);
 
-        var diagnostics = new List<Diagnostic> (driver.GetRunResult ().Diagnostics);
+        var diagnostics = driver.GetRunResult ().Diagnostics;
+        var diagnosticMatched = new bool [diagnostics.Length];
         foreach (var expectedDiag in expectedDiagnostics) {
             var diagLoc = markupData.DiagnosticLocations [expectedDiag.LocationIndex];
 
             var notFound = true;
-            for (var i = 0; i < diagnostics.Count; i++) {
+            for (var i = 0; i < diagnostics.Length; i++) {
                 var diag = diagnostics [i];
 
                 // Check expected diagnostic data.
@@ -111,19 +112,20 @@ internal static partial class TestHelper {
                     continue;
 
                 notFound = false;
-                if (i < diagnostics.Count - 1)
-                    diagnostics [i] = diagnostics [^1];
-                diagnostics.RemoveAt (diagnostics.Count - 1);
-
+                diagnosticMatched [i] = true;
                 break;
             }
 
             Assert.False (notFound, $"Expected diagnostic '{expectedDiag.Id}' with severity {expectedDiag.Severity} at line {diagLoc.Line + 1}, column {diagLoc.Column + 1} is not present.");
         }
 
-        foreach (var unexpectedDiag in diagnostics) {
-            var loc = unexpectedDiag.Location.GetLineSpan ().StartLinePosition;
-            Assert.Fail (@$"Unexpected diagnostic '{unexpectedDiag.Id}' with severity {unexpectedDiag.Severity} at line {loc.Line + 1}, column {loc.Character + 1}: ""{unexpectedDiag.GetMessage ()}"".");
+        for (var i = 0; i < diagnostics.Length; i++) {
+            if (diagnosticMatched [i])
+                continue;
+
+            var diag = diagnostics [i];
+            var loc = diag.Location.GetLineSpan ().StartLinePosition;
+            Assert.Fail (@$"Unexpected diagnostic '{diag.Id}' with severity {diag.Severity} at line {loc.Line + 1}, column {loc.Character + 1}: ""{diag.GetMessage ()}"".");
         }
 
         return (compilation, driver);
