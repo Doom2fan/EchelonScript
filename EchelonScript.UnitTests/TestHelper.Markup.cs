@@ -114,13 +114,16 @@ internal static partial class TestHelper {
         while (codeRanges.Count > 0)
             sb.Append (markupCode [codeRanges.Dequeue ()]);
 
+        var processedCode = sb.ToString ();
+        sb.Clear ();
+
         var curLine = 0;
-        for (curPos = 0; curPos < markupCode.Length;) {
+        for (curPos = 0; curPos < processedCode.Length;) {
             var lineStart = curPos;
             var lineEnd = lineStart;
-            for (; lineEnd < markupCode.Length; lineEnd++) {
-                var c = markupCode [lineEnd];
-                if (c == '\r' && markupCode.Length - lineEnd > 0 && markupCode [lineEnd + 1] == '\n') {
+            for (; lineEnd < processedCode.Length; lineEnd++) {
+                var c = processedCode [lineEnd];
+                if (c == '\r' && processedCode.Length - lineEnd > 0 && processedCode [lineEnd + 1] == '\n') {
                     curPos = lineEnd += 2;
                     break;
                 } else if (c == '\n' || c == '\r') {
@@ -152,7 +155,7 @@ internal static partial class TestHelper {
 
         return new () {
             DiagnosticLocations = diagLocations,
-            ProcessedCode = sb.ToString (),
+            ProcessedCode = processedCode,
         };
     }
 }
