@@ -255,7 +255,7 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
             if (defStructSymbol.TypeKind != TypeKind.Struct) {
                 Diag (
                     DiagnosticDescriptors.DefinitionTypeNotAStruct,
-                    structSymbol.Locations,
+                    defStructSymbol.Locations,
                     structSymbol.Name
                 );
                 structError = true;
@@ -264,7 +264,7 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
             if (defStructSymbol.IsRefLikeType) {
                 Diag (
                     DiagnosticDescriptors.DefinitionStructIsRef,
-                    structSymbol.Locations,
+                    defStructSymbol.Locations,
                     structSymbol.Name
                 );
                 structError = true;
@@ -273,7 +273,7 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
             if (defStructSymbol.TypeParameters.Length > 0) {
                 Diag (
                     DiagnosticDescriptors.DefinitionStructIsGeneric,
-                    structSymbol.Locations,
+                    defStructSymbol.Locations,
                     structSymbol.Name
                 );
                 structError = true;
@@ -282,7 +282,7 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
             if (!defStructSymbol.IsUnmanagedType) {
                 Diag (
                     DiagnosticDescriptors.DefinitionStructNotUnmanaged,
-                    structSymbol.Locations,
+                    defStructSymbol.Locations,
                     structSymbol.Name
                 );
                 structError = true;
@@ -292,7 +292,7 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
                 defStructSymbol.DeclaredAccessibility != Accessibility.NotApplicable) {
                 Diag (
                     DiagnosticDescriptors.DefinitionStructNotPrivate,
-                    structSymbol.Locations,
+                    defStructSymbol.Locations,
                     structSymbol.Name
                 );
                 structError = true;
