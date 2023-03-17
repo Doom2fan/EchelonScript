@@ -159,6 +159,16 @@ internal static partial class DiagnosticDescriptors {
         customTags: errorTags
     );
 
+    public static DiagnosticDescriptor ExportedTypeNestedInNonPartial => new (
+        id: GetExportErrorId (DiagnosticId.ExportedTypeNestedInNonPartial),
+        title: "Exported type nested within a type that is not partial",
+        messageFormat: "Exported type '{0}' cannot be nested within a type that is not partial",
+        category: Constants.Category.Exports,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        customTags: errorTags
+    );
+
     public static DiagnosticDescriptor InstanceMemberInAggregate => new (
         id: GetExportErrorId (DiagnosticId.InstanceMemberInAggregate),
         title: "Instance member declared outside definition struct",

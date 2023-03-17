@@ -468,14 +468,27 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
             if (structDecl.Parent is TypeDeclarationSyntax parentClass) {
                 var parentClassesList = new List<string> ();
                 while (parentClass != null && IsAllowedKind (parentClass.Kind ())) {
+                    var parentError = false;
                     if (parentClass.TypeParameterList?.Parameters.Count > 0) {
                         Diag (
                             DiagnosticDescriptors.ExportedTypeNestedInGeneric,
                             structSymbol.Locations,
                             structSymbol.Name
                         );
-                        structError = true;
+                        parentError = true;
+                    }
 
+                    if (!parentClass.Modifiers.Any (SyntaxKind.PartialKeyword)) {
+                        Diag (
+                            DiagnosticDescriptors.ExportedTypeNestedInNonPartial,
+                            structSymbol.Locations,
+                            structSymbol.Name
+                        );
+                        parentError = true;
+                    }
+
+                    if (parentError) {
+                        structError = true;
                         parentClassesList.Clear ();
                         break;
                     }
