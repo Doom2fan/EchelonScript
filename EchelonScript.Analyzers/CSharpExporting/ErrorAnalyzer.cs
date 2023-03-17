@@ -35,6 +35,7 @@ public class ES_ErrorAnalyzer : DiagnosticAnalyzer {
         context.RegisterCompilationStartAction (
             compilationContext => {
                 var analyzer = new Analyzer (compilationContext.Compilation, compilationContext.CancellationToken);
+                analyzer.Initialize ();
 
                 compilationContext.RegisterSyntaxNodeAction (analyzer.AnalyzeSyntaxNode, ImmutableArray.Create (
                     SyntaxKind.StructDeclaration,
@@ -95,7 +96,7 @@ public class ES_ErrorAnalyzer : DiagnosticAnalyzer {
             if (nodeContext.Node is not TypeDeclarationSyntax typeNode)
                 throw new NotSupportedException ("Invalid node.");
 
-            if (typeNode.Members.Count < 1)
+            if (typeNode.Members.Count < 1 && typeNode.AttributeLists.Count < 1)
                 return;
 
             reportDiagnostic = nodeContext.ReportDiagnostic;
