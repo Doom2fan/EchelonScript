@@ -10,7 +10,6 @@
 using System;
 using ChronosLib.Pooled;
 using EchelonScript.Compiler.CompilerCommon;
-using EchelonScript.Compiler.Frontend;
 using EchelonScript.Compiler.Frontend.AST;
 using EchelonScript.Compiler.Frontend.Parser.Tokenizer;
 

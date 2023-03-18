@@ -595,7 +595,8 @@ internal unsafe static class ImmixGC_GlobalAllocator {
         var chunkMemPtr = (nint) mi_malloc_aligned_at (
             (nuint) ImmixConstants.TotalChunkSize,
             ImmixConstants.BlockSize,
-            (nuint) ImmixConstants.ChunkMetadataSize);
+            (nuint) ImmixConstants.ChunkMetadataSize
+        );
 
         // Assign the chunk header.
         var chunkPtr = (ImmixChunkHeader*) chunkMemPtr;
