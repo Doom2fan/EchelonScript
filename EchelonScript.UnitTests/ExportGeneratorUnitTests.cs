@@ -24,7 +24,7 @@ using EchelonScript.Common.Exporting;
 
 [ES_ExportStruct (Namespace = ""NativeTests.Export"", Name = ""BinaryTree"")]
 public partial struct BinaryTree {
-    private struct ExportDefinition {
+    private partial struct ExportDefinition {
         [ES_ExportFieldAttribute (Name = ""Left"", AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
         public ES_Object<BinaryTree> Left;
         [ES_ExportFieldAttribute (AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
@@ -42,7 +42,7 @@ public partial struct BinaryTree {
 
 [ES_ExportStruct (Namespace = ""NativeTests.Export"")]
 public partial struct SomeValue {
-    private struct ExportDefinition {
+    private partial struct ExportDefinition {
         [ES_ExportFieldAttribute (AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
         public int Value;
 
