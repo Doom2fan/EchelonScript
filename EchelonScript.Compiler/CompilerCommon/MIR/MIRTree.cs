@@ -12,6 +12,8 @@ using EchelonScript.Common;
 namespace EchelonScript.Compiler.CompilerCommon.MIR;
 
 public unsafe struct MIRTree {
+#if false // FIXME: Implement MIR
     /// <summary>The MIR bodies in the tree.</summary>
     public ES_Array1D<MIRBody> Bodies;
+#endif
 }

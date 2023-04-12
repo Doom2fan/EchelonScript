@@ -17,7 +17,9 @@ public unsafe struct MIRRegisterDef {
 }
 
 public struct MIRBody {
+#if false // FIXME: Implement MIR
     public MIRString Identifier;
     public ES_Array1D<MIRRegisterDef> Registers;
     public ES_Array1D<MIRBasicBlock> BasicBlocks;
+#endif
 }

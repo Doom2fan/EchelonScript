@@ -12,6 +12,8 @@ using EchelonScript.Common;
 namespace EchelonScript.Compiler.CompilerCommon.MIR;
 
 public struct MIRBasicBlock {
+#if false // FIXME: Implement MIR
     public ES_Array1D<MIRStatement> Statements;
     public MIRTerminator Terminator;
+#endif
 }

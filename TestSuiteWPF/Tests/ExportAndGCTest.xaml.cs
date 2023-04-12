@@ -20,9 +20,9 @@ using static TerraFX.Interop.Mimalloc;
 
 namespace TestSuiteWPF.Tests;
 
-[ES_ExportStruct (Namespace = "NativeTests.Export", Name = "LinkedList")]
+[ES_ExportStruct (Namespace = "NativeTests.Export", Name = "BinaryTree")]
 internal partial struct Struct_TreeTest {
-    private struct ExportDefinition {
+    private partial struct ExportDefinition {
         [ES_ExportField (AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
         public ES_Object<Struct_TreeTest> Left;
         [ES_ExportField (AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
@@ -38,9 +38,9 @@ internal partial struct Struct_TreeTest {
     }
 }
 
-[ES_ExportStruct (Namespace = "NativeTests.Export", Name = "LinkedList")]
+[ES_ExportStruct (Namespace = "NativeTests.Export")]
 internal partial struct Struct_ValueTypeTest {
-    private struct ExportDefinition {
+    private partial struct ExportDefinition {
         [ES_ExportField (AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
         public ES_Object<Struct_TreeTest> A;
         public ES_Object<Struct_TreeTest> B;

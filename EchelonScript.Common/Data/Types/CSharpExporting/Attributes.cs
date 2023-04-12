@@ -21,6 +21,7 @@ public sealed class ES_ExportStructAttribute : Attribute {
 public sealed class ES_ExportClassAttribute : Attribute {
     public string? Namespace { get; init; }
     public string? Name { get; init; }
+    public bool Sealed { get; init; } = false;
     public Type? ParentClass { get; init; }
 }
 
@@ -30,3 +31,6 @@ public sealed class ES_ExportFieldAttribute : Attribute {
     public required ES_AccessModifier AccessModifier { get; init; }
     public required ES_Constness Constness { get; init; }
 }
+
+[AttributeUsage (AttributeTargets.Field)]
+public sealed class ES_ProtectedFieldAttribute : Attribute { }

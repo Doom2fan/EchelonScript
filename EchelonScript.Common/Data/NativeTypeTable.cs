@@ -280,7 +280,7 @@ public unsafe sealed class ES_TypeTable : IDisposable {
             var methodTablePtr = typeToken.MethodTable;
             var typeInfoPtr = typeToken.MethodTable->TypeInfo;
 
-            var typeFlags = ES_TypeFlag.ValueType | ES_TypeFlag.NativeType;
+            var typeFlags = ES_TypeFlag.ValueType | ES_TypeFlag.Sealed | ES_TypeFlag.NativeType;
 
             ES_Utf8String name;
             {
@@ -340,7 +340,7 @@ public unsafe sealed class ES_TypeTable : IDisposable {
             var methodTablePtr = typeToken.MethodTable;
             var typeInfoPtr = typeToken.MethodTable->TypeInfo;
 
-            var typeFlags = ES_TypeFlag.ValueType;
+            var typeFlags = ES_TypeFlag.ValueType | ES_TypeFlag.Sealed;
             if (nativeType)
                 typeFlags |= ES_TypeFlag.NativeType;
 
@@ -379,6 +379,81 @@ public unsafe sealed class ES_TypeTable : IDisposable {
             };
         }
 
+        public void CreateClass (
+            ref TypeLoadToken typeToken,
+
+            ReadOnlySpan<ES_TypeInterfaceData> interfaces,
+
+            ReadOnlySpan<ES_FieldInfo> fields,
+            ReadOnlySpan<ES_MethodInfo> methods,
+            ReadOnlySpan<ES_FunctionInfo> functions,
+
+            bool nativeType,
+            ES_MethodTable* baseClass,
+            bool isSealed
+        ) {
+            Debug.Assert (typeToken.Initialized);
+            Debug.Assert (!typeToken.Created);
+            typeToken.Validate (nameof (typeToken));
+
+            typeToken.Created = true;
+
+            Debug.Assert (!baseClass->Flags.HasFlag (ES_TypeFlag.Sealed));
+
+            var methodTablePtr = typeToken.MethodTable;
+            var typeInfoPtr = typeToken.MethodTable->TypeInfo;
+
+            var typeFlags = ES_TypeFlag.None;
+            if (nativeType)
+                typeFlags |= ES_TypeFlag.NativeType;
+            if (isSealed)
+                typeFlags |= ES_TypeFlag.Sealed;
+
+            using var refsList = new StructPooledList<nint> (CL_ClearMode.Auto);
+
+            var curClass = baseClass;
+            if (baseClass != null)
+                refsList.AddRange (baseClass->GetRefsList ());
+
+            foreach (var field in fields) {
+                Debug.Assert (field.Type != null);
+
+                var refsSpan = field.Type->GetRefsList ();
+                refsList.EnsureCapacity (refsList.Count + refsSpan.Length);
+
+                foreach (var refPtr in refsSpan)
+                    refsList.Add (field.Offset + refPtr);
+            }
+
+            var refListPtr = AllocateArray (refsList.Span);
+            refsList.Dispose ();
+
+            var classInfo = AllocateType (new ES_ClassInfo {
+                Fields = AllocateArray (fields),
+                Methods = AllocateArray (methods),
+                Functions = AllocateArray (functions),
+            });
+
+            *methodTablePtr = *methodTablePtr with {
+                FlagsInit = typeFlags,
+
+                VTableInit = ArrayPointer<Pointer<ES_FunctionData>>.Null,
+
+                RefsListInit = refListPtr,
+
+                ParentTypeInit = baseClass,
+                TypeInfoInit = typeInfoPtr,
+
+                InterfacesInit = AllocateArray (interfaces),
+            };
+            *typeInfoPtr = *typeInfoPtr with {
+                MethodTableInit = methodTablePtr,
+                TypeTagInit = ES_TypeTag.Struct,
+
+                ExtraDataInit = classInfo,
+            };
+        }
+
         public void CreateVoid (ref TypeLoadToken typeToken) {
             Debug.Assert (typeToken.Initialized);
             Debug.Assert (!typeToken.Created);
@@ -389,7 +464,7 @@ public unsafe sealed class ES_TypeTable : IDisposable {
             var methodTablePtr = typeToken.MethodTable;
             var typeInfoPtr = typeToken.MethodTable->TypeInfo;
 
-            var typeFlags = ES_TypeFlag.ValueType | ES_TypeFlag.NativeType | ES_TypeFlag.NoRefs;
+            var typeFlags = ES_TypeFlag.ValueType | ES_TypeFlag.Sealed | ES_TypeFlag.NativeType | ES_TypeFlag.NoRefs;
 
             *methodTablePtr = *methodTablePtr with {
                 RuntimeSizeInit = 1,
@@ -425,7 +500,7 @@ public unsafe sealed class ES_TypeTable : IDisposable {
             var methodTablePtr = typeToken.MethodTable;
             var typeInfoPtr = typeToken.MethodTable->TypeInfo;
 
-            var typeFlags = ES_TypeFlag.ValueType | ES_TypeFlag.NativeType | ES_TypeFlag.NoRefs;
+            var typeFlags = ES_TypeFlag.ValueType | ES_TypeFlag.Sealed | ES_TypeFlag.NativeType | ES_TypeFlag.NoRefs;
 
             *methodTablePtr = *methodTablePtr with {
                 RuntimeSizeInit = 1,
@@ -461,7 +536,7 @@ public unsafe sealed class ES_TypeTable : IDisposable {
             var methodTablePtr = typeToken.MethodTable;
             var typeInfoPtr = typeToken.MethodTable->TypeInfo;
 
-            var typeFlags = ES_TypeFlag.ValueType | ES_TypeFlag.NativeType | ES_TypeFlag.NoRefs;
+            var typeFlags = ES_TypeFlag.ValueType | ES_TypeFlag.Sealed | ES_TypeFlag.NativeType | ES_TypeFlag.NoRefs;
 
             *methodTablePtr = *methodTablePtr with {
                 RuntimeSizeInit = ES_PrimitiveTypeConsts.GetIntMemorySize (intSize),
@@ -497,7 +572,7 @@ public unsafe sealed class ES_TypeTable : IDisposable {
             var methodTablePtr = typeToken.MethodTable;
             var typeInfoPtr = typeToken.MethodTable->TypeInfo;
 
-            var typeFlags = ES_TypeFlag.ValueType | ES_TypeFlag.NativeType | ES_TypeFlag.NoRefs;
+            var typeFlags = ES_TypeFlag.ValueType | ES_TypeFlag.Sealed | ES_TypeFlag.NativeType | ES_TypeFlag.NoRefs;
 
             *methodTablePtr = *methodTablePtr with {
                 RuntimeSizeInit = ES_PrimitiveTypeConsts.GetFloatMemorySize (floatSize),

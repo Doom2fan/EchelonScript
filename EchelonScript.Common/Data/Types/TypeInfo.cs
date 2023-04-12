@@ -47,6 +47,8 @@ public enum ES_TypeFlag : ushort {
     ValueType  = 1 << 2,
     /// <summary>The type's environment is being unloaded and any objects of this type must be destroyed.</summary>
     Unloading  = 1 << 3,
+    /// <summary>The type is sealed and cannot be inherited from.</summary>
+    Sealed     = 1 << 4,
 }
 
 public readonly unsafe struct ES_TypeInfo {

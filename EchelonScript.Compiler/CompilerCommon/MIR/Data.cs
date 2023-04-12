@@ -17,8 +17,10 @@ public class MIRADTException : Exception {
 }
 
 public unsafe struct MIRString {
+#if false // FIXME: Implement MIR
     /// <summary>The string's length.</summary>
     public int Length;
     /// <summary>The string's characters as UTF-8. Immutable.</summary>
     public ES_ImmutArray1D<byte> Chars;
+#endif
 }

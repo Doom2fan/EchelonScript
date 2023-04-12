@@ -290,6 +290,86 @@ internal static partial class DiagnosticDescriptors {
         customTags: errorTags
     );
 
+    public static DiagnosticDescriptor DuplicateFieldExportName => new (
+        id: GetExportErrorId (DiagnosticId.DuplicateFieldExportName),
+        title: "Duplicate field export name",
+        messageFormat: $"The type '{{0}}' already contains a field with the export name '{{1}}'",
+        category: Constants.Category.Exports,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        customTags: errorTags
+    );
+
+    public static DiagnosticDescriptor FieldNameUsedInBase => new (
+        id: GetExportErrorId (DiagnosticId.FieldNameUsedInBase),
+        title: "Field name already defined in base type",
+        messageFormat: $"The native field '{{1}}' is already defined in the base type '{{0}}'",
+        category: Constants.Category.Exports,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        customTags: errorTags
+    );
+
+    public static DiagnosticDescriptor FieldExportNameUsedInBase => new (
+        id: GetExportErrorId (DiagnosticId.FieldExportNameUsedInBase),
+        title: "Field export name already defined in base type",
+        messageFormat: $"The field export name '{{1}}' is already defined in the base type '{{0}}'",
+        category: Constants.Category.Exports,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        customTags: errorTags
+    );
+
+    public static DiagnosticDescriptor ProtectedMemberInStruct => new (
+        id: GetExportErrorId (DiagnosticId.ProtectedMemberInStruct),
+        title: "New protected member declared in struct",
+        messageFormat: $"New protected member '{{0}}' declared in struct '{{1}}'",
+        category: Constants.Category.Exports,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        customTags: errorTags
+    );
+
+    public static DiagnosticDescriptor ProtectedMemberInSealedClass => new (
+        id: GetExportErrorId (DiagnosticId.ProtectedMemberInSealedClass),
+        title: "New protected member declared in sealed class",
+        messageFormat: $"New protected member '{{0}}' declared in sealed class '{{1}}'",
+        category: Constants.Category.Exports,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        customTags: errorTags
+    );
+
+    public static DiagnosticDescriptor InheritsFromSealedType => new (
+        id: GetExportErrorId (DiagnosticId.InheritsFromSealedType),
+        title: "Type inherits a sealed type",
+        messageFormat: $"Type '{{0}}' cannot inherit from sealed type '{{1}}'",
+        category: Constants.Category.Exports,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        customTags: errorTags
+    );
+
+    public static DiagnosticDescriptor InheritanceCycle => new (
+        id: GetExportErrorId (DiagnosticId.InheritanceCycle),
+        title: "Type creates inheritance cycle",
+        messageFormat: $"Type '{{0}}' inheriting from '{{1}}' creates an inheritance cycle",
+        category: Constants.Category.Exports,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        customTags: errorTags
+    );
+
+    public static DiagnosticDescriptor ClassInheritsNonClass => new (
+        id: GetExportErrorId (DiagnosticId.ClassInheritsNonClass),
+        title: "Class cannot inherit from a non-class type",
+        messageFormat: $"Class '{{0}}' cannot inherit from non-class type '{{1}}'",
+        category: Constants.Category.Exports,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        customTags: errorTags
+    );
+
     /*
      *
      * Error analyzer

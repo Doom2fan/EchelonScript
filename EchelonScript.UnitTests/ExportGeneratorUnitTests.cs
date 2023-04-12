@@ -50,6 +50,25 @@ public partial struct SomeValue {
         public ES_Object<BinaryTree> BinaryTree;
     }
 }
+
+[ES_ExportClass (Namespace = ""NativeTests.Export"")]
+public partial struct ClassDef {
+    private partial struct ExportDefinition {
+        [ES_ExportFieldAttribute (AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
+        public int Value;
+
+        [ES_ExportFieldAttribute (Name = ""SomeBinaryTree"", AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
+        public ES_Object<BinaryTree> BinaryTree;
+    }
+}
+
+[ES_ExportClass (Namespace = ""NativeTests.Export"", ParentClass = typeof (ClassDef))]
+public partial struct SubClassDef {
+    private partial struct ExportDefinition {
+        [ES_ExportFieldAttribute (AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
+        public int Value2;
+    }
+}
 ";
 
         return VerifyCSharp<ES_ExportGenerator> (source, (compilation, driver) => {
@@ -575,6 +594,165 @@ public class TestClass {{
         return TestCSharp<ES_ErrorAnalyzer> (source, new [] {
             DiagnosticResult.FromDescriptor (0, DiagnosticDescriptors.ExportUsedAsValueTypeOutsideExport),
             DiagnosticResult.FromDescriptor (1, DiagnosticDescriptors.ExportUsedAsValueTypeOutsideExport),
+        });
+    }
+
+    [Fact]
+    public void TestDiagnostic_ProtectedMemberInStruct_ProtectedMemberInSealedClass () {
+        var source = @$"
+using EchelonScript.Common;
+using EchelonScript.Common.Exporting;
+
+[ES_ExportStruct]
+public partial struct TestStruct {{
+    private partial struct ExportDefinition {{
+        [ES_ProtectedField]
+        public ES_Object<int> [|0:Foo|];
+    }}
+}}
+
+[ES_ExportClass (Sealed = true)]
+public partial struct TestClass {{
+    private partial struct ExportDefinition {{
+        [ES_ProtectedField]
+        public ES_Object<int> [|1:Foo|];
+    }}
+}}
+";
+
+        TestCSharp<ES_ExportGenerator> (source, new [] {
+            DiagnosticResult.FromDescriptor (0, DiagnosticDescriptors.ProtectedMemberInStruct),
+            DiagnosticResult.FromDescriptor (1, DiagnosticDescriptors.ProtectedMemberInSealedClass),
+        });
+    }
+
+    [Fact]
+    public void TestDiagnostic_DuplicateFieldExportName () {
+        var source = @$"
+using EchelonScript.Common;
+using EchelonScript.Common.Exporting;
+
+[ES_ExportStruct]
+public partial struct TestStruct {{
+    private partial struct ExportDefinition {{
+        [ES_ExportField (Name = ""Foo"", AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
+        private int Foo;
+        [ES_ExportField (Name = ""Foo"", AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
+        private int [|0:Bar|];
+    }}
+}}
+";
+
+        TestCSharp<ES_ExportGenerator> (source, new [] {
+            DiagnosticResult.FromDescriptor (0, DiagnosticDescriptors.DuplicateFieldExportName),
+        });
+    }
+
+    [Fact]
+    public void TestDiagnostic_FieldNameUsedInBase_FieldExportNameUsedInBase () {
+        var source = @$"
+using EchelonScript.Common;
+using EchelonScript.Common.Exporting;
+
+[ES_ExportClass (Namespace = ""NativeTests.Export"")]
+public partial struct ClassDef {{
+    private partial struct ExportDefinition {{
+        [ES_ExportFieldAttribute (AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
+        public int Value;
+    }}
+}}
+
+[ES_ExportClass (Namespace = ""NativeTests.Export"", ParentClass = typeof (ClassDef))]
+public partial struct SubClassDef {{
+    private partial struct ExportDefinition {{
+        [ES_ExportFieldAttribute (AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
+        public int [|0:Value|];
+    }}
+}}
+";
+
+        TestCSharp<ES_ExportGenerator> (source, new [] {
+            DiagnosticResult.FromDescriptor (0, DiagnosticDescriptors.FieldNameUsedInBase),
+            DiagnosticResult.FromDescriptor (0, DiagnosticDescriptors.FieldExportNameUsedInBase),
+        });
+    }
+
+    [Fact]
+    public void TestDiagnostic_InheritsFromSealedType () {
+        var source = @$"
+using EchelonScript.Common;
+using EchelonScript.Common.Exporting;
+
+[ES_ExportClass (Sealed = true)]
+public partial struct ClassDef {{
+    private partial struct ExportDefinition {{
+    }}
+}}
+
+[ES_ExportClass (ParentClass = typeof (ClassDef))]
+public partial struct [|0:SubClassDef|] {{
+    private partial struct ExportDefinition {{
+    }}
+}}
+";
+
+        TestCSharp<ES_ExportGenerator> (source, new [] {
+            DiagnosticResult.FromDescriptor (0, DiagnosticDescriptors.InheritsFromSealedType),
+        });
+    }
+
+    [Fact]
+    public void TestDiagnostic_InheritanceCycle () {
+        var source = @$"
+using EchelonScript.Common;
+using EchelonScript.Common.Exporting;
+
+[ES_ExportClass (ParentClass = typeof (Bar))]
+public partial struct Foo {{
+    private partial struct ExportDefinition {{
+    }}
+}}
+
+[ES_ExportClass (ParentClass = typeof (Foo))]
+public partial struct [|0:Bar|] {{
+    private partial struct ExportDefinition {{
+    }}
+}}
+
+[ES_ExportClass (ParentClass = typeof (Baz))]
+public partial struct [|1:Baz|] {{
+    private partial struct ExportDefinition {{
+    }}
+}}
+";
+
+        TestCSharp<ES_ExportGenerator> (source, new [] {
+            DiagnosticResult.FromDescriptor (0, DiagnosticDescriptors.InheritanceCycle),
+            DiagnosticResult.FromDescriptor (1, DiagnosticDescriptors.InheritanceCycle),
+        });
+    }
+
+    [Fact]
+    public void TestDiagnostic_ClassInheritsNonClass () {
+        var source = @$"
+using EchelonScript.Common;
+using EchelonScript.Common.Exporting;
+
+[ES_ExportStruct]
+public partial struct Foo {{
+    private partial struct ExportDefinition {{
+    }}
+}}
+
+[ES_ExportClass (ParentClass = typeof (Foo))]
+public partial struct [|0:Bar|] {{
+    private partial struct ExportDefinition {{
+    }}
+}}
+";
+
+        TestCSharp<ES_ExportGenerator> (source, new [] {
+            DiagnosticResult.FromDescriptor (0, DiagnosticDescriptors.ClassInheritsNonClass),
         });
     }
 }

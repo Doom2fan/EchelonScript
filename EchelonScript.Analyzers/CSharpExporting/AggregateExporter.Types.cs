@@ -7,6 +7,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+using Microsoft.CodeAnalysis;
+
 namespace EchelonScript.Analyzers.CSharpExporting.Internal;
 
 internal enum ExportedFieldSpecialType {
@@ -23,6 +25,7 @@ internal struct ExportedField {
     public string AccessModifier;
     public string Constness;
 
+    public string SourceType;
     public string FieldType;
     public string PropertyName;
     public string PropertyAccessibility;
@@ -37,11 +40,16 @@ internal struct ExportedFunction {
 }
 
 internal struct ExportedStruct {
+    public bool Error;
+
     public string NativeName;
     public string NativeNamespace;
     public string [] NativeParents;
 
-    public string? BaseClass;
+    public bool IsClass;
+    public bool IsSealed;
+    public INamedTypeSymbol? BaseClass;
+
     public string? ExportNamespace;
     public string ExportName;
 

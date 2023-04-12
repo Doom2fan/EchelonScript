@@ -43,6 +43,14 @@ static partial class DiagnosticDescriptors {
         DefinitionStructIsRef,
         ExportedTypeNestedInNonPartial,
         ExportUsedAsValueTypeOutsideExport,
+        ProtectedMemberInStruct,
+        ProtectedMemberInSealedClass,
+        DuplicateFieldExportName,
+        FieldNameUsedInBase,
+        FieldExportNameUsedInBase,
+        InheritsFromSealedType,
+        InheritanceCycle,
+        ClassInheritsNonClass,
     }
 
     private static string GetExportErrorId (DiagnosticId id) {

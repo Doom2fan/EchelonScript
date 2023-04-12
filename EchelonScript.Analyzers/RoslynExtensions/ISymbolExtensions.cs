@@ -7,9 +7,35 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+using System.Text;
 using Microsoft.CodeAnalysis;
 
 namespace EchelonScript.Analyzers.RoslynExtensions;
+
+internal static partial class ISymbolExtensions {
+    public static string GetFullNamespace (this ISymbol symbol) {
+        while (symbol != null && symbol.Kind != SymbolKind.Namespace)
+            symbol = symbol.ContainingSymbol;
+
+        if (symbol == null)
+            return string.Empty;
+
+        var sb = new StringBuilder ();
+        var first = true;
+        while (symbol != null && symbol.Kind == SymbolKind.Namespace) {
+            if (!first)
+                sb.Insert (0, '.');
+            sb.Insert (0, symbol.Name);
+            first = false;
+
+            symbol = symbol.ContainingSymbol;
+            if ((symbol as INamespaceSymbol)?.IsGlobalNamespace == true)
+                break;
+        }
+
+        return sb.ToString ();
+    }
+}
 
 // THE FOLLOWING LICENSE APPLIES ONLY TO THE FOLLOWING CODE:
 /*
@@ -44,7 +70,7 @@ internal enum SymbolVisibility {
     Private,
 }
 
-internal static class ISymbolExtensions {
+internal static partial class ISymbolExtensions {
     // From https://github.com/dotnet/roslyn/blob/main/src/Workspaces/SharedUtilitiesAndExtensions/Compiler/Core/Extensions/ISymbolExtensions.cs
     public static SymbolVisibility GetResultantVisibility (this ISymbol symbol) {
         // Start by assuming it's visible.
