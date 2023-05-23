@@ -29,7 +29,7 @@ static partial class DiagnosticDescriptors {
         RefMembersNotAllowed,
         RefReturnNotAllowed,
         ReferenceTypesNotAllowed,
-        DisallowedTypeInField,
+        DisallowedTypeInField_NotExportOrPrimitive,
         NonStructExported,
         ReferenceUsedOutsideExport,
         InvalidNamespace,
@@ -51,6 +51,7 @@ static partial class DiagnosticDescriptors {
         InheritsFromSealedType,
         InheritanceCycle,
         ClassInheritsNonClass,
+        ManagedTypesNotAllowed,
     }
 
     private static string GetExportErrorId (DiagnosticId id) {

@@ -609,11 +609,18 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
                             fieldSymbol.Name
                         );
                         fieldError = true;
+                    } else if (!fieldTypeSymbol.IsUnmanagedType) {
+                        Diag (
+                            DiagnosticDescriptors.ManagedTypesNotAllowed,
+                            fieldSymbol.Locations,
+                            fieldSymbol.Name
+                        );
+                        fieldError = true;
                     }
 
-                    if (!CheckTypeAllowed (fieldTypeSymbol, out var fieldSpecialType)) {
+                    if (!CheckFieldTypeAllowed (fieldSymbol, out var fieldSpecialType)) {
                         Diag (
-                            DiagnosticDescriptors.DisallowedTypeInField,
+                            DiagnosticDescriptors.DisallowedTypeInField_NotExportOrPrimitive,
                             fieldSymbol.Locations,
                             fieldSymbol.Name
                         );
@@ -797,14 +804,9 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
         }
     }
 
-    private bool CheckTypeAllowed (ITypeSymbol type, out ExportedFieldSpecialType specialType) {
+    private bool CheckFieldTypeAllowed (IFieldSymbol fieldSymbol, out ExportedFieldSpecialType specialType) {
+        var type = fieldSymbol.Type;
         specialType = ExportedFieldSpecialType.None;
-        if (!type.IsUnmanagedType)
-            return false;
-        if (!type.IsValueType)
-            return false;
-        if (type.IsReferenceType)
-            return false;
 
         switch (type.SpecialType) {
             case SpecialType.System_Boolean:

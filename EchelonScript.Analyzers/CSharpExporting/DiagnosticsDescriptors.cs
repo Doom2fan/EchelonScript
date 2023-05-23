@@ -229,10 +229,20 @@ internal static partial class DiagnosticDescriptors {
         customTags: errorTags
     );
 
-    public static DiagnosticDescriptor DisallowedTypeInField => new (
-        id: GetExportErrorId (DiagnosticId.DisallowedTypeInField),
+    public static DiagnosticDescriptor ManagedTypesNotAllowed => new (
+        id: GetExportErrorId (DiagnosticId.ManagedTypesNotAllowed),
+        title: "Managed types are not allowed in exports",
+        messageFormat: "Managed type '{0}' cannot be exported",
+        category: Constants.Category.Exports,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        customTags: errorTags
+    );
+
+    public static DiagnosticDescriptor DisallowedTypeInField_NotExportOrPrimitive => new (
+        id: GetExportErrorId (DiagnosticId.DisallowedTypeInField_NotExportOrPrimitive),
         title: "Disallowed type in export",
-        messageFormat: "Type '{0}' cannot be exported",
+        messageFormat: "Type '{0}' cannot be exported: Type is not a primitive or an exported type",
         category: Constants.Category.Exports,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,

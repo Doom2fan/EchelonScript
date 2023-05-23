@@ -349,7 +349,7 @@ public partial struct Test1 {{
 
         TestCSharp<ES_ExportGenerator> (source, new [] {
             DiagnosticResult.FromDescriptor (0, DiagnosticDescriptors.RefMembersNotAllowed),
-            DiagnosticResult.FromDescriptor (0, DiagnosticDescriptors.DisallowedTypeInField),
+            DiagnosticResult.FromDescriptor (0, DiagnosticDescriptors.DisallowedTypeInField_NotExportOrPrimitive),
         });
     }
 
@@ -387,7 +387,33 @@ public partial struct Test1 {{
         TestCSharp<ES_ExportGenerator> (source, new [] {
             DiagnosticResult.FromDescriptor (0, DiagnosticDescriptors.ReferenceTypesNotAllowed),
             DiagnosticResult.FromDescriptor (1, DiagnosticDescriptors.DefinitionStructNotUnmanaged),
-            DiagnosticResult.FromDescriptor (0, DiagnosticDescriptors.DisallowedTypeInField),
+            DiagnosticResult.FromDescriptor (0, DiagnosticDescriptors.DisallowedTypeInField_NotExportOrPrimitive),
+        });
+    }
+
+    [Fact]
+    public void TestDiagnostic_ManagedTypesNotAllowed () {
+        var source = @$"
+using System.Runtime.InteropServices;
+using EchelonScript.Common;
+using EchelonScript.Common.Exporting;
+
+public struct ManagedStruct {{
+    string Foo;
+}}
+
+[ES_ExportStruct]
+public partial struct Test1 {{
+    private partial struct [|1:ExportDefinition|] {{
+        private ManagedStruct [|0:Foo|];
+    }}
+}}
+";
+
+        TestCSharp<ES_ExportGenerator> (source, new [] {
+            DiagnosticResult.FromDescriptor (1, DiagnosticDescriptors.DefinitionStructNotUnmanaged),
+            DiagnosticResult.FromDescriptor (0, DiagnosticDescriptors.ManagedTypesNotAllowed),
+            DiagnosticResult.FromDescriptor (0, DiagnosticDescriptors.DisallowedTypeInField_NotExportOrPrimitive),
         });
     }
 
@@ -407,7 +433,7 @@ public partial struct Test1 {{
 }}
 ";
 
-        TestCSharp<ES_ExportGenerator> (source, new [] { DiagnosticResult.FromDescriptor (0, DiagnosticDescriptors.DisallowedTypeInField), });
+        TestCSharp<ES_ExportGenerator> (source, new [] { DiagnosticResult.FromDescriptor (0, DiagnosticDescriptors.DisallowedTypeInField_NotExportOrPrimitive), });
     }
 
     [Fact]
