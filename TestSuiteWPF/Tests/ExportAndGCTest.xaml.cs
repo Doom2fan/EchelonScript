@@ -240,4 +240,9 @@ Expected results:
             resultsTextBox.Text = $"Consistency test failed: Exception\n{ex.Message}\n{ex.StackTrace}";
         }
     }
+
+    private void SpamAllocations_Click (object sender, System.Windows.RoutedEventArgs e) {
+        for (int i = 20_000; i > 0; i--)
+            AddNode (i, default, default);
+    }
 }

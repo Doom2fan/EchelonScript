@@ -17,6 +17,7 @@
             <Button Content="Test exports" Click="TestExports_Click"/>
             <Button Content="Test Consistency" Click="TestConsistency_Click"/>
             <Button Content="Test Consistency (Loop)" Click="TestConsistency2_Click"/>
+            <Button Content="Spam allocations" Click="SpamAllocations_Click"/>
         </StackPanel>
         <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" ResizeDirection="Columns"/>
         <TextBox x:Name="resultsTextBox" Grid.Column="2" HorizontalAlignment="Stretch" TextWrapping="Wrap" UndoLimit="0" IsReadOnly="True" FontFamily="Courier New"/>
