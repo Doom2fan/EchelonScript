@@ -414,4 +414,14 @@ internal static partial class DiagnosticDescriptors {
         isEnabledByDefault: true,
         customTags: errorTags
     );
+
+    public static DiagnosticDescriptor DefinitionStructReferenced => new (
+        id: GetExportErrorId (DiagnosticId.DefinitionStructReferenced),
+        title: "Reference to export definition struct.",
+        messageFormat: "Export definition structs cannot be used in code",
+        category: Constants.Category.Exports,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        customTags: errorTags
+    );
 }

@@ -109,7 +109,6 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
         }
     }
 
-    // TODO: Add checks to forbid using the ExportDefinition struct.
     // TODO: Forbid using classes directly instead of through refs.
     public IReadOnlyList<ExportedStruct> GetTypesToGenerate (IEnumerable<(StructDeclarationSyntax, INamedTypeSymbol)> structs) {
         // Get the semantic representation of our marker attributes and other types.

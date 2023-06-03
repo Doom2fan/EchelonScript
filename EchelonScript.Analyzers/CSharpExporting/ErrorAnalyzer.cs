@@ -28,7 +28,8 @@ public class ES_ErrorAnalyzer : DiagnosticAnalyzer {
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create (
         DiagnosticDescriptors.NonStructExported,
         DiagnosticDescriptors.ReferenceUsedOutsideExport,
-        DiagnosticDescriptors.ExportUsedAsValueTypeOutsideExport
+        DiagnosticDescriptors.ExportUsedAsValueTypeOutsideExport,
+        DiagnosticDescriptors.DefinitionStructReferenced
     );
 
     public override void Initialize (AnalysisContext context) {
@@ -46,6 +47,10 @@ public class ES_ErrorAnalyzer : DiagnosticAnalyzer {
                     SyntaxKind.RecordDeclaration,
                     SyntaxKind.RecordStructDeclaration
                 ));
+
+                compilationContext.RegisterSyntaxNodeAction (analyzer.AnalyzeIdentifierNameNode, ImmutableArray.Create (
+                    SyntaxKind.IdentifierName
+                ));
             }
         );
     }
@@ -55,6 +60,7 @@ public class ES_ErrorAnalyzer : DiagnosticAnalyzer {
             public bool IsStruct;
             public bool IsExported;
             public bool IsGCRef;
+            public bool IsExportDefinition;
 
             public bool IsValidExport => IsStruct && IsExported;
         }
@@ -100,6 +106,9 @@ public class ES_ErrorAnalyzer : DiagnosticAnalyzer {
             arrayRefInterface = compilation.GetTypeByMetadataNameAndAssembly (AggregateExporter_Parser.ArrayRefInterfaceFullName, AggregateExporter_Parser.AssemblyNameEchelonCommon);
         }
 
+        private bool StringIsExportDef (string text)
+            => text != null && text.Equals (AggregateExporter_Parser.DefinitionStructName, StringComparison.InvariantCulture);
+
         private TypeInfo CheckType (ITypeSymbol typeSymbol) {
             if (checkedTypes.TryGetValue (typeSymbol, out var typeInfo))
                 return typeInfo;
@@ -108,7 +117,12 @@ public class ES_ErrorAnalyzer : DiagnosticAnalyzer {
                 IsStruct = typeSymbol.TypeKind == TypeKind.Struct,
                 IsExported = typeSymbol.GetAttributes ().Any (attr => CheckAttribute (attr, structExportAttribute) || CheckAttribute (attr, classExportAttribute)),
                 IsGCRef = typeSymbol.AllInterfaces.Any (i => CompareTypeSymbols (i, objectRefInterface) || CompareTypeSymbols (i, arrayRefInterface)),
+                IsExportDefinition = false,
             };
+            if (typeSymbol.ContainingType != null && StringIsExportDef (typeSymbol.Name)) {
+                var parentTypeInfo = CheckType (typeSymbol.ContainingType);
+                typeInfo.IsExportDefinition = parentTypeInfo.IsValidExport;
+            }
 
             checkedTypes.TryAdd (typeSymbol, typeInfo);
 
@@ -126,14 +140,10 @@ public class ES_ErrorAnalyzer : DiagnosticAnalyzer {
             if (typeNodeSM.GetDeclaredSymbol (typeNode) is not INamedTypeSymbol typeSymbol)
                 return;
 
-            if (typeNode.Parent is TypeDeclarationSyntax parentTypeNode && typeNodeSM.GetDeclaredSymbol (parentTypeNode) is INamedTypeSymbol parentTypeSymbol) {
-                var parentTypeInfo = CheckType (parentTypeSymbol);
-                if (typeSymbol.Name.Equals (AggregateExporter_Parser.DefinitionStructName, StringComparison.InvariantCulture) && parentTypeInfo.IsValidExport)
-                    return;
-            }
-
             var typeInfo = CheckType (typeSymbol);
-            if (!typeInfo.IsStruct && typeInfo.IsExported) {
+            if (typeInfo.IsExportDefinition)
+                return;
+            else if (!typeInfo.IsStruct && typeInfo.IsExported) {
                 Diag (
                     nodeContext,
 
@@ -204,6 +214,34 @@ public class ES_ErrorAnalyzer : DiagnosticAnalyzer {
                         );
                     }
                 }
+            }
+        }
+
+        public void AnalyzeIdentifierNameNode (SyntaxNodeAnalysisContext nodeContext) {
+            if (nodeContext.Node is not IdentifierNameSyntax identName)
+                return;
+
+            if (identName.Parent is null)
+                return;
+
+            if (!StringIsExportDef (identName.Identifier.Text))
+                return;
+
+            SyntaxNode symbolName = identName;
+            if (identName.Parent is QualifiedNameSyntax qualNameSyntax)
+                symbolName = qualNameSyntax;
+
+            if (nodeContext.SemanticModel.GetSymbolInfo (symbolName).Symbol is not ITypeSymbol typeSymbol)
+                return;
+
+            var typeInfo = CheckType (typeSymbol);
+            if (typeInfo.IsExportDefinition) {
+                Diag (
+                    nodeContext,
+
+                    DiagnosticDescriptors.DefinitionStructReferenced,
+                    identName.GetLocation ()
+                );
             }
         }
     }

@@ -9,79 +9,12 @@
 
 using EchelonScript.Analyzers.CSharpExporting;
 using EchelonScript.Analyzers.CSharpExporting.Internal;
-using Microsoft.CodeAnalysis;
 using static EchelonScript.UnitTests.TestHelper;
 
 namespace EchelonScript.UnitTests;
 
 [UsesVerify]
-public class ExportGeneratorSnapshotTests {
-    [Fact]
-    public Task GeneratesExportsCorrectly () {
-        var source = @"
-using EchelonScript.Common;
-using EchelonScript.Common.Exporting;
-
-[ES_ExportStruct (Namespace = ""NativeTests.Export"", Name = ""BinaryTree"")]
-public partial struct BinaryTree {
-    private partial struct ExportDefinition {
-        [ES_ExportFieldAttribute (Name = ""Left"", AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
-        public ES_Object<BinaryTree> Left;
-        [ES_ExportFieldAttribute (AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
-        public ES_Object<BinaryTree> Right;
-
-        [ES_ExportFieldAttribute (AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
-        public ES_Object<SomeValue> ValuePointer;
-        [ES_ExportFieldAttribute (AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
-        public SomeValue ValueDirect;
-
-        private ES_Object<SomeValue> HiddenValuePointer;
-        private SomeValue HiddenValue;
-    }
-}
-
-[ES_ExportStruct (Namespace = ""NativeTests.Export"")]
-public partial struct SomeValue {
-    private partial struct ExportDefinition {
-        [ES_ExportFieldAttribute (AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
-        public int Value;
-
-        [ES_ExportFieldAttribute (Name = ""SomeBinaryTree"", AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
-        public ES_Object<BinaryTree> BinaryTree;
-    }
-}
-
-[ES_ExportClass (Namespace = ""NativeTests.Export"")]
-public partial struct ClassDef {
-    private partial struct ExportDefinition {
-        [ES_ExportFieldAttribute (AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
-        public int Value;
-
-        [ES_ExportFieldAttribute (Name = ""SomeBinaryTree"", AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
-        public ES_Object<BinaryTree> BinaryTree;
-    }
-}
-
-[ES_ExportClass (Namespace = ""NativeTests.Export"", ParentClass = typeof (ClassDef))]
-public partial struct SubClassDef {
-    private partial struct ExportDefinition {
-        [ES_ExportFieldAttribute (AccessModifier = ES_AccessModifier.Public, Constness = ES_Constness.Mutable)]
-        public int Value2;
-    }
-}
-";
-
-        return VerifyCSharp<ES_ExportGenerator> (source, (compilation, driver) => {
-            Assert.Empty (compilation.GetDiagnostics ().Where (diag => !diag.IsWarningAsError && diag.Severity == DiagnosticSeverity.Error));
-            Assert.Empty (driver.GetRunResult ().Diagnostics);
-        });
-    }
-
-    /*
-     *
-     * Export generator tests
-     *
-     */
+public class ExportGeneratorUnitTests {
     [Fact]
     public void TestDiagnostic_StructNotPartial () {
         var source = @$"
@@ -553,74 +486,6 @@ public partial struct Test1 {{
 ";
 
         TestCSharp<ES_ExportGenerator> (source, new [] { DiagnosticResult.FromDescriptor (0, DiagnosticDescriptors.InvalidAutoFieldName), });
-    }
-
-    /*
-     *
-     * Error analyzer tests
-     *
-     */
-
-    [Fact]
-    public Task TestDiagnostic_NonStructExported () {
-        var source = @$"
-using EchelonScript.Common;
-using EchelonScript.Common.Exporting;
-
-[ES_ExportStruct]
-public class [|0:Test1|] {{ }}
-";
-
-        return TestCSharp<ES_ErrorAnalyzer> (source, new [] { DiagnosticResult.FromDescriptor (0, DiagnosticDescriptors.NonStructExported), });
-    }
-
-    [Fact]
-    public Task TestDiagnostic_ReferenceUsedOutsideExport () {
-        var source = @$"
-using EchelonScript.Common;
-using EchelonScript.Common.Exporting;
-
-public class TestClass {{
-    public ES_Object<int> [|0:Foo|];
-    public ES_Array1D<int> [|1:Bar|];
-
-    public ES_Object<int> [|2:FooProp|] {{ get; set; }}
-    public ES_Array1D<int> [|3:BarProp|] {{ get; set; }}
-}}
-";
-
-        return TestCSharp<ES_ErrorAnalyzer> (source, new [] {
-            DiagnosticResult.FromDescriptor (0, DiagnosticDescriptors.ReferenceUsedOutsideExport),
-            DiagnosticResult.FromDescriptor (1, DiagnosticDescriptors.ReferenceUsedOutsideExport),
-            DiagnosticResult.FromDescriptor (2, DiagnosticDescriptors.ReferenceUsedOutsideExport),
-            DiagnosticResult.FromDescriptor (3, DiagnosticDescriptors.ReferenceUsedOutsideExport),
-        });
-    }
-
-    [Fact]
-    public Task TestDiagnostic_ExportUsedAsValueTypeOutsideExport () {
-        var source = @$"
-using EchelonScript.Common;
-using EchelonScript.Common.Exporting;
-
-[ES_ExportStruct]
-public partial struct TestStruct {{
-    private partial struct ExportDefinition {{
-        public ES_Object<int> Foo;
-        public ES_Array1D<int> Bar;
-    }}
-}}
-
-public class TestClass {{
-    public TestStruct [|0:Foo|];
-    public TestStruct [|1:Foo|] {{ get; set; }}
-}}
-";
-
-        return TestCSharp<ES_ErrorAnalyzer> (source, new [] {
-            DiagnosticResult.FromDescriptor (0, DiagnosticDescriptors.ExportUsedAsValueTypeOutsideExport),
-            DiagnosticResult.FromDescriptor (1, DiagnosticDescriptors.ExportUsedAsValueTypeOutsideExport),
-        });
     }
 
     [Fact]
