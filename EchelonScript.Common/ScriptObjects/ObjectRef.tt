@@ -26,7 +26,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using EchelonScript.Common.Data;
-using EchelonScript.Common.Data.Types;
 using EchelonScript.Common.Exporting;
 
 namespace EchelonScript.Common;
@@ -184,7 +183,7 @@ public unsafe readonly struct <#= typeName #><T> : <#= interfaces #>
     public override int GetHashCode () => ((nint) objPtr.Address).GetHashCode ();
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
-    void IES_ReferenceType.InitializeType (ES_NativeTypeTable.NativeTypeLoader typeLoader, ref ES_NativeTypeTable.TypeLoadToken typeToken) {
+    void IES_ReferenceType.InitializeType (ES_TypeTable.TypeLoader typeLoader, ref ES_TypeTable.TypeLoadToken typeToken) {
         typeLoader.CreateReference<T> (ref typeToken, <#= GetConstness (mode) #>);
     }
 
