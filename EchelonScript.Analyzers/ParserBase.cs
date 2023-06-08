@@ -36,7 +36,7 @@ internal abstract class ParserBase {
     protected void Diag (DiagnosticDescriptor desc, Location? location, IEnumerable<Location>? additionalLocations, params object? []? messageArgs)
         => reportDiagnostic (Diagnostic.Create (desc, location, additionalLocations, messageArgs));
 
-    protected void Diag (DiagnosticDescriptor desc, IReadOnlyList<Location>? locations, params object? []? messageArgs) {
+    protected void Diag<T> (DiagnosticDescriptor desc, T? locations, params object? []? messageArgs) where T : IReadOnlyList<Location> {
         if (locations is null || locations.Count < 0)
             Diag (desc, messageArgs);
         else if (locations.Count == 1)
