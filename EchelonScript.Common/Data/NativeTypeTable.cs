@@ -398,7 +398,7 @@ public unsafe sealed class ES_TypeTable : IDisposable {
 
             typeToken.Created = true;
 
-            Debug.Assert (!baseClass->Flags.HasFlag (ES_TypeFlag.Sealed));
+            Debug.Assert (baseClass == null || !baseClass->Flags.HasFlag (ES_TypeFlag.Sealed));
 
             var methodTablePtr = typeToken.MethodTable;
             var typeInfoPtr = typeToken.MethodTable->TypeInfo;
