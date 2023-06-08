@@ -101,7 +101,7 @@ internal static partial class TestHelper {
                 break;
             }
 
-            Assert.False (notFound, $"Expected diagnostic '{expectedDiag.Id}' with severity {expectedDiag.Severity} at line {diagLoc.Line + 1}, column {diagLoc.Column + 1} is not present.");
+            Assert.False (notFound, $"Expected diagnostic (#{expectedDiag.LocationIndex}) '{expectedDiag.Id}' with severity {expectedDiag.Severity} at line {diagLoc.Line + 1}, column {diagLoc.Column + 1} is not present.");
         }
 
         for (var i = 0; i < diagnostics.Length; i++) {
