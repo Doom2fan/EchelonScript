@@ -594,15 +594,6 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
                     }
 
                     var fieldTypeSymbol = fieldSymbol.Type;
-                    if (fieldTypeSymbol.IsRefLikeType) {
-                        Diag (
-                            DiagnosticDescriptors.RefMembersNotAllowed,
-                            fieldSymbol.Locations,
-                            fieldSymbol.Name
-                        );
-                        fieldError = true;
-                    }
-
                     if (fieldTypeSymbol.IsReferenceType) {
                         Diag (
                             DiagnosticDescriptors.ReferenceTypesNotAllowed,

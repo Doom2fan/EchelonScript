@@ -28,7 +28,6 @@ namespace EchelonScript.Analyzers.CSharpExporting;
 public class ES_ErrorAnalyzer : DiagnosticAnalyzer {
     // TODO: Disallow GC refs from being used arbitrarily in methods.
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create (
-        DiagnosticDescriptors.NonStructExported,
         DiagnosticDescriptors.ReferenceUsedOutsideExport,
         DiagnosticDescriptors.ExportUsedAsValueTypeOutsideExport,
         DiagnosticDescriptors.DefinitionStructReferenced,
@@ -352,15 +351,7 @@ public class ES_ErrorAnalyzer : DiagnosticAnalyzer {
             var typeInfo = CheckType (typeSymbol);
             if (typeInfo.IsExportDefinition)
                 return;
-            else if (!typeInfo.IsStruct && typeInfo.IsExported) {
-                Diag (
-                    nodeContext,
-
-                    DiagnosticDescriptors.NonStructExported,
-                    typeSymbol.Locations,
-                    typeSymbol.Name
-                );
-            } else if (typeInfo.IsGCRef) // Let the definitions for GC refs do whatever they want.
+            else if (typeInfo.IsGCRef) // Let the definitions for GC refs do whatever they want.
                 return;
 
             foreach (var memberNode in typeNode.Members) {

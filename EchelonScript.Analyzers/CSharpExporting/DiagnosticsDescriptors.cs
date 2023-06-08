@@ -199,16 +199,6 @@ internal static partial class DiagnosticDescriptors {
         customTags: errorTags
     );
 
-    public static DiagnosticDescriptor RefMembersNotAllowed => new (
-        id: GetExportErrorId (DiagnosticId.RefMembersNotAllowed),
-        title: "Exported members cannot be 'ref'",
-        messageFormat: "Exported members '{0}' cannot be ref",
-        category: Constants.Category.Exports,
-        DiagnosticSeverity.Error,
-        isEnabledByDefault: true,
-        customTags: errorTags
-    );
-
     public static DiagnosticDescriptor RefReturnNotAllowed => new (
         id: GetExportErrorId (DiagnosticId.RefReturnNotAllowed),
         title: "Return values of exported functions cannot be 'ref'",
@@ -385,16 +375,6 @@ internal static partial class DiagnosticDescriptors {
      * Error analyzer
      *
      */
-    public static DiagnosticDescriptor NonStructExported => new (
-        id: GetExportErrorId (DiagnosticId.NonStructExported),
-        title: "Non-struct type cannot be exported",
-        messageFormat: "Type '{0}' is not an unmanaged struct and cannot be exported",
-        category: Constants.Category.Exports,
-        DiagnosticSeverity.Error,
-        isEnabledByDefault: true,
-        customTags: errorTags
-    );
-
     public static DiagnosticDescriptor ReferenceUsedOutsideExport => new (
         id: GetExportErrorId (DiagnosticId.ReferenceUsedOutsideExport),
         title: "GC reference in non-exported type",

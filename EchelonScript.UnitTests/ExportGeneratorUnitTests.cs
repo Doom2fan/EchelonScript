@@ -264,28 +264,6 @@ public partial struct Test1 {{
         TestCSharp<ES_ExportGenerator> (source, new [] { DiagnosticResult.FromDescriptor (0, DiagnosticDescriptors.ExportedMemberIsReadonly), });
     }
 
-    [Fact]
-    public void TestDiagnostic_RefMembersNotAllowed () {
-        var source = @$"
-using EchelonScript.Common;
-using EchelonScript.Common.Exporting;
-
-public ref struct RefStruct {{ }}
-
-[ES_ExportStruct]
-public partial struct Test1 {{
-    private partial struct ExportDefinition {{
-        private RefStruct [|0:Foo|];
-    }}
-}}
-";
-
-        TestCSharp<ES_ExportGenerator> (source, new [] {
-            DiagnosticResult.FromDescriptor (0, DiagnosticDescriptors.RefMembersNotAllowed),
-            DiagnosticResult.FromDescriptor (0, DiagnosticDescriptors.DisallowedTypeInField_NotExportOrPrimitive),
-        });
-    }
-
 #if false // TODO: Implement this test once methods are implemented.
     [Fact]
     public void TestDiagnostic_RefReturnNotAllowed () {

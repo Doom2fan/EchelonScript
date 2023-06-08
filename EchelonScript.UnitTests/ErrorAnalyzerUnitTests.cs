@@ -16,19 +16,6 @@ namespace EchelonScript.UnitTests;
 [UsesVerify]
 public class ErrorAnalyzerUnitTests {
     [Fact]
-    public Task TestDiagnostic_NonStructExported () {
-        var source = @$"
-using EchelonScript.Common;
-using EchelonScript.Common.Exporting;
-
-[ES_ExportStruct]
-public class [|0:Test1|] {{ }}
-";
-
-        return TestCSharp<ES_ErrorAnalyzer> (source, new [] { DiagnosticResult.FromDescriptor (0, DiagnosticDescriptors.NonStructExported), });
-    }
-
-    [Fact]
     public Task TestDiagnostic_ReferenceUsedOutsideExport () {
         var source = @$"
 using EchelonScript.Common;
