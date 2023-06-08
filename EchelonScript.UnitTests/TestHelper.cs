@@ -133,7 +133,16 @@ internal static partial class TestHelper {
         }
 
         var analyzerArr = ImmutableArray.Create<DiagnosticAnalyzer> (new T ());
-        var compilation = CompileCSharp (markupData.ProcessedCode).WithAnalyzers (analyzerArr);
+        var bareCompilation = CompileCSharp (markupData.ProcessedCode);
+        var compilation = bareCompilation.WithAnalyzers (analyzerArr);
+
+        foreach (var diag in bareCompilation.GetDiagnostics ()) {
+            if (diag.Severity != DiagnosticSeverity.Error || diag.IsSuppressed)
+                continue;
+
+            var loc = diag.Location.GetLineSpan ().StartLinePosition;
+            Assert.Fail (@$"Unexpected compiler diagnostic '{diag.Id}' with severity {diag.Severity} at line {loc.Line + 1}, column {loc.Character + 1}: ""{diag.GetMessage ()}"".");
+        }
 
         userActions?.Invoke (compilation);
 
@@ -180,6 +189,14 @@ internal static partial class TestHelper {
         var compilation = CompileCSharp (markupData.ProcessedCode);
         var generator = new T ();
         var driver = (GeneratorDriver) CSharpGeneratorDriver.Create (generator);
+
+        foreach (var diag in compilation.GetDiagnostics ()) {
+            if (diag.Severity != DiagnosticSeverity.Error || diag.IsSuppressed)
+                continue;
+
+            var loc = diag.Location.GetLineSpan ().StartLinePosition;
+            Assert.Fail (@$"Unexpected compiler diagnostic '{diag.Id}' with severity {diag.Severity} at line {loc.Line + 1}, column {loc.Character + 1}: ""{diag.GetMessage ()}"".");
+        }
 
         driver = driver.RunGenerators (compilation);
         userActions?.Invoke (compilation, driver);
