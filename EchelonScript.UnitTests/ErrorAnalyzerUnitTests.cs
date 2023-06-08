@@ -54,7 +54,7 @@ public partial struct TestStruct {{
 
 public class TestClass {{
     public TestStruct [|0:Foo|];
-    public TestStruct [|1:Foo|] {{ get; set; }}
+    public TestStruct [|1:Bar|] {{ get; set; }}
 }}
 ";
 
@@ -76,7 +76,7 @@ public partial struct TestStruct {{
     public partial struct ExportDefinition {{
     }}
 
-    public static Foo () {{
+    public static void Foo () {{
         var asd = new [|0:ExportDefinition|] ();
     }}
 }}
