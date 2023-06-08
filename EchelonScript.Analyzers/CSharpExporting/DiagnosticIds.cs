@@ -53,6 +53,7 @@ static partial class DiagnosticDescriptors {
         ClassInheritsNonClass,
         ManagedTypesNotAllowed,
         DefinitionStructReferenced,
+        ClassUsedAsAValueType,
     }
 
     private static string GetExportErrorId (DiagnosticId id) {

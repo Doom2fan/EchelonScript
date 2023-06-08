@@ -26,11 +26,13 @@ internal sealed class AggregateExporter_Parser : Utils.ParserBase {
     public const string ClassAttributeName = "ES_ExportClassAttribute";
     public const string FieldAttributeName = "ES_ExportFieldAttribute";
     public const string ProtectedFieldAttributeName = "ES_ProtectedFieldAttribute";
+    public const string AllowExportedClassAttributeName = "AllowExportedClassAttribute";
 
     public const string StructAttributeFullName = $"{ES_ExportGenerator.ExportAttributeNamespace}.{StructAttributeName}";
     public const string ClassAttributeFullName = $"{ES_ExportGenerator.ExportAttributeNamespace}.{ClassAttributeName}";
     public const string FieldAttributeFullName = $"{ES_ExportGenerator.ExportAttributeNamespace}.{FieldAttributeName}";
     public const string ProtectedFieldAttributeFullName = $"{ES_ExportGenerator.ExportAttributeNamespace}.{ProtectedFieldAttributeName}";
+    public const string AllowExportedClassAttributeFullName = $"{ES_ExportGenerator.ExportAttributeNamespace}.{AllowExportedClassAttributeName}";
 
     public const string ObjectRefInterfaceFullName = $"{ES_ExportGenerator.ExportInterfaceNamespace}.IES_ReferenceType";
     public const string ArrayRefInterfaceFullName = $"{ES_ExportGenerator.ExportInterfaceNamespace}.IES_ArrayType";

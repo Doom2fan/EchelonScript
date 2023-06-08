@@ -16,6 +16,7 @@ using ChronosLib.Pooled;
 using CommunityToolkit.HighPerformance;
 using EchelonScript.Common.Data;
 using EchelonScript.Common.Data.Types;
+using EchelonScript.Common.Exporting;
 using EchelonScript.Common.GarbageCollection.Immix;
 using EchelonScript.Common.Utilities;
 
@@ -134,16 +135,15 @@ public unsafe sealed partial class ES_GarbageCollector : IDisposable {
 
     #region Objects
 
-
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
-    public static ES_Object<T> AllocObject<T> (bool pinned) where T : unmanaged {
+    public static ES_Object<T> AllocObject<[AllowExportedClass] T> (bool pinned) where T : unmanaged {
         EnsureInitialized ();
 
         return new (new (garbageCollector!.AllocateObject (GetMethodTable<T> (), true, pinned)));
     }
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
-    public static ES_Object<T> AllocObject<T> (T defaultVal, bool pinned) where T : unmanaged {
+    public static ES_Object<T> AllocObject<[AllowExportedClass] T> (T defaultVal, bool pinned) where T : unmanaged {
         EnsureInitialized ();
 
         var ptr = (T*) garbageCollector!.AllocateObject (GetMethodTable<T> (), true, pinned);
@@ -153,7 +153,7 @@ public unsafe sealed partial class ES_GarbageCollector : IDisposable {
     }
 
     [MethodImpl (MethodImplOptions.AggressiveInlining)]
-    public static ES_ObjectImmut<T> AllocObjectImmut<T> (T value, bool pinned) where T : unmanaged {
+    public static ES_ObjectImmut<T> AllocObjectImmut<[AllowExportedClass] T> (T value, bool pinned) where T : unmanaged {
         EnsureInitialized ();
 
         var ptr = (T*) garbageCollector!.AllocateObject (GetMethodTable<T> (), true, pinned);
@@ -427,6 +427,7 @@ public unsafe sealed partial class ES_GarbageCollector : IDisposable {
     private ES_ArrayAddress AllocateArray (ES_MethodTable* elemType, ReadOnlySpan<ES_ArrayIndex> dimSizes, bool immutable, bool pinned, bool clearElems) {
         CheckDisposed ();
 
+        Debug.Assert (elemType->TypeInfo->TypeTag != ES_TypeTag.Class);
         Debug.Assert (dimSizes.Length > 0 && dimSizes.Length <= byte.MaxValue);
 
         var elemSize = elemType->RuntimeSize;

@@ -104,4 +104,66 @@ public class TestClass {{
             DiagnosticResult.FromDescriptor (1, DiagnosticDescriptors.DefinitionStructReferenced),
         });
     }
+
+    [Fact]
+    public Task TestDiagnostic_ClassUsedAsAValueType () {
+        var source = @$"
+using EchelonScript.Common;
+using EchelonScript.Common.Exporting;
+using EchelonScript.Common.GarbageCollection;
+
+[ES_ExportClass]
+public partial struct TestExport {{
+    private partial struct ExportDefinition {{
+        public int Foo;
+    }}
+}}
+
+[ES_ExportStruct]
+public partial struct TestExport2 {{
+    private partial struct ExportDefinition {{
+        public TestExport [|0:Foo|];
+    }}
+}}
+
+public class TestClass {{
+    public ES_Object<TestExport> TestMethodValid (ES_Object<TestExport> testArg, ref TestExport testArg2) {{
+        ES_Object<TestExport> a = default;
+        var b = default (ES_Object<TestExport>);
+        var c = new ES_Object<TestExport> ();
+        a = ES_GarbageCollector.AllocObject<TestExport> (false);
+        a.Value = default;
+        var z = (ref TestExport a) => {{ }};
+        z (ref a.Value);
+
+        TestMethodValid (c, ref b.Value);
+
+        return c;
+    }}
+
+    public TestExport [|1:TestMethodInvalid|] (TestExport [|2:testArg|]) {{
+        TestExport [|3:a|] = default;
+        var [|4:b|] = default (TestExport);
+        var [|5:c|] = new TestExport ();
+        var [|6:d|] = [|7:new TestExport [1]|];
+        var [|8:z|] = [|9:ES_GarbageCollector.AllocArray<TestExport> (new ES_ArrayIndex [] {{ 1 }}, false)|];
+
+        return c;
+    }}
+}}
+";
+
+        return TestCSharp<ES_ErrorAnalyzer> (source, new [] {
+            DiagnosticResult.FromDescriptor (0, DiagnosticDescriptors.ClassUsedAsAValueType),
+            DiagnosticResult.FromDescriptor (1, DiagnosticDescriptors.ClassUsedAsAValueType),
+            DiagnosticResult.FromDescriptor (2, DiagnosticDescriptors.ClassUsedAsAValueType),
+            DiagnosticResult.FromDescriptor (3, DiagnosticDescriptors.ClassUsedAsAValueType),
+            DiagnosticResult.FromDescriptor (4, DiagnosticDescriptors.ClassUsedAsAValueType),
+            DiagnosticResult.FromDescriptor (5, DiagnosticDescriptors.ClassUsedAsAValueType),
+            DiagnosticResult.FromDescriptor (6, DiagnosticDescriptors.ClassUsedAsAValueType),
+            DiagnosticResult.FromDescriptor (7, DiagnosticDescriptors.ClassUsedAsAValueType),
+            DiagnosticResult.FromDescriptor (8, DiagnosticDescriptors.ClassUsedAsAValueType),
+            DiagnosticResult.FromDescriptor (9, DiagnosticDescriptors.ClassUsedAsAValueType),
+        });
+    }
 }

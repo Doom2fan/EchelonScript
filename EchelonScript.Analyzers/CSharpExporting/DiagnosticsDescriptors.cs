@@ -417,8 +417,18 @@ internal static partial class DiagnosticDescriptors {
 
     public static DiagnosticDescriptor DefinitionStructReferenced => new (
         id: GetExportErrorId (DiagnosticId.DefinitionStructReferenced),
-        title: "Reference to export definition struct.",
+        title: "Reference to export definition struct",
         messageFormat: "Export definition structs cannot be used in code",
+        category: Constants.Category.Exports,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        customTags: errorTags
+    );
+
+    public static DiagnosticDescriptor ClassUsedAsAValueType => new (
+        id: GetExportErrorId (DiagnosticId.ClassUsedAsAValueType),
+        title: "Exported class used as a value type",
+        messageFormat: "Exported class '{0}' cannot be used as a value type",
         category: Constants.Category.Exports,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,

@@ -86,7 +86,7 @@ static partial class ES_Utils {
 #>
 
 [StructLayout (LayoutKind.Sequential, Pack = 1)]
-public unsafe readonly struct <#= typeName #><T> : <#= interfaces #>
+public unsafe readonly struct <#= typeName #><[AllowExportedClass] T> : <#= interfaces #>
     where T : unmanaged {
     public static <#= typeName #><T> Null {
         [MethodImpl (MethodImplOptions.AggressiveInlining)]

@@ -65,7 +65,7 @@ static partial class ES_Utils {
 }
 
 [StructLayout (LayoutKind.Sequential, Pack = 1)]
-public unsafe readonly struct ES_Object<T> : IES_ReferenceType, IEquatable<ES_Object<T>>, IEquatable<ES_ObjectConst<T>>
+public unsafe readonly struct ES_Object<[AllowExportedClass] T> : IES_ReferenceType, IEquatable<ES_Object<T>>, IEquatable<ES_ObjectConst<T>>
     where T : unmanaged {
     public static ES_Object<T> Null {
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
@@ -133,7 +133,7 @@ public unsafe readonly struct ES_Object<T> : IES_ReferenceType, IEquatable<ES_Ob
 }
 
 [StructLayout (LayoutKind.Sequential, Pack = 1)]
-public unsafe readonly struct ES_ObjectImmut<T> : IES_ReferenceType, IEquatable<ES_ObjectImmut<T>>, IEquatable<ES_ObjectConst<T>>
+public unsafe readonly struct ES_ObjectImmut<[AllowExportedClass] T> : IES_ReferenceType, IEquatable<ES_ObjectImmut<T>>, IEquatable<ES_ObjectConst<T>>
     where T : unmanaged {
     public static ES_ObjectImmut<T> Null {
         [MethodImpl (MethodImplOptions.AggressiveInlining)]
@@ -201,7 +201,7 @@ public unsafe readonly struct ES_ObjectImmut<T> : IES_ReferenceType, IEquatable<
 }
 
 [StructLayout (LayoutKind.Sequential, Pack = 1)]
-public unsafe readonly struct ES_ObjectConst<T> : IES_ReferenceType, IEquatable<ES_ObjectConst<T>>, IEquatable<ES_Object<T>>, IEquatable<ES_ObjectImmut<T>>
+public unsafe readonly struct ES_ObjectConst<[AllowExportedClass] T> : IES_ReferenceType, IEquatable<ES_ObjectConst<T>>, IEquatable<ES_Object<T>>, IEquatable<ES_ObjectImmut<T>>
     where T : unmanaged {
     public static ES_ObjectConst<T> Null {
         [MethodImpl (MethodImplOptions.AggressiveInlining)]

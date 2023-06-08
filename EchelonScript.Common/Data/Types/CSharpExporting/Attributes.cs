@@ -34,3 +34,6 @@ public sealed class ES_ExportFieldAttribute : Attribute {
 
 [AttributeUsage (AttributeTargets.Field)]
 public sealed class ES_ProtectedFieldAttribute : Attribute { }
+
+[AttributeUsage (AttributeTargets.GenericParameter)]
+internal sealed class AllowExportedClassAttribute : Attribute { }

@@ -29,7 +29,7 @@ internal unsafe interface IES_NativeTypeStoredData {
     public ES_MethodTable* MethodTable { get; }
 }
 
-public unsafe sealed class ES_NativeTypeStoredData<T> : IES_NativeTypeStoredData where T : unmanaged {
+public unsafe sealed class ES_NativeTypeStoredData<[AllowExportedClass] T> : IES_NativeTypeStoredData where T : unmanaged {
     public readonly static ES_NativeTypeStoredData<T> Instance = new ();
 
     internal bool Loaded { get; set; }
@@ -247,7 +247,7 @@ public unsafe sealed class ES_TypeTable : IDisposable {
 
             return ret;
         }
-        public ES_MethodTable* GetType<T> (bool load) where T : unmanaged => GetType_Internal<T> (load);
+        public ES_MethodTable* GetType<[AllowExportedClass] T> (bool load) where T : unmanaged => GetType_Internal<T> (load);
         //public ES_MethodTable* GetScriptType () => typeTable.TryGetScriptType ();
 
         public T* AllocateType<T> () where T : unmanaged => typeTable.typeFactory.AllocateType<T> ();
@@ -269,7 +269,7 @@ public unsafe sealed class ES_TypeTable : IDisposable {
             return ret;
         }
 
-        public void CreateReference<TPointed> (ref TypeLoadToken typeToken, ES_Constness pointedConst) where TPointed : unmanaged {
+        public void CreateReference<[AllowExportedClass] TPointed> (ref TypeLoadToken typeToken, ES_Constness pointedConst) where TPointed : unmanaged {
             Debug.Assert (typeToken.Initialized);
             Debug.Assert (!typeToken.Created);
             typeToken.Validate (nameof (typeToken));
@@ -633,7 +633,7 @@ public unsafe sealed class ES_TypeTable : IDisposable {
 
     #region ================== Static methods
 
-    public static ES_MethodTable* GetNativeType<T> () where T : unmanaged {
+    public static ES_MethodTable* GetNativeType<[AllowExportedClass] T> () where T : unmanaged {
         var success = nativeInstance.TryGetNativeType_Internal<T> (out var ret, true);
         nativeInstance.InitializeTypes ();
         if (!success)
@@ -642,7 +642,7 @@ public unsafe sealed class ES_TypeTable : IDisposable {
         return ret;
     }
 
-    public static bool TryGetNativeType<T> (out ES_MethodTable* result) where T : unmanaged {
+    public static bool TryGetNativeType<[AllowExportedClass] T> (out ES_MethodTable* result) where T : unmanaged {
         var success = nativeInstance.TryGetNativeType_Internal<T> (out result, true);
         nativeInstance.InitializeTypes ();
         return success;
