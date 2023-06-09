@@ -45,6 +45,7 @@ internal sealed class AggregateExporter_Emitter {
 
     public const string MarshalFullName = "System.Runtime.InteropServices.Marshal";
     public const string UnsafeFullName = "System.Runtime.CompilerServices.Unsafe";
+    public const string NonBrowsableAttributes = "[System.ComponentModel.Browsable (false), System.ComponentModel.EditorBrowsable (System.ComponentModel.EditorBrowsableState.Never)]";
 
     private readonly StringBuilder builder = new (DefaultStringBuildCapacity);
     private IReadOnlyList<ExportedStruct> exportedStructs;
@@ -101,6 +102,10 @@ internal sealed class AggregateExporter_Emitter {
 {indentation}{{");
         IndentationAdd (ref indentation);
 
+        builder.Append ($@"
+{indentation}{NonBrowsableAttributes}
+{indentation}partial struct {AggregateExporter_Parser.DefinitionStructName} {{ }}");
+
         // Output the fields.
         var fieldAutoNames = new string [expStruct.Fields.Length];
         var fieldCount = 0;
@@ -128,6 +133,7 @@ internal sealed class AggregateExporter_Emitter {
             }
 
             builder.Append ($@"
+{indentation}{NonBrowsableAttributes}
 {indentation}private {privFieldType} {privFieldName};
 {indentation}{expField.PropertyAccessibility} ref {expField.FieldType} {expField.PropertyName} {propGetter}
 ");
