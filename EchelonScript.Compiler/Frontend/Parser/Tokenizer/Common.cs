@@ -8,50 +8,33 @@
  */
 
 using System;
+using System.Diagnostics;
 using System.Text;
-using ChronosLib.Pooled;
-using EchelonScript.Compiler.Data;
 
 namespace EchelonScript.Compiler.Frontend.Parser.Tokenizer;
 
-public partial class EchelonScriptTokenizer {
-    private int CalcColumn (int columnStart, int textPos) => CalcColumn (data.Span, columnStart, textPos);
-
+public ref partial struct ES_Tokenizer {
     #region Character reading
 
-    private char? PeekChar () => curPos < data.Length ? data.Span [curPos] : null;
+    private char? PeekChar () => curPos < text.Length ? text [curPos] : null;
 
-    private char? PeekChar (int offset) => curPos + offset < data.Length ? data.Span [curPos + offset] : null;
+    private char? PeekChar (int offset) => curPos + offset < text.Length ? text [curPos + offset] : null;
 
     private ReadOnlySpan<char> PeekChars (int count)
-        => data.Span.Slice (curPos, Math.Min (count, data.Length - curPos));
+        => text.Slice (curPos, Math.Min (count, text.Length - curPos));
 
     private char? ReadChar () {
-        if (curPos >= data.Length)
+        if (curPos >= text.Length)
             return null;
 
-        var ret = data.Span [curPos++];
-
-        if (ret == '\n') {
-            curLine++;
-            curLineStartPos = curPos;
-        }
-
-        return ret;
+        return text [curPos++];
     }
 
     private ReadOnlySpan<char> ReadChars (int count) {
-        count = Math.Min (count, data.Length - curPos);
+        count = Math.Min (count, text.Length - curPos);
 
-        var ret = data.Span.Slice (curPos, count);
+        var ret = text.Slice (curPos, count);
         curPos += count;
-
-        foreach (var c in ret) {
-            if (c == '\n') {
-                curLine++;
-                curLineStartPos = curPos;
-            }
-        }
 
         return ret;
     }
@@ -92,258 +75,150 @@ public partial class EchelonScriptTokenizer {
 
     #region Common pattern reading
 
-    private bool TryReadIntSuffix () {
-        var peekedChars = PeekChars (3);
-
-        if (peekedChars.Length < 1)
+    private bool TryReadNumber (Func<char?, bool> digitFunction) {
+        var sepAtStart = PeekChar () == NumberSeparator;
+        if (!digitFunction (PeekChar ()) && !sepAtStart)
             return false;
 
-        var c = peekedChars [0];
-        if (c == 's' || c == 'S' || c == 'u' || c == 'U') {
+        while (true) {
+            var c = PeekChar ();
+
+            if (!digitFunction (c) && c != NumberSeparator)
+                break;
+
             ReadChar ();
 
-            if (peekedChars.Length >= 2) {
-                var c1 = peekedChars [1];
-                var c2 = peekedChars.Length >= 3 ? peekedChars [2] : 0;
-
-                if (c1 == '8')
-                    ReadChar ();
-                else if (
-                    c1 == '1' && c2 == '6' ||
-                    c1 == '3' && c2 == '2' ||
-                    c1 == '6' && c2 == '4'
-                ) {
-                    ReadChars (2);
-                }
+            if (c == NumberSeparator) {
+                c = PeekChar ();
+                if (!digitFunction (c) && c != NumberSeparator)
+                    return false;
             }
-
-            return true;
         }
 
-        return false;
+        return !sepAtStart;
     }
 
-    private void TryReadFloatExponent (int line, int column, int startPos) {
-        var c = PeekChar ();
-        if (c == 'e' || c == 'E') {
+    private bool TryReadIntSuffix () {
+        if (!IsIntegerSuffix (PeekChar ()))
+            return false;
+
+        ReadChar ();
+        if (PeekChar () == '8')
+            ReadChar ();
+        else {
+            var peekedChars = PeekChars (2);
+            if (
+                peekedChars.Equals ("16", StringComparison.InvariantCulture) ||
+                peekedChars.Equals ("32", StringComparison.InvariantCulture) ||
+                peekedChars.Equals ("64", StringComparison.InvariantCulture)
+            ) {
+                ReadChars (2);
+            }
+        }
+
+        return true;
+    }
+
+    private bool? TryReadFloatExponent () {
+        if (!IsExponentStart (PeekChar ()))
+            return null;
+
+        ReadChar ();
+        if (PeekChar () is '+' or '-')
             ReadChar ();
 
-            var hasSign = false;
-            c = PeekChar ();
-            if (c == '+' || c == '-') {
-                ReadChar ();
-                hasSign = true;
-            }
-
-            if (!IsIntegerDigit (PeekChar ())) {
-                Errors.Add (new EchelonScriptErrorMessage (
-                    ES_FrontendErrors.InvalidFloatLiteral,
-                    startPos, curPos - startPos,
-                    fileName, line, column
-                ));
-                curPos -= hasSign ? 2 : 1;
-                return;
-            }
-
-            ReadStringWhile ((c) => IsIntegerDigit (c));
-        }
+        return TryReadNumber (IsIntegerDigit);
     }
 
     private bool TryReadFloatSuffix () {
         var c = PeekChar ();
-        if (c != null && IsFloatSuffix (c.Value)) {
-            ReadChar ();
-            return true;
-        }
+        if (!IsFloatSuffix (c))
+            return false;
 
-        return false;
+        ReadChar ();
+        return true;
     }
 
-    private bool TryReadFloatFractional () {
-        if (PeekChar () == '.' && IsIntegerDigit (PeekChar (1))) {
-            ReadChar ();
+    private bool? TryReadFloatFractional () {
+        if (PeekChar () != '.' || (!IsIntegerDigit (PeekChar (1)) && PeekChar (1) != NumberSeparator))
+            return null;
 
-            if (PeekChar () != NumberSeparator)
-                ReadStringWhile ((c) => IsIntegerDigit (c) || c == NumberSeparator);
-
-            return true;
-        }
-
-        return false;
+        ReadChar ();
+        return TryReadNumber (IsIntegerDigit);
     }
 
     #endregion
 
-    private void DecodeStringToken (
-        ReadOnlySpan<char> input,
-        out string outputUTF16,
-        out int [] outputUTF32,
-        int curLine, int lineStartPos, int curPos,
-        bool verbatim
-    ) {
-        void EmitError (string message, int line, int col, int pos, int len)
-            => Errors.Add (new EchelonScriptErrorMessage (message, pos, len, fileName, line, col));
+    public static bool TryDecodeStringEscapeCode (ReadOnlySpan<char> input, out Rune unescapedChar, out int length, bool charLit = false) {
+        Debug.Assert (input.Length > 0);
 
-        using var charList = new StructPooledList<(int Line, int Col, int Pos, Rune Rune)> (CL_ClearMode.Auto);
-        using var newCharList = new StructPooledList<Rune> (CL_ClearMode.Auto);
+        int hexCharLen;
+        switch (input [0]) {
+            case '\'':
+                if (charLit)
+                    goto case '\\';
+                goto default;
+            case '"':
+                if (!charLit)
+                    goto case '\\';
+                goto default;
+            case '\\':
+                unescapedChar = new (input [0]);
+                length = 1;
+                return true;
 
-        (int Line, int Col, int Pos, Rune Rune)? TryGetRune (int pos) {
-            if (pos >= charList.Count)
-                return null;
+            case '0': unescapedChar = new ('\0'    ); length = 1; return true;
+            case 'a': unescapedChar = new ('\u0007'); length = 1; return true;
+            case 'b': unescapedChar = new ('\u0008'); length = 1; return true;
+            case 'f': unescapedChar = new ('\u000C'); length = 1; return true;
+            case 'n': unescapedChar = new ('\u000A'); length = 1; return true;
+            case 'r': unescapedChar = new ('\u000D'); length = 1; return true;
+            case 't': unescapedChar = new ('\u0009'); length = 1; return true;
+            case 'v': unescapedChar = new ('\u000B'); length = 1; return true;
 
-            return charList [pos];
-        }
+            case 'x':
+                hexCharLen = 2;
+                goto ParseHexChar;
 
-        for (var offs = 0; offs < input.Length;) {
-            Rune.DecodeFromUtf16 (input [offs..^0], out var rune, out var consumed);
+            case 'u':
+                hexCharLen = 4;
+                goto ParseHexChar;
 
-            if (rune.Value == '\n') {
-                curLine++;
-                curLineStartPos = curPos + offs;
-            }
+            case 'U':
+                hexCharLen = 8;
+                goto ParseHexChar;
 
-            charList.Add ((curLine, CalcColumn (lineStartPos, curPos + offs), curPos + offs, rune));
-            offs += consumed;
-        }
-
-        var hexCharLen = 0;
-        for (var i = 0; i < charList.Count;) {
-            var runeData = charList [i++];
-            var rune = runeData.Rune;
-
-            if (rune.Value == '\\') {
-                var nextRune = TryGetRune (i);
-
-                if (!verbatim && nextRune != null) {
-                    i++;
-
-                    switch (nextRune.Value.Rune.Value) {
-                        case '\'':
-                            newCharList.Add (new Rune ('\''));
-                            break;
-
-                        case '"':
-                            newCharList.Add (new Rune ('"'));
-                            break;
-
-                        case '\\':
-                            newCharList.Add (new Rune ('\\'));
-                            break;
-
-                        case '0':
-                            newCharList.Add (new Rune ('\0'));
-                            break;
-
-                        case 'a':
-                            newCharList.Add (new Rune ('\u0007'));
-                            break;
-
-                        case 'b':
-                            newCharList.Add (new Rune ('\u0008'));
-                            break;
-
-                        case 'f':
-                            newCharList.Add (new Rune ('\u000C'));
-                            break;
-
-                        case 'n':
-                            newCharList.Add (new Rune ('\u000A'));
-                            break;
-
-                        case 'r':
-                            newCharList.Add (new Rune ('\u000D'));
-                            break;
-
-                        case 't':
-                            newCharList.Add (new Rune ('\u0009'));
-                            break;
-
-                        case 'v':
-                            newCharList.Add (new Rune ('\u000B'));
-                            break;
-
-                        case 'x':
-                            hexCharLen = 2;
-                        ParseHexChar:
-                            {
-                                var startPos = i - 1;
-                                Span<char> charBuf = stackalloc char [hexCharLen];
-                                var invalid = false;
-                                var len = 0;
-                                for (var j = 0; j < hexCharLen; j++) {
-                                    var c = TryGetRune (i++);
-
-                                    if (c != null && IsHexDigit (c.Value.Rune)) {
-                                        var cChar = (char) c.Value.Rune.Value;
-
-                                        charBuf [j] = char.ToLowerInvariant (cChar);
-                                    } else
-                                        invalid = true;
-
-                                    if (c != null)
-                                        len += c.Value.Rune.Utf16SequenceLength;
-                                }
-                                i = Math.Min (i, charList.Count);
-
-                                if (invalid) {
-                                    for (var k = startPos; k < i; k++)
-                                        newCharList.Add (charList [k].Rune);
-                                    EmitError (
-                                        ES_FrontendErrors.UnrecognizedEscape,
-                                        runeData.Line, runeData.Col,
-                                        runeData.Pos, rune.Utf16SequenceLength + len
-                                    );
-                                } else {
-                                    var charValue = int.Parse (charBuf, System.Globalization.NumberStyles.AllowHexSpecifier, null);
-                                    newCharList.Add (new Rune (charValue));
-                                }
-                                break;
-                            }
-
-                        case 'u':
-                            hexCharLen = 4;
-                            goto ParseHexChar;
-
-                        case 'U':
-                            hexCharLen = 8;
-                            goto ParseHexChar;
-
-                        default:
-                            newCharList.Add (rune);
-                            newCharList.Add (nextRune.Value.Rune);
-                            EmitError (
-                                ES_FrontendErrors.UnrecognizedEscape,
-                                runeData.Line, runeData.Col,
-                                runeData.Pos, runeData.Rune.Utf16SequenceLength
-                            );
-                            break;
-                    }
-                } else if (verbatim && nextRune != null) {
-                    if (nextRune.Value.Rune.Value == '"') {
-                        i++;
-                        newCharList.Add (new Rune ('"'));
-                    } else
-                        newCharList.Add (new Rune ('\\'));
+            ParseHexChar:
+                if (input.Length - 1 < hexCharLen) {
+                    unescapedChar = default;
+                    length = 1;
+                    return false;
                 }
-            } else
-                newCharList.Add (rune);
+
+                var hexChars = input.Slice (1, hexCharLen);
+                foreach (var c in hexChars) {
+                    if (!IsHexDigit (c)) {
+                        unescapedChar = default;
+                        length = 1;
+                        return false;
+                    }
+                }
+
+                var charValue = int.Parse (hexChars, System.Globalization.NumberStyles.AllowHexSpecifier, null);
+                length = hexCharLen + 1;
+
+                if (!Rune.IsValid (charValue)) {
+                    unescapedChar = default;
+                    return false;
+                }
+
+                unescapedChar = new (charValue);
+                return true;
+
+            default:
+                unescapedChar = default;
+                length = 1;
+                return false;
         }
-
-        var strLen = 0;
-        foreach (var rune in newCharList)
-            strLen += rune.Utf16SequenceLength;
-
-        using var retUTF16 = PooledArray<char>.GetArray (strLen);
-        outputUTF32 = new int [newCharList.Count];
-
-        var utf16Span = retUTF16.Span;
-        for (var i = 0; i < newCharList.Count; i++) {
-            outputUTF32 [i] = newCharList [i].Value;
-
-            var offs = newCharList [i].EncodeToUtf16 (utf16Span);
-            utf16Span = utf16Span [offs..];
-        }
-
-        outputUTF16 = retUTF16.Span.ToString ();
     }
 }

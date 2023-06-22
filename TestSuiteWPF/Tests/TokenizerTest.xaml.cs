@@ -9,10 +9,15 @@
 
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Data.Common;
+using System.Linq;
+using System.Security.Cryptography.X509Certificates;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using EchelonScript.Compiler;
 using EchelonScript.Compiler.CompilerCommon;
 using EchelonScript.Compiler.Data;
 using EchelonScript.Compiler.Frontend.Parser.Tokenizer;
@@ -26,8 +31,7 @@ namespace TestSuiteWPF.Tests;
 public partial class TokenizerTest : UserControl {
     #region ================== Instance fields
 
-    protected List<EchelonScriptErrorMessage> errors;
-    protected EchelonScriptTokenizer tokenizer;
+    protected List<ES_Diagnostic> diagnostics;
     protected TextMarkerService textMarkerService;
 
     #endregion
@@ -35,30 +39,20 @@ public partial class TokenizerTest : UserControl {
     public TokenizerTest () {
         InitializeComponent ();
 
-        errors = new List<EchelonScriptErrorMessage> ();
-        tokenizer = new EchelonScriptTokenizer (errors);
+        diagnostics = new List<ES_Diagnostic> ();
         textMarkerService = new TextMarkerService (codeText);
     }
 
     #region ================== Instance methods
 
-    private void DisplayError (int column, int lineNumber, string message) {
-        if (lineNumber >= 1 && lineNumber <= codeText.Document.LineCount) {
-            var offset = codeText.Document.GetOffset (new TextLocation (lineNumber, column));
-            var endOffset = TextUtilities.GetNextCaretPosition (codeText.Document, offset, LogicalDirection.Forward, CaretPositioningMode.WordBorderOrSymbol);
+    private void DisplayDiagnostic (int startPos, int endPos, string message) {
+        if (startPos > endPos || startPos < 0 || endPos > codeText.Text.Length)
+            return;
 
-            if (endOffset < 0)
-                endOffset = codeText.Document.TextLength;
-            var length = endOffset - offset;
-
-            if (length < 2)
-                length = Math.Min (2, codeText.Document.TextLength - offset);
-
-            textMarkerService.Create (offset, length, tm => {
-                tm.MarkerColor = Colors.Red;
-                tm.ToolTip = message;
-            });
-        }
+        textMarkerService.Create (startPos, endPos - startPos, tm => {
+            tm.MarkerColor = Colors.Red;
+            tm.ToolTip = message;
+        });
     }
 
     #endregion
@@ -68,58 +62,84 @@ public partial class TokenizerTest : UserControl {
     private void codeText_TextChanged (object sender, EventArgs e) {
         using var d = Dispatcher.DisableProcessing ();
 
-        var code = codeText.Text;
-        errors.Clear ();
-        tokenizer.SetSource ("Buffer".AsMemory (), code.AsMemory ());
+        var context = new ES_CompilerContext () {
+            ReportDiagnostic = diagnostics.Add
+        };
+        using var tokenizer = new ES_Tokenizer ();
+
+        diagnostics.Clear ();
+        context.SourceMap.AddFile ("<anon>", "Buffer", codeText.Text.ToImmutableArray ());
+        tokenizer.SetSource (context, context.SourceMap.EnumerateFiles ().First ().Span);
 
         textMarkerService.Clear ();
-        errorsList.Items.Clear ();
+        diagList.Items.Clear ();
         tokensTree.Items.Clear ();
 
-        var tok = new EchelonScriptToken () { Type = EchelonScriptTokenType.Invalid };
-        EchelonScriptToken? docComment;
-        while (tok.Type != EchelonScriptTokenType.EOF) {
-            (tok, docComment) = tokenizer.NextToken ();
+        var tok = new ES_Token () { Type = ES_TokenType.Invalid };
+        while (tok.Type != ES_TokenType.EOF) {
+            tok = tokenizer.NextToken ();
+            var location = context.SourceMap.GetLocation (tok.TextSpan);
 
             var tokItem = new TreeViewItem {
-                Header = $"{tok.Type} ({tok.TextLine}:{tok.TextColumn})"
+                Header = $"{tok.Type} ({location.Line}:{location.Column})",
+                ToolTip = tok.TextSpan.Length > 0 ? $"Text: \"{context.SourceMap.GetText (tok.TextSpan)}\"" : null,
+                Tag = location
             };
-            if (tok.Text.Length > 0)
-                tokItem.ToolTip = $"Text: \"{tok.Text}\"";
-            tokItem.Tag = tok;
 
-            if (docComment != null) {
-                var docItem = new TreeViewItem {
-                    Header = $"{docComment?.Type} ({docComment?.TextLine}:{docComment?.TextColumn})",
-                    ToolTip = $"Text: \"{docComment?.Text}\"",
-                    Tag = docComment.Value
-                };
-                tokItem.Items.Add (docItem);
+            var leadingTriviaItem = new TreeViewItem { Header = "Leading trivia:", };
+            var trailingTriviaItem = new TreeViewItem { Header = "Trailing trivia:", };
+            tokItem.Items.Add (leadingTriviaItem);
+            tokItem.Items.Add (trailingTriviaItem);
+
+            foreach (var trivia in tok.LeadingTrivia) {
+                var triviaLoc = context.SourceMap.GetLocation (trivia.TextSpan);
+                leadingTriviaItem.Items.Add (new TreeViewItem {
+                    Header = $"{trivia.Type} ({triviaLoc.Line}:{triviaLoc.Column})",
+                    ToolTip = trivia.TextSpan.Length > 0 ? $"Text: \"{context.SourceMap.GetText (trivia.TextSpan)}\"" : null,
+                    Tag = triviaLoc
+                });
+            }
+            foreach (var trivia in tok.TrailingTrivia) {
+                var triviaLoc = context.SourceMap.GetLocation (trivia.TextSpan);
+                trailingTriviaItem.Items.Add (new TreeViewItem {
+                    Header = $"{trivia.Type} ({triviaLoc.Line}:{triviaLoc.Column})",
+                    ToolTip = trivia.TextSpan.Length > 0 ? $"Text: \"{context.SourceMap.GetText (trivia.TextSpan)}\"" : null,
+                    Tag = triviaLoc
+                });
             }
 
             tokensTree.Items.Add (tokItem);
         }
-        foreach (var error in errors) {
-            errorsList.Items.Add ($"Line {error.Line}, column {error.Column}: {error.Message}");
 
-            if (error.Length == 0 || (error.StartPos + error.Length >= codeText.Text.Length))
+        foreach (var diag in diagnostics) {
+            var message = diag.GetMessage ();
+            if (diag.Location is null) {
+                diagList.Items.Add (message);
+                continue;
+            }
+
+            var location = diag.Location.Value;
+            diagList.Items.Add ($"Line {location.Line}, column {location.Column}: {message}");
+
+            if (location.Length == 0 || location.EndPos >= codeText.Text.Length)
                 continue;
 
-            DisplayError (error.Column, error.Line, error.Message);
+            DisplayDiagnostic (location.StartPos, location.EndPos, message);
         }
     }
 
-    private void errorsList_MouseDoubleClick (object sender, MouseButtonEventArgs e) {
-        if (errorsList.SelectedIndex < 0 || errorsList.SelectedIndex > errors.Count)
+    private void diagList_MouseDoubleClick (object sender, MouseButtonEventArgs e) {
+        if (diagList.SelectedIndex < 0 || diagList.SelectedIndex > diagnostics.Count)
             return;
 
-        var error = errors [errorsList.SelectedIndex];
-        if (error.Length == 0)
+        var diag = diagnostics [diagList.SelectedIndex];
+        if (diag.Location == null || diag.Location.Value.Length < 1)
             return;
 
+        var location = diag.Location.Value;
         codeText.Focus ();
-        codeText.Select (error.StartPos, error.Length);
-        codeText.ScrollTo (error.Line, error.Column);
+        codeText.Select (location.StartPos, location.Length);
+        codeText.ScrollTo (location.Line, location.Column);
     }
 
     private void tokensTree_ClickItem (object sender, MouseButtonEventArgs e) {
@@ -129,15 +149,14 @@ public partial class TokenizerTest : UserControl {
         var selectedItem = (TreeViewItem) tokensTree.SelectedItem;
         if (selectedItem == null)
             return;
-        var token = (EchelonScriptToken?) selectedItem.Tag;
-        if (token == null)
-            return;
+        var location = (SourceLocation) selectedItem.Tag;
+
+        codeText.Focus ();
+        codeText.Select (location.StartPos, location.Length);
+        codeText.UpdateLayout ();
+        codeText.ScrollTo (location.Line, location.Column);
 
         e.Handled = true;
-        codeText.Focus ();
-        codeText.Select (token.Value.TextStartPos, token.Value.Text.Length);
-        codeText.UpdateLayout ();
-        codeText.ScrollTo (token.Value.TextLine, token.Value.TextColumn);
     }
 
     #endregion

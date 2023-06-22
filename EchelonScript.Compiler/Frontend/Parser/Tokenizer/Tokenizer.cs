@@ -9,15 +9,19 @@
 
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Text;
 using ChronosLib.Pooled;
 using EchelonScript.Common.Utilities;
 using EchelonScript.Compiler.CompilerCommon;
 using EchelonScript.Compiler.Data;
+using EchelonScript.Compiler.Frontend.Parser.Internal;
 
 namespace EchelonScript.Compiler.Frontend.Parser.Tokenizer;
 
-public sealed partial class EchelonScriptTokenizer : IDisposable {
+[NonCopyable]
+public ref partial struct ES_Tokenizer {
     #region ================== Constants
 
     public const char NumberSeparator = '\'';
@@ -34,28 +38,24 @@ public sealed partial class EchelonScriptTokenizer : IDisposable {
     #region ================== Instance fields
 
     private int curPos;
-    private ReadOnlyMemory<char> fileName;
-    private ReadOnlyMemory<char> data;
-    private StructPooledList<(EchelonScriptToken, EchelonScriptToken?)> tokenBuffer;
 
-    private int curLine;
-    private int curLineStartPos;
+    private ES_CompilerContext? context;
+    private SourceFile? sourceFile;
+    private ReadOnlySpan<char> text;
 
-    #endregion
-
-    #region ================== Instance properties
-
-    public List<EchelonScriptErrorMessage> Errors { get; private set; }
+    private ImmutableArray<ES_TriviaToken>.Builder triviaBuilder;
+    private StructPooledList<ES_Token> tokenBuffer;
 
     #endregion
 
     #region ================== Constructors
 
-    static EchelonScriptTokenizer () {
+    static ES_Tokenizer () {
         tokenParsers = new List<TokenParser> {
             new HexTokenParser (),
             new BinaryTokenParser (),
             new DecimalTokenParser (),
+            new FloatTokenParser (),
             new IdentifierTokenParser (),
             new StringLiteralTokenParser (),
             new CharLiteralTokenParser (),
@@ -67,64 +67,43 @@ public sealed partial class EchelonScriptTokenizer : IDisposable {
             tokenParsersMaxLength = Math.Max (Math.Max (tokenParsersMaxLength, parser.MinimumStartPeek), parser.RequestedStartPeek);
     }
 
-    public EchelonScriptTokenizer (List<EchelonScriptErrorMessage> errorsList) {
+    public ES_Tokenizer () {
         curPos = 0;
-        fileName = null;
-        data = null;
-        tokenBuffer = new StructPooledList<(EchelonScriptToken, EchelonScriptToken?)> (CL_ClearMode.Auto);
 
-        Errors = errorsList;
+        context = null;
+        sourceFile = null;
+        text = null;
+
+        triviaBuilder = ImmutableArray.CreateBuilder<ES_TriviaToken> ();
+        tokenBuffer = new StructPooledList<ES_Token> (CL_ClearMode.Auto);
     }
 
     #endregion
 
     #region ================== Static methods
 
-    public static int CalcColumn (ReadOnlySpan<char> srcText, int columnStart, int textPos) {
-        var charCount = 0;
-        var maxPos = Math.Min (srcText.Length, textPos);
-
-        for (var i = columnStart; i < maxPos;) {
-            Rune.DecodeFromUtf16 (srcText [i..^0], out _, out var offs);
-            i += offs;
-            charCount++;
-        }
-
-        return charCount + 1;
-    }
-
-    public static void CalcLine (ReadOnlySpan<char> srcText, int curPos, out int curLine, out int curLineStart) {
-        var lineCount = 1;
-        var lineStart = 0;
-        var maxPos = Math.Min (srcText.Length, curPos);
-
-        for (var i = 0; i < maxPos;) {
-            Rune.DecodeFromUtf16 (srcText [i..^0], out var rune, out var offs);
-            i += offs;
-
-            if (rune.Value == '\n') {
-                lineCount++;
-                lineStart = i;
-            }
-        }
-
-        curLine = lineCount;
-        curLineStart = lineStart;
-    }
-
     #region Common pattern matching
 
-    public static bool IsLatinLetter (char? c) => c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z';
+    public static bool IsLatinLetter (char? c) => c is >= 'a' and <= 'z' || c is >= 'A' and <= 'Z';
 
-    public static bool IsIntegerDigit (char? c) => c >= '0' && c <= '9';
+    public static bool IsIntegerDigit (char? c) => c is >= '0' and <= '9';
 
-    public static bool IsHexDigit (char? c) => IsIntegerDigit (c) || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F';
+    public static bool IsHexDigit (char? c) => IsIntegerDigit (c) || c is >= 'a' and <= 'f' || c is >= 'A' and <= 'F';
 
-    public static bool IsBinaryDigit (char? c) => c == '0' || c == '1';
-
-    public static bool IsFloatSuffix (char? c) => c == 'f' || c == 'F' || c == 'd' || c == 'D';
+    public static bool IsBinaryDigit (char? c) => c is '0' or '1';
 
     public static bool IsHexDigit (Rune? c) => c != null && c.Value.IsBmp && IsHexDigit ((char) c.Value.Value);
+
+    public static bool IsFloatSuffix (char? c) => c is 'f' or 'F' or 'd' or 'D';
+
+    public static bool IsExponentStart (char? c) => c is 'e' or 'E';
+
+    public static bool IsIntegerSuffix (char? c) => c is 's' or 'S' or 'u' or 'U';
+
+    public static bool IsWhitespace (char? c) => c switch {
+        ' ' or '\t' => true,
+        _ => false,
+    };
 
     #endregion
 
@@ -137,22 +116,30 @@ public sealed partial class EchelonScriptTokenizer : IDisposable {
     /// <summary>Resets the tokenizer to its initial state.</summary>
     public void Reset () {
         curPos = 0;
-        curLine = 1;
-        curLineStartPos = 0;
+
+        context = null;
+        sourceFile = null;
+        text = null;
+
         tokenBuffer.Clear ();
     }
 
     /// <summary>Sets the source data for the input text.</summary>
-    /// <param name="newData">The new source data.</param>
-    public void SetSource (ReadOnlyMemory<char> newName, ReadOnlyMemory<char> newData) {
+    /// <param name="newText">The new source data.</param>
+    public void SetSource (ES_CompilerContext newContext, SourceSpan span) {
         Reset ();
-        fileName = newName;
-        data = newData;
+
+        sourceFile = newContext.SourceMap.TryGetFile (span);
+        if (sourceFile is null)
+            throw new CompilationException ("Invalid source span");
+
+        context = newContext;
+        text = sourceFile.GetText (span).AsSpan ();
     }
 
     /// <summary>Peeks a token from the input text.</summary>
     /// <returns>The next token in the input text.</returns>
-    public (EchelonScriptToken tk, EchelonScriptToken? doc) PeekNextToken () {
+    public ES_Token PeekNextToken () {
         if (tokenBuffer.Count > 0)
             return tokenBuffer [0];
 
@@ -164,7 +151,7 @@ public sealed partial class EchelonScriptTokenizer : IDisposable {
     /// <summary>Peeks a token from the input text with the specified offset.</summary>
     /// <param name="offset">The offset of the token.</param>
     /// <returns>The next token in the input text.</returns>
-    public (EchelonScriptToken tk, EchelonScriptToken? doc) PeekNextToken (int offset) {
+    public ES_Token PeekNextToken (int offset) {
         while (tokenBuffer.Count < offset + 1)
             tokenBuffer.Add (InternalNextToken ());
 
@@ -173,7 +160,7 @@ public sealed partial class EchelonScriptTokenizer : IDisposable {
 
     /// <summary>Reads a token from the input text.</summary>
     /// <returns>The next token in the input text.</returns>
-    public (EchelonScriptToken tk, EchelonScriptToken? doc) NextToken () {
+    public ES_Token NextToken () {
         if (tokenBuffer.Count < 1)
             return InternalNextToken ();
 
@@ -186,22 +173,41 @@ public sealed partial class EchelonScriptTokenizer : IDisposable {
 
     #region Private methods
 
-    private (EchelonScriptToken tk, EchelonScriptToken? doc) InternalNextToken () {
-        var docTk = SkipWhitespace ();
+    private readonly void Diag (ES_DiagnosticDescriptor diagDesc, params object? []? messageArgs)
+        => context!.ReportDiagnostic (diagDesc.Create (messageArgs));
 
-        var retToken = new EchelonScriptToken {
-            Type = EchelonScriptTokenType.Invalid,
-            //FileName = fileName,
-            Text = ES_String.Empty,
-            TextStartPos = curPos,
-            TextLine = curLine,
-            TextColumn = CalcColumn (curLineStartPos, curPos)
+    private readonly void Diag (ES_DiagnosticDescriptor diagDesc, int startPos, int endPos, params object? []? messageArgs) {
+        Debug.Assert (context is not null);
+
+        var location = context.SourceMap.GetLocation (GetSpan (startPos, endPos));
+        context.ReportDiagnostic (diagDesc.Create (location, messageArgs));
+    }
+
+    private readonly SourceSpan GetSpan (int startPos, int endPos) => sourceFile!.Span [startPos..endPos];
+
+    private readonly ImmutableArray<ES_TriviaToken> FlushTrivia () {
+        if (triviaBuilder.Count == triviaBuilder.Capacity)
+            return triviaBuilder.MoveToImmutable ();
+
+        var ret = triviaBuilder.ToImmutable ();
+        triviaBuilder.Clear ();
+        return ret;
+    }
+
+    private ES_Token InternalNextToken () {
+        SkipWhitespace (false);
+
+        var retToken = new ES_Token {
+            Type = ES_TokenType.Invalid,
+
+            TextSpan = default,
+
+            LeadingTrivia = FlushTrivia (),
+            TrailingTrivia = ImmutableArray<ES_TriviaToken>.Empty,
         };
 
-        if (PeekChar () == null) {
-            retToken.Type = EchelonScriptTokenType.EOF;
-            return (retToken, docTk);
-        }
+        if (PeekChar () == null)
+            return retToken with { Type = ES_TokenType.EOF, };
 
         var peekedChars = PeekChars (tokenParsersMaxLength);
 
@@ -209,97 +215,163 @@ public sealed partial class EchelonScriptTokenizer : IDisposable {
             if (peekedChars.Length < parser.MinimumStartPeek)
                 continue;
 
-            if (parser.IsStartValid (this, peekedChars) && parser.ParseToken (this, peekedChars, ref retToken))
+            if (parser.IsStartValid (ref this, peekedChars) && parser.ParseToken (ref this, peekedChars, ref retToken))
                 break;
         }
 
-        if (retToken.Type == EchelonScriptTokenType.Invalid) {
+        if (retToken.Type == ES_TokenType.Invalid) {
             ReadChar ();
-            //TODO: FIXME
-            //retToken.Text = data [retToken.TextStartPos..curPos];
+            retToken = retToken with { TextSpan = GetSpan (curPos - 1, curPos), };
         }
 
-        return (retToken, docTk);
+        SkipWhitespace (true);
+        return retToken with { TrailingTrivia = FlushTrivia (), };
     }
 
-    private EchelonScriptToken? SkipWhitespace () {
-        EchelonScriptToken? ret = null;
-        int blockCommentDepth;
+    private void SkipWhitespace_ReadComment () {
+        var startPos = curPos;
+        if (!ReadChars (2).Equals ("//", StringComparison.InvariantCulture))
+            throw new CompilationException ($"Invalid call to {nameof (SkipWhitespace_ReadComment)}");
+
+        char? c;
+        while ((c = PeekChar ()) != null) {
+            if (c == '\n' || c == '\r')
+                break;
+
+            ReadChar ();
+        }
+
+        triviaBuilder.Add (new () {
+            Type = ES_TriviaType.LineComment,
+            TextSpan = GetSpan (startPos, curPos),
+        });
+    }
+
+    private void SkipWhitespace_ReadBlockComment () {
+        var startPos = curPos;
+        if (!ReadChars (2).Equals ("/*", StringComparison.InvariantCulture))
+            throw new CompilationException ($"Invalid call to {nameof (SkipWhitespace_ReadBlockComment)}");
+
+        var blockCommentDepth = 1;
+        while (blockCommentDepth > 0) {
+            var c = ReadUntil (ch => ch == '*' || ch == '/', true);
+            var c2 = PeekChar ();
+
+            if (c == null) {
+                Diag (DiagnosticDescriptors.UnclosedBlockComment, startPos, curPos);
+                break;
+            } else if (c == '*' && c2 == '/') {
+                ReadChar ();
+                blockCommentDepth--;
+            } else if (c == '/' && c2 == '*') {
+                ReadChar ();
+                blockCommentDepth++;
+            }
+        }
+
+        triviaBuilder.Add (new () {
+            Type = ES_TriviaType.BlockComment,
+            TextSpan = GetSpan (startPos, curPos),
+        });
+    }
+
+    private void SkipWhitespace_ReadDocComment () {
+        var startPos = curPos;
+        if (!ReadChars (2).Equals ("/+", StringComparison.InvariantCulture))
+            throw new CompilationException ($"Invalid call to {nameof (SkipWhitespace_ReadDocComment)}");
 
         while (true) {
+            var c = ReadUntil (ch => ch == '+', true);
+            if (c == null) {
+                Diag (DiagnosticDescriptors.UnclosedDocComment, startPos, curPos);
+                break;
+            }
+
+            if (PeekChar () == '/') {
+                ReadChar ();
+                break;
+            }
+        }
+
+        triviaBuilder.Add (new () {
+            Type = ES_TriviaType.DocComment,
+            TextSpan = GetSpan (startPos, curPos),
+        });
+    }
+
+    private bool SkipWhitespace_TryReadWhitespace () {
+        if (!IsWhitespace (PeekChar ()))
+            return false;
+
+        var startPos = curPos;
+        while (IsWhitespace (PeekChar ()))
+            ReadChar ();
+
+        triviaBuilder.Add (new () {
+            Type = ES_TriviaType.Whitespace,
+            TextSpan = GetSpan (startPos, curPos)
+        });
+
+        return true;
+    }
+
+    private bool SkipWhitespace_TryReadLineFeed (bool trailing) {
+        var startPos = curPos;
+        int length;
+
+        var c = PeekChar ();
+        if (c == '\r' && PeekChar (1) == '\n')
+            length = 2;
+        else if (c == '\n' || c == '\r')
+            length = 1;
+        else
+            return false;
+
+        if (!trailing)
+            ReadChars (length);
+
+        triviaBuilder.Add (new () {
+            Type = ES_TriviaType.EndOfLine,
+            TextSpan = GetSpan (startPos, startPos + length)
+        });
+
+        return true;
+    }
+
+    private void SkipWhitespace (bool trailing) {
+         while (true) {
+            if (SkipWhitespace_TryReadWhitespace ())
+                continue;
+            else if (SkipWhitespace_TryReadLineFeed (trailing)) {
+                if (trailing)
+                    return;
+
+                continue;
+            }
+
             var c = PeekChar ();
-
             switch (c) {
-                case ' ':
-                case '\t':
-                case '\r':
-                case '\n':
-                    ReadChar ();
-                    break;
-
                 case '/':
                     c = PeekChar (1);
 
                     if (c == '/') {
-                        ReadChars (2);
-                        c = ReadUntil (ch => ch == '\n', true);
-
-                        break;
+                        SkipWhitespace_ReadComment ();
+                        continue;
                     } else if (c == '*') {
-                        ReadChars (2);
-
-                        blockCommentDepth = 1;
-                        while (blockCommentDepth > 0) {
-                            c = ReadUntil (ch => ch == '*' || ch == '/', true);
-                            var c2 = PeekChar ();
-
-                            if (c == null)
-                                break;
-                            else if (c == '*' && c2 == '/') {
-                                ReadChar ();
-                                blockCommentDepth--;
-                            } else if (c == '/' && c2 == '*') {
-                                ReadChar ();
-                                blockCommentDepth++;
-                            }
-                        }
-
+                        SkipWhitespace_ReadBlockComment ();
                         continue;
                     } else if (c == '+') {
-                        var docStartPos = curPos;
-                        var docLine = curLine;
-                        var docColumn = CalcColumn (curLineStartPos, docStartPos);
-                        ReadChars (2);
+                        if (trailing)
+                            return;
 
-                        while (true) {
-                            c = ReadUntil (ch => ch == '+', true);
-                            if (c == null)
-                                break;
-
-                            if (PeekChar () == '/') {
-                                ReadChar ();
-                                var docEndPos = curPos;
-
-                                var docCom = new EchelonScriptToken {
-                                    Type = EchelonScriptTokenType.DocComment,
-                                    //TODO: FIXME
-                                    //Text = data [docStartPos..docEndPos],
-                                    TextStartPos = docStartPos,
-                                    TextLine = docLine,
-                                    TextColumn = docColumn
-                                };
-                                ret = docCom;
-                                break;
-                            }
-                        }
-
+                        SkipWhitespace_ReadDocComment ();
                         continue;
                     }
                     goto default;
 
                 case null:
                 default:
-                    return ret;
+                    return;
             }
         }
     }
@@ -312,11 +384,6 @@ public sealed partial class EchelonScriptTokenizer : IDisposable {
 
     public bool IsDisposed { get; private set; }
 
-    ~EchelonScriptTokenizer () {
-        if (!IsDisposed)
-            DoDispose ();
-    }
-
     private void DoDispose () {
         if (IsDisposed)
             return;
@@ -327,7 +394,6 @@ public sealed partial class EchelonScriptTokenizer : IDisposable {
     }
 
     public void Dispose () {
-        GC.SuppressFinalize (this);
         DoDispose ();
     }
 

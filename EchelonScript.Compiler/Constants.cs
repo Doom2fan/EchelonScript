@@ -16,4 +16,6 @@ public static class ES_Constants {
     public const string GlobalStaticConstructorName = "$_GlobalStaticCons";
     public const string DefaultStaticConstructorName = "$_DefaultStaticCons";
     public const string CustomStaticConstructorName = "$_CustomStaticCons";
+
+    public const string DiagnosticCategoryCompiler = "Compiler";
 }
