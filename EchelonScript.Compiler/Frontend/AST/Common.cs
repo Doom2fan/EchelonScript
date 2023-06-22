@@ -9,6 +9,7 @@
 
 namespace EchelonScript.Compiler.Frontend.AST;
 
+#if false
 public struct ES_AstNodeBounds {
     public int StartPos;
     public int EndPos;
@@ -28,3 +29,4 @@ public abstract class ES_AstNode {
 }
 
 //public struct ES_AstNodeId<T> where T : unmanaged, ES_AstNode { }
+#endif

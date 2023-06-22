@@ -17,6 +17,7 @@ using EchelonScript.Common.Utilities;
 namespace EchelonScript.Compiler.Frontend;
 
 internal unsafe static class Compiler_TypeInfoGen {
+#if false
     public static void GenerateTypes (ref CompileData compileData) {
         /*HandleType (ref compileData, compileData.TypeUnknown);
         HandleType (ref compileData, compileData.TypeNull);
@@ -34,7 +35,7 @@ internal unsafe static class Compiler_TypeInfoGen {
             }
         }*/
     }
-#if false
+
     private static void HandleType (ref CompileData compileData, ESC_TypeData type) {
         var typeInfo = compileData.ToTypeInfo (type);
         switch (type) {

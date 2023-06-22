@@ -18,6 +18,7 @@ using EchelonScript.Compiler.Frontend.Parser.Tokenizer;
 namespace EchelonScript.Compiler.Frontend.Parser;
 
 public partial class EchelonScriptParser {
+#if false
     private enum ExpressionPrecedence {
         NO_PRECEDENCE = 0,
 
@@ -772,4 +773,5 @@ public partial class EchelonScriptParser {
 
         #endregion
     }
+#endif
 }

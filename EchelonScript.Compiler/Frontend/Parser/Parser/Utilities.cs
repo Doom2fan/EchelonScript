@@ -16,6 +16,7 @@ using EchelonScript.Compiler.Frontend.AST;
 namespace EchelonScript.Compiler.Frontend.Parser;
 
 public partial class EchelonScriptParser {
+#if false
     private enum EnsureTokenResult {
         Correct,
         WrongType,
@@ -180,4 +181,5 @@ public partial class EchelonScriptParser {
 
         return dimsList.ToArray ();
     }
+#endif
 }

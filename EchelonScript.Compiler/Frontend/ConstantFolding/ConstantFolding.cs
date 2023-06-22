@@ -16,7 +16,6 @@ using EchelonScript.Compiler.Data;
 namespace EchelonScript.Compiler.Frontend;
 
 internal unsafe static partial class Compiler_ConstantFolding {
-    public static void FoldConstants (ref CompileData compileData) { }
 #if false
     private ref struct PassData {
         public ES_Identifier TransUnitName;

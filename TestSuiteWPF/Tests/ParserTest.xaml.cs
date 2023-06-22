@@ -29,7 +29,7 @@ namespace TestSuiteWPF.Tests;
 public partial class ParserTest : UserControl {
     #region ================== Instance fields
 
-    protected List<EchelonScriptErrorMessage> errList;
+    protected List<ES_Diagnostic> diagnostics;
     protected EchelonScriptParser parser;
     protected TextMarkerService textMarkerService;
 
@@ -38,14 +38,14 @@ public partial class ParserTest : UserControl {
     public ParserTest () {
         InitializeComponent ();
 
-        errList = new List<EchelonScriptErrorMessage> ();
-        parser = new EchelonScriptParser (errList);
+        diagnostics = new List<ES_Diagnostic> ();
+        parser = new EchelonScriptParser (diagnostics);
         textMarkerService = new TextMarkerService (codeText);
     }
 
     #region ================== Instance methods
 
-    private void DisplayError (int column, int lineNumber, int length, string message) {
+    private void DisplayDiagnostic (int column, int lineNumber, int length, string message) {
         if (lineNumber >= 1 && lineNumber <= codeText.Document.LineCount) {
             var offset = codeText.Document.GetOffset (new TextLocation (lineNumber, column));
             var endOffset = offset + length;
@@ -67,6 +67,8 @@ public partial class ParserTest : UserControl {
 
     #region ================== Event handlers
 
+    private void codeText_TextChanged (object sender, EventArgs e) { }
+#if false
     private void codeText_TextChanged (object sender, EventArgs e) {
         using var d = Dispatcher.DisableProcessing ();
 
@@ -86,7 +88,7 @@ public partial class ParserTest : UserControl {
             if (error.Length == 0 || (error.StartPos + error.Length > codeText.Text.Length))
                 continue;
 
-            DisplayError (error.Column, error.Line, error.Length, error.Message);
+            DisplayDiagnostic (error.Column, error.Line, error.Length, error.Message);
         }
 
         astTreeView.Items.Clear ();
@@ -821,15 +823,20 @@ public partial class ParserTest : UserControl {
             AddAstNodeToTree (arg.ValueExpression, argItem);
         }
     }
+#endif
 
-    private void errorsList_MouseDoubleClick (object sender, MouseButtonEventArgs e) {
-        if (errorsList.SelectedIndex < 0 || errorsList.SelectedIndex > errList.Count)
+    private void diagList_MouseDoubleClick (object sender, MouseButtonEventArgs e) {
+        if (diagList.SelectedIndex < 0 || diagList.SelectedIndex > diagnostics.Count)
             return;
 
-        var error = errList [errorsList.SelectedIndex];
+        var diag = diagnostics [diagList.SelectedIndex];
+        if (diag.Location is null)
+            return;
+
+        var location = diag.Location.Value;
         codeText.Focus ();
-        codeText.Select (error.StartPos, error.Length);
-        codeText.ScrollTo (error.Line, error.Column);
+        codeText.Select (location.StartPos, location.EndPos);
+        codeText.ScrollTo (location.Line, location.Column);
     }
 
     private void astTreeView_ClickItem (object sender, MouseButtonEventArgs e) {
@@ -840,15 +847,16 @@ public partial class ParserTest : UserControl {
         if (selectedItem == null)
             return;
 
-        if (selectedItem.Tag is EchelonScriptToken?) {
-            var token = selectedItem.Tag as EchelonScriptToken?;
-
+        //TODO: FIXME
+        /*if (selectedItem.Tag is ES_Token?) {
+            var token = selectedItem.Tag as ES_Token?;
             e.Handled = true;
             codeText.Focus ();
             codeText.Select (token.Value.TextStartPos, token.Value.Text.Length);
             codeText.UpdateLayout ();
             codeText.ScrollTo (token.Value.TextLine, token.Value.TextColumn);
-        } else if (selectedItem.Tag is ES_AstDottableIdentifier) {
+        }
+        else if (selectedItem.Tag is ES_AstDottableIdentifier) {
             var id = selectedItem.Tag as ES_AstDottableIdentifier;
 
             if (id.Parts == null || id.Parts.Length < 1)
@@ -867,7 +875,7 @@ public partial class ParserTest : UserControl {
             codeText.Select (startPos, endPos - startPos);
             codeText.UpdateLayout ();
             codeText.ScrollTo (id.Parts [0].TextLine, id.Parts [0].TextColumn);
-        }
+        }*/
     }
 
     #endregion

@@ -19,8 +19,6 @@ using EchelonScript.Compiler.Frontend.AST;
 namespace EchelonScript.Compiler.Frontend;
 
 internal static class Compiler_FunctionCreation {
-    public static void CreateFunctions (ref CompileData compileData) { }
-
 #if false
     private ref struct PassData {
         public ES_Identifier TransUnitName;

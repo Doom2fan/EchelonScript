@@ -17,6 +17,7 @@ using EchelonScript.Compiler.Frontend.AST;
 namespace EchelonScript.Compiler.Frontend.Parser;
 
 public partial class EchelonScriptParser {
+#if false
     private ES_AstExpression [] ParseExpressionList () {
         using var exprList = new StructPooledList<ES_AstExpression> (CL_ClearMode.Auto);
 
@@ -139,4 +140,5 @@ public partial class EchelonScriptParser {
 
         return argsList.ToArray ();
     }
+#endif
 }

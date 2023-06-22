@@ -19,6 +19,7 @@ using EchelonScript.Compiler.Frontend.AST;
 namespace EchelonScript.Compiler.Frontend.Parser;
 
 public partial class EchelonScriptParser {
+#if false
     private ES_AbstractSyntaxTree ParseCodeUnit () {
         using var importsList = new StructPooledList<ES_AstImportStatement> (CL_ClearMode.Auto);
         using var aliasesList = new StructPooledList<ES_AstTypeAlias> (CL_ClearMode.Auto);
@@ -290,4 +291,5 @@ public partial class EchelonScriptParser {
 
         return contents.ToArray ();
     }
+#endif
 }

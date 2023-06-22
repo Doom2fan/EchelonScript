@@ -16,6 +16,8 @@ using EchelonScript.Compiler.CompilerCommon;
 
 namespace EchelonScript.Compiler.Frontend.AST;
 
+public sealed class ES_AbstractSyntaxTree { }
+#if false
 public sealed class ES_AbstractSyntaxTree : ES_AstNode {
     public readonly ReadOnlyMemory<char> FileName;
     public readonly ReadOnlyMemory<char> Source;
@@ -64,3 +66,4 @@ public sealed class ES_AstNamespace : ES_AstNode {
         };
     }
 }
+#endif

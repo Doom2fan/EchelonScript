@@ -12,6 +12,7 @@ using EchelonScript.Compiler.CompilerCommon;
 
 namespace EchelonScript.Compiler.Frontend.AST;
 
+#if false
 public enum SimpleBinaryExprType {
     Concatenation,
 
@@ -527,3 +528,4 @@ public sealed class ES_AstConditionalExpression : ES_AstExpression {
         bounds = new (Condition.NodeBounds.StartPos, Else.NodeBounds.EndPos);
     }
 }
+#endif

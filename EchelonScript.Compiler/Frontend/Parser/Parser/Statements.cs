@@ -17,6 +17,7 @@ using EchelonScript.Compiler.Frontend.AST;
 namespace EchelonScript.Compiler.Frontend.Parser;
 
 public partial class EchelonScriptParser {
+#if false
     private ES_AstStatement ParseStatement () {
         var tkPair = tokenizer.PeekNextToken ();
 
@@ -709,4 +710,5 @@ public partial class EchelonScriptParser {
 
         return new ES_AstExpressionStatement (expr, endTk);
     }
+#endif
 }

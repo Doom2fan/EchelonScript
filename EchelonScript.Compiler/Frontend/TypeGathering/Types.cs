@@ -19,7 +19,6 @@ using EchelonScript.Common.Utilities;
 namespace EchelonScript.Compiler.Frontend;
 
 internal static partial class Compiler_TypeGathering {
-    public static void GatherTypes_Types (ref CompileData compileData) { }
 #if false
     public static void GatherTypes_Types (ref CompileData compileData) {
         Debug.Assert (compileData.Symbols.ScopesCount == 0);

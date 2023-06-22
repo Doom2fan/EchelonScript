@@ -20,6 +20,7 @@ using EchelonScript.Compiler.Frontend.AST;
 namespace EchelonScript.Compiler.Frontend.Parser;
 
 public partial class EchelonScriptParser {
+#if false
     private ES_AstNode? [] ParseAggregate (
         ES_AggregateModifiers? baseModifiersArg, ES_AggregateModifiers defaultModifiers,
         bool abstractsAllowed, bool virtualsAllowed, bool overridesAllowed,
@@ -648,4 +649,5 @@ public partial class EchelonScriptParser {
 
         return enumDef;
     }
+#endif
 }

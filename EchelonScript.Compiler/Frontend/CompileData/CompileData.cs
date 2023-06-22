@@ -7,42 +7,18 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-using System;
-using System.Collections.Generic;
-using ChronosLib.Unmanaged;
-using CommunityToolkit.HighPerformance;
-using EchelonScript.Common.Data;
+using System.Collections.Immutable;
 using EchelonScript.Common.Utilities;
-using EchelonScript.Compiler.Data;
+using EchelonScript.Compiler.CompilerCommon;
 
 namespace EchelonScript.Compiler.Frontend;
 
 [NonCopyable]
-public ref partial struct GlobalCompilerData {
-    public ES_MemoryManager PersistentMemory { get; init; }
-    public ES_MemoryManager TransientMemory { get; init; }
-
-    public List<EchelonScriptErrorMessage> ErrorList { get; init; }
-    public List<EchelonScriptErrorMessage> WarnList { get; init; }
-    public List<EchelonScriptErrorMessage> InfoList { get; init; }
-
-    public ES_IdentifierPool IdPool { get; init; }
-}
-
-[NonCopyable]
 internal ref partial struct CompileData {
-    public EchelonScriptEnvironment Env { get; init; }
-    public EchelonScriptEnvironment.Builder EnvBuilder { get; init; }
+    public ES_CompilerContext Context { get; init; }
 
-    public List<EchelonScriptErrorMessage> ErrorList { get; init; }
-    public List<EchelonScriptErrorMessage> WarnList { get; init; }
-    public List<EchelonScriptErrorMessage> InfoList { get; init; }
+    public readonly SourceMap SourceMap => Context.SourceMap;
+    public readonly ImmutableArray<TranslationUnitData> TranslationUnits => Context.TranslationUnits;
 
-    public Span<TranslationUnitData> TranslationUnits { get; init; }
     public SymbolStack<FrontendSymbol> Symbols { get; init; }
-
-    //public Dictionary<ES_Identifier, ESC_Namespace> Namespaces { get; init; }
-
-    public ES_IdentifierPool IdPool => Env.IdPool;
-    public IMemoryManager MemoryManager => EnvBuilder.MemoryManager;
 }

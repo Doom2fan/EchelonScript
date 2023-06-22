@@ -14,6 +14,7 @@ using EchelonScript.Compiler.CompilerCommon;
 
 namespace EchelonScript.Compiler.Frontend.AST;
 
+#if false
 public sealed class ES_AstDottableIdentifier : ES_AstNode {
     public override ES_AstNodeBounds NodeBounds {
         get {
@@ -169,3 +170,4 @@ public sealed class ES_AstNamespaceIdentifier : ES_AstNode {
 
     #endregion
 }
+#endif

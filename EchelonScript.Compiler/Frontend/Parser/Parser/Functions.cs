@@ -17,6 +17,7 @@ using EchelonScript.Compiler.Frontend.AST;
 namespace EchelonScript.Compiler.Frontend.Parser;
 
 public partial class EchelonScriptParser {
+#if false
     private ES_AstFunctionDefinition? ParseFunction (ES_AggregateModifiers funcModifiers, ES_AstTypeDeclaration? returnType, bool virtualsValid) {
         // Check if all the modifiers are defined/set. (If not, someone forgot to fill them with the defaults.)
         if (funcModifiers.AnyUndefined ())
@@ -157,4 +158,5 @@ public partial class EchelonScriptParser {
 
         return argsList.ToArray ();
     }
+#endif
 }

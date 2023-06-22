@@ -12,6 +12,7 @@ using ChronosLib.Pooled;
 
 namespace EchelonScript.Compiler.Frontend.AST;
 
+#if false
 public abstract class ES_AstTypeDeclaration : ES_AstNode {
     public const string NullInnerName = "INVALID";
 
@@ -225,3 +226,4 @@ internal class ES_AstTypeDeclaration_TypeReference : ES_AstTypeDeclaration {
 
     private ES_AstTypeDeclaration_TypeReference () : base (0) { }
 }
+#endif

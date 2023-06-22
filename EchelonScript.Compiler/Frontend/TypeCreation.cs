@@ -18,8 +18,6 @@ using EchelonScript.Compiler.Frontend.AST;
 namespace EchelonScript.Compiler.Frontend;
 
 internal unsafe static class Compiler_TypeCreation {
-    public static void CreateTypes (ref CompileData compileData) { }
-
 #if false
     private ref struct PassData {
         public ES_Identifier TransUnitName;

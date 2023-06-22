@@ -18,7 +18,6 @@ using EchelonScript.Compiler.Data;
 namespace EchelonScript.Compiler.Frontend;
 
 internal unsafe static partial class Compiler_TypeChecking {
-    public static ES_Object<MIRTree> CheckTypes (ref CompileData compileData) => throw new NotImplementedException ();
 #if false
     private ref struct PassData {
         public ES_Identifier TransUnitName { get; set; }

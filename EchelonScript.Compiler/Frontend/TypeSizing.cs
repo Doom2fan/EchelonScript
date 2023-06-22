@@ -15,7 +15,6 @@ using EchelonScript.Common.Utilities;
 namespace EchelonScript.Compiler.Frontend;
 
 internal static partial class Compiler_TypeSizing {
-    public static void SizeTypes (ref CompileData compileData) { }
 #if false
     public static void SizeTypes (ref CompileData compileData) {
         foreach (var nmData in compileData.Namespaces.Values) {

@@ -17,6 +17,7 @@ using EchelonScript.Compiler.Frontend.AST;
 namespace EchelonScript.Compiler.Frontend.Parser;
 
 public partial class EchelonScriptParser {
+#if false
     private EchelonScriptToken? ParseIdentifier () {
         var tkPair = tokenizer.NextToken ();
 
@@ -256,4 +257,5 @@ public partial class EchelonScriptParser {
 
         return innerDecl;
     }
+#endif
 }

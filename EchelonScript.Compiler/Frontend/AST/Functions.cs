@@ -13,6 +13,7 @@ using EchelonScript.Compiler.CompilerCommon;
 
 namespace EchelonScript.Compiler.Frontend.AST;
 
+#if false
 public sealed class ES_AstFunctionDefinition : ES_AstNode {
     public override ES_AstNodeBounds NodeBounds => bounds;
     private ES_AstNodeBounds bounds;
@@ -77,3 +78,4 @@ public sealed class ES_AstFunctionArgumentDefinition : ES_AstNode {
         bounds = new (startTk.TextStartPos, defaultExpr?.NodeBounds.EndPos ?? name.TextEndPos);
     }
 }
+#endif

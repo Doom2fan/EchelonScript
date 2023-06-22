@@ -9,14 +9,11 @@
 
 using System;
 using System.Collections.Generic;
-using ChronosLib.Pooled;
 using EchelonScript.Common;
 using EchelonScript.Common.Data;
 using EchelonScript.Compiler.Backends;
 using EchelonScript.Compiler.CompilerCommon.MIR;
 using EchelonScript.Compiler.Data;
-using EchelonScript.Compiler.Frontend;
-using EchelonScript.Compiler.Frontend.AST;
 using EchelonScript.Compiler.Frontend.Parser;
 
 namespace EchelonScript.Compiler;
@@ -24,25 +21,17 @@ namespace EchelonScript.Compiler;
 public sealed class EchelonScript_Compiler : IDisposable {
     #region ================== Instance fields
 
-    private List<EchelonScriptErrorMessage> errorsList;
-    private List<EchelonScriptErrorMessage> warningsList;
-    private List<EchelonScriptErrorMessage> infoList;
+    private List<ES_Diagnostic> diagnosticsList;
     private EchelonScriptParser parser;
-    private CompilerFrontend frontend;
     private ICompilerBackend? backend;
 
     private bool disposeBackend;
-
-    private EchelonScriptEnvironment? environment;
-    private EchelonScriptEnvironment.Builder? environmentBuilder;
 
     #endregion
 
     #region ================== Instance properties
 
-    public IReadOnlyList<EchelonScriptErrorMessage> Errors => errorsList;
-    public IReadOnlyList<EchelonScriptErrorMessage> Warnings => warningsList;
-    public IReadOnlyList<EchelonScriptErrorMessage> InfoMessages => infoList;
+    public IReadOnlyList<ES_Diagnostic> Diagnostics => diagnosticsList;
 
     public bool HasBackend => backend is not null;
 
@@ -51,12 +40,9 @@ public sealed class EchelonScript_Compiler : IDisposable {
     #region ================== Constructors
 
     private EchelonScript_Compiler () {
-        errorsList = new List<EchelonScriptErrorMessage> ();
-        warningsList = new List<EchelonScriptErrorMessage> ();
-        infoList = new List<EchelonScriptErrorMessage> ();
+        diagnosticsList = new List<ES_Diagnostic> ();
 
-        parser = new EchelonScriptParser (errorsList);
-        frontend = new CompilerFrontend (errorsList, warningsList, infoList);
+        parser = new EchelonScriptParser (diagnosticsList);
         backend = null;
 
         disposeBackend = false;
@@ -67,7 +53,7 @@ public sealed class EchelonScript_Compiler : IDisposable {
     public static EchelonScript_Compiler Create<TBackend> ()
         where TBackend : ICompilerBackend, new () {
         var comp = new EchelonScript_Compiler { backend = new TBackend (), };
-        comp.backend.Initialize (comp.errorsList, comp.warningsList, comp.infoList);
+        //comp.backend.Initialize (comp.diagnosticsList);
 
         return comp;
     }
@@ -77,17 +63,19 @@ public sealed class EchelonScript_Compiler : IDisposable {
     #region ================== Instance methods
 
     public void Setup (ES_IdentifierPool idPool, out EchelonScriptEnvironment env) {
-        if (environment != null)
+        throw new NotImplementedException ();
+        /*if (environment != null)
             throw new CompilationException ("The compiler has already been set up!");
 
         environment = EchelonScriptEnvironment.CreateEnvironment (idPool, out environmentBuilder);
         frontend.Setup (environment, environmentBuilder);
 
-        env = environment;
+        env = environment;*/
     }
 
     public void AddTranslationUnit (string unitName, ReadOnlySpan<(ReadOnlyMemory<char>, ReadOnlyMemory<char>)> codeTransUnit) {
-        CheckDisposed ();
+        throw new NotImplementedException ();
+        /*CheckDisposed ();
 
         var foundErrors = false;
 
@@ -103,18 +91,18 @@ public sealed class EchelonScript_Compiler : IDisposable {
             }
         }
 
-        foundErrors |= errorsList.Count > 0;
+        foundErrors |= diagnosticsList.Count > 0;
 
         if (foundErrors)
             return;
 
-        frontend.AddUnit (unitName, astUnitsList.Span);
+        frontend.AddUnit (unitName, astUnitsList.Span);*/
     }
 
-    public bool Compile () {
-        var code = frontend.CompileCode ();
+    public bool Compile () {throw new NotImplementedException ();
+        /*var code = frontend.CompileCode ();
 
-        if (errorsList.Count > 0 || code.IsNull ())
+        if (diagnosticsList.Count > 0 || code.IsNull ())
             return false;
 
         if (backend is null)
@@ -123,34 +111,20 @@ public sealed class EchelonScript_Compiler : IDisposable {
         if (!backend.CompileEnvironment (environment!, environmentBuilder!, code))
             return false;
 
-        if (errorsList.Count > 0)
+        if (diagnosticsList.Count > 0)
             return false;
 
-        return true;
+        return true;*/
     }
 
     public ES_ObjectConst<MIRTree> CompileIR () {
-        var code = frontend.CompileCode ();
-
-        if (errorsList.Count > 0)
-            return ES_ObjectConst<MIRTree>.Null;
-
-        return code;
+        throw new NotImplementedException ();
     }
 
     public void Reset () {
         CheckDisposed ();
 
-        errorsList.Clear ();
-        warningsList.Clear ();
-        infoList.Clear ();
-        frontend.Reset ();
-
-        environmentBuilder?.Dispose ();
-        environment?.Dispose ();
-
-        environmentBuilder = null;
-        environment = null;
+        diagnosticsList.Clear ();
     }
 
     private void CheckDisposed () {
@@ -159,8 +133,7 @@ public sealed class EchelonScript_Compiler : IDisposable {
     }
 
     private void CheckSetUp () {
-        if (environment == null | environmentBuilder == null)
-            throw new CompilationException ("The compiler is not set up.");
+        throw new NotImplementedException ();
     }
 
     #endregion
@@ -179,11 +152,8 @@ public sealed class EchelonScript_Compiler : IDisposable {
             return;
 
         parser?.Dispose ();
-        frontend?.Dispose ();
         if (disposeBackend)
             backend?.Dispose ();
-
-        environmentBuilder?.Dispose ();
 
         IsDisposed = true;
     }

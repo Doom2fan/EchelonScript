@@ -13,6 +13,7 @@ using EchelonScript.Compiler.CompilerCommon;
 
 namespace EchelonScript.Compiler.Frontend.AST;
 
+#if false
 public abstract class ES_AstAggregateDefinition : ES_AstNode {
     public ES_AccessModifier AccessModifier;
     public ES_AstNode? [] Contents;
@@ -173,3 +174,4 @@ public sealed class ES_AstEnumDefinition : ES_AstNode {
         bounds = new (startTk.TextStartPos, closeBraceTk.TextEndPos);
     }
 }
+#endif

@@ -27,7 +27,7 @@ public struct ES_AggregateModifiers {
     public bool? Const;
     public ES_VirtualnessModifier? VirtualnessModifier;
 
-    public EchelonScriptToken? DocComment;
+    public ES_Token? DocComment;
 
     public void ResetToNull () {
         AccessModifier = null;
@@ -65,15 +65,16 @@ public sealed partial class EchelonScriptParser : IDisposable {
     public static string [] PrimitiveTypes { get; private set; }
     public static string [] Keywords { get; private set; }
 
+#if false
     private static Dictionary<EchelonScriptTokenType, List<IPrefixExpressionParselet>> PrefixExprParsers { get; set; }
     private static Dictionary<EchelonScriptTokenType, List<IPostfixExpressionParselet>> PostfixExprParsers { get; set; }
+#endif
 
     #endregion
 
     #region ================== Instance fields
 
-    private List<EchelonScriptErrorMessage> errorsList;
-    private EchelonScriptTokenizer tokenizer;
+    private List<ES_Diagnostic> errorsList;
     private ReadOnlyMemory<char> fileName;
     private ReadOnlyMemory<char> sourceText;
 
@@ -81,7 +82,7 @@ public sealed partial class EchelonScriptParser : IDisposable {
 
     #region ================== Instance properties
 
-    public IReadOnlyList<EchelonScriptErrorMessage> Errors => errorsList;
+    public IReadOnlyList<ES_Diagnostic> Errors => errorsList;
 
     #endregion
 
@@ -89,6 +90,7 @@ public sealed partial class EchelonScriptParser : IDisposable {
 
     #region Util functions
 
+#if false
     static void AddPrefixParselet (EchelonScriptTokenType tokenType, IPrefixExpressionParselet parselet) {
         if (!PrefixExprParsers.ContainsKey (tokenType))
             PrefixExprParsers.Add (tokenType, new List<IPrefixExpressionParselet> ());
@@ -127,6 +129,7 @@ public sealed partial class EchelonScriptParser : IDisposable {
 
         PrefixExprParsers [tokenType].Add (new SimpleUnaryExpressionParselet (precedence, tokenType, exprType));
     }
+#endif
 
     #endregion
 
@@ -153,6 +156,7 @@ public sealed partial class EchelonScriptParser : IDisposable {
 
         Keywords = keywordsList.ToArray ();
 
+#if false
         // Parselets
         PrefixExprParsers = new Dictionary<EchelonScriptTokenType, List<IPrefixExpressionParselet>> ();
         PostfixExprParsers = new Dictionary<EchelonScriptTokenType, List<IPostfixExpressionParselet>> ();
@@ -267,11 +271,11 @@ public sealed partial class EchelonScriptParser : IDisposable {
             kvp.Value.Capacity = kvp.Value.Count;
         foreach (var kvp in PostfixExprParsers)
             kvp.Value.Capacity = kvp.Value.Count;
+#endif
     }
 
-    public EchelonScriptParser (List<EchelonScriptErrorMessage> errList) {
+    public EchelonScriptParser (List<ES_Diagnostic> errList) {
         errorsList = errList;
-        tokenizer = new EchelonScriptTokenizer (errorsList);
     }
 
     #endregion
@@ -286,12 +290,13 @@ public sealed partial class EchelonScriptParser : IDisposable {
     public void Reset () {
         CheckDisposed ();
 
-        tokenizer.Reset ();
         fileName = null;
         sourceText = null;
     }
 
     public ES_AbstractSyntaxTree ParseCode (ReadOnlyMemory<char> name, ReadOnlyMemory<char> codeData) {
+        throw new NotImplementedException ();
+#if false
         CheckDisposed ();
 
         Reset ();
@@ -302,6 +307,7 @@ public sealed partial class EchelonScriptParser : IDisposable {
         var astTree = ParseCodeUnit ();
 
         return astTree;
+#endif
     }
 
     #endregion
@@ -318,8 +324,6 @@ public sealed partial class EchelonScriptParser : IDisposable {
     private void DoDispose () {
         if (IsDisposed)
             return;
-
-        tokenizer?.Dispose ();
 
         sourceText = null;
 

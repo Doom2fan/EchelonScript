@@ -234,9 +234,9 @@ public unsafe sealed partial class RoslynCompilerBackend : ICompilerBackend, IDi
         public EchelonScriptEnvironment Env { get; init; }
         public EchelonScriptEnvironment.Builder EnvBuilder { get; init; }
 
-        public List<EchelonScriptErrorMessage> ErrorList { get; init; }
-        public List<EchelonScriptErrorMessage> WarnList { get; init; }
-        public List<EchelonScriptErrorMessage> InfoList { get; init; }
+        public List<ES_Diagnostic> ErrorList { get; init; }
+        public List<ES_Diagnostic> WarnList { get; init; }
+        public List<ES_Diagnostic> InfoList { get; init; }
 
         public ChronosLib.Unmanaged.IMemoryManager MemoryManager => EnvBuilder.MemoryManager;
         public ES_IdentifierPool IdPool => Env.IdPool;
@@ -259,41 +259,21 @@ public unsafe sealed partial class RoslynCompilerBackend : ICompilerBackend, IDi
 
     #endregion
 
-    #region ================== Instance fields
-
-    private List<EchelonScriptErrorMessage> errorList;
-    private List<EchelonScriptErrorMessage> warningList;
-    private List<EchelonScriptErrorMessage> infoList;
-
-    #endregion
-
     #region ================== Instance properties
 
     public bool IsDisposed { get; private set; }
 
     #endregion
 
-    public RoslynCompilerBackend () {
-        errorList = null!;
-        warningList = null!;
-        infoList = null!;
-    }
+    public RoslynCompilerBackend () { }
 
     #region ================== Instance methods
 
     #region ICompilerBackend implementation
 
-    public void Initialize (
-        List<EchelonScriptErrorMessage> errList,
-        List<EchelonScriptErrorMessage> warnList,
-        List<EchelonScriptErrorMessage> infoMsgList
-    ) {
-        errorList = errList;
-        warningList = warnList;
-        infoList = infoMsgList;
-    }
+    public void Initialize () { }
 
-    public bool CompileEnvironment (EchelonScriptEnvironment environment, EchelonScriptEnvironment.Builder builder, ES_ObjectConst<MIRTree> mirTree) {
+    public bool CompileEnvironment (ES_CompilerContext context, ES_ObjectConst<MIRTree> mirTree) {
         CheckDisposed ();
 
         return false;

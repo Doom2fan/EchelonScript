@@ -8,12 +8,10 @@
  */
 
 using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using EchelonScript.Common;
 using EchelonScript.Common.Data.Types;
 using EchelonScript.Compiler.CompilerCommon.MIR;
-using EchelonScript.Compiler.Data;
 
 namespace EchelonScript.Compiler.Backends;
 
@@ -40,13 +38,9 @@ public unsafe interface ICompilerBackend : IDisposable {
 
     #region ================== Instance methods
 
-    void Initialize (
-        List<EchelonScriptErrorMessage> errList,
-        List<EchelonScriptErrorMessage> warnList,
-        List<EchelonScriptErrorMessage> infoMsgList
-    );
+    void Initialize ();
 
-    bool CompileEnvironment (EchelonScriptEnvironment environment, EchelonScriptEnvironment.Builder builder, ES_ObjectConst<MIRTree> mirTree);
+    bool CompileEnvironment (ES_CompilerContext context, ES_ObjectConst<MIRTree> mirTree);
 
     #endregion
 }

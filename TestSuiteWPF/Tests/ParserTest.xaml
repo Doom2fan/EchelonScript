@@ -31,6 +31,6 @@
                 </TreeView.ItemContainerStyle>
             </TreeView>
         </Grid>
-        <ListBox x:Name="errorsList" IsSynchronizedWithCurrentItem="True" Grid.Row="2" ScrollViewer.VerticalScrollBarVisibility="Visible" MouseDoubleClick="errorsList_MouseDoubleClick" FontFamily="Courier New"/>
+        <ListBox x:Name="diagList" IsSynchronizedWithCurrentItem="True" Grid.Row="2" ScrollViewer.VerticalScrollBarVisibility="Visible" MouseDoubleClick="diagList_MouseDoubleClick" FontFamily="Courier New"/>
     </Grid>
 </UserControl>

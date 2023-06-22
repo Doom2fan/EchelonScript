@@ -12,6 +12,7 @@ using EchelonScript.Compiler.CompilerCommon;
 
 namespace EchelonScript.Compiler.Frontend.AST;
 
+#if false
 public abstract class ES_AstStatement : ES_AstNode {
     public ES_AstStatement? Endpoint { get; set; }
 
@@ -355,3 +356,4 @@ public sealed class ES_AstExpressionListStatement : ES_AstStatement {
 
     public ES_AstExpressionListStatement (ES_AstExpression [] exprList) : base (1) => Expressions = exprList;
 }
+#endif
