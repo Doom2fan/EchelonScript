@@ -7,16 +7,14 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-using System;
-using EchelonScript.Common.Utilities;
+using System.Collections.Immutable;
 
 namespace EchelonScript.Compiler.CompilerCommon;
 
-public enum EchelonScriptTokenType {
+public enum ES_TokenType {
     Invalid = -1,
 
     EOF = 0,
-    DocComment,
 
     Dot,
     DotDot,
@@ -94,19 +92,11 @@ public enum EchelonScriptTokenType {
     FloatLiteral,
 }
 
-public struct EchelonScriptToken {
-    public EchelonScriptTokenType Type;
-    public int TextStartPos;
-    public int TextLine;
-    public int TextColumn;
-    public int TextEndPos => TextStartPos + Text.Length;
+public readonly struct ES_Token {
+    public ES_TokenType Type { get; init; }
 
-    public ES_String FileName;
+    public SourceSpan TextSpan { get; init; }
 
-    public ES_String Text;
-    public ES_String WhitespacePre;
-    public ES_String WhitespacePost;
-
-    public bool CheckIdentifier (ReadOnlySpan<char> text)
-        => Type == EchelonScriptTokenType.Identifier && Text.Span.Equals (text, StringComparison.Ordinal);
+    public ImmutableArray<ES_TriviaToken> LeadingTrivia { get; init; }
+    public ImmutableArray<ES_TriviaToken> TrailingTrivia { get; init; }
 }
