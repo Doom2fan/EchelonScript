@@ -61,7 +61,7 @@ public class SourceFile {
     }
 }
 
-public struct SourceLocation {
+public readonly struct SourceLocation {
     public readonly int StartPos { get; init; }
     public readonly int EndPos { get; init; }
     public readonly int Length => EndPos - StartPos;
