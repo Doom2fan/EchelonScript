@@ -315,7 +315,7 @@ public ref partial struct ES_Tokenizer {
         return true;
     }
 
-    private bool SkipWhitespace_TryReadLineFeed (bool trailing) {
+    private bool SkipWhitespace_TryReadLineFeed () {
         var startPos = curPos;
         int length;
 
@@ -327,8 +327,7 @@ public ref partial struct ES_Tokenizer {
         else
             return false;
 
-        if (!trailing)
-            ReadChars (length);
+        ReadChars (length);
 
         triviaBuilder.Add (new () {
             Type = ES_TriviaType.EndOfLine,
@@ -342,7 +341,7 @@ public ref partial struct ES_Tokenizer {
          while (true) {
             if (SkipWhitespace_TryReadWhitespace ())
                 continue;
-            else if (SkipWhitespace_TryReadLineFeed (trailing)) {
+            else if (SkipWhitespace_TryReadLineFeed ()) {
                 if (trailing)
                     return;
 
