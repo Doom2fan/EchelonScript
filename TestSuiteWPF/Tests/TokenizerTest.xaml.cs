@@ -147,7 +147,7 @@ public partial class TokenizerTest : UserControl {
             return;
 
         var selectedItem = (TreeViewItem) tokensTree.SelectedItem;
-        if (selectedItem == null)
+        if (selectedItem is null || selectedItem.Tag is null)
             return;
         var location = (SourceLocation) selectedItem.Tag;
 
